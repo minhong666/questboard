@@ -1,0 +1,5 @@
+{
+  "routes": [
+    { "path": "/", "title": "QuestBoard · RPG 待辦賓果" }
+  ]
+}
