@@ -3998,10 +3998,10 @@ export default function Home() {
                 <div>
                   <div className="eyebrow">
                     <span className="eyebrow-line" />
-                    週一任務簡報
+                    任務簡報
                   </div>
                   <h1>
-                    早安，Mira <span className="wave-mark">✦</span>
+                    歡迎回來，冒險者 <span className="wave-mark">✦</span>
                   </h1>
                   <p className="welcome-copy">
                     把今天的小事，變成下一段冒險的經驗值。
