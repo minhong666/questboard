@@ -4595,6 +4595,14 @@ export default function Home() {
                   const unlocked = unlockedSpecialSkills.some(item => item.id === skill.id);
                   const isBuff = skill.effectType === "buff";
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
+                  const upgradeBonusLabel =
+                    upgradeLevel > 0
+                      ? skill.effectType === "damage"
+                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(90, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
+                        : skill.effectType === "buff"
+                        ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
+                        : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
+                      : "";
                   return (
                     <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
                       <div className="skill-archive-card-top">
@@ -4606,6 +4614,12 @@ export default function Home() {
                         <strong>{skill.requiredValue}{skill.attributeName === "暴擊率" ? "%" : " 點"}</strong>
                       </div>
                       <p>{skill.description}</p>
+                      {upgradeBonusLabel && (
+                        <div className="skill-upgrade-bonus">
+                          <Zap size={13} />
+                          <span>{upgradeBonusLabel}（Lv.{upgradeLevel}）</span>
+                        </div>
+                      )}
                       <div className="skill-archive-meta">
                         <span>{skill.attributeName}門檻</span>
                         {isBuff ? <span>增益技能 · {skill.durationTurns} 回合</span> : <span>{skill.damageMultiplier.toFixed(2)}×{skill.damageType}傷害</span>}
