@@ -118,6 +118,17 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     getValue: context => context.skillUpgradeLevels,
     formatProgress: integerProgress,
   },
+  {
+    id: "loot-collector",
+    title: "戰利品收藏家",
+    description: "收集 5 件戰利品或裝備。",
+    category: "收藏",
+    goal: 5,
+    rewardCoins: 100,
+    icon: "gift",
+    getValue: context => context.inventoryItems,
+    formatProgress: integerProgress,
+  },
 ];
 
 export function getAchievementProgress(

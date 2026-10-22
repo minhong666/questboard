@@ -5409,8 +5409,8 @@ export default function Home() {
                   <strong>{achievementStatuses.filter(item => item.progress.completed && !item.claimed).length}</strong>
                 </div>
                 <div className="achievement-summary-card panel-card">
-                  <span>可得金幣</span>
-                  <strong>{achievementStatuses.filter(item => !item.claimed).reduce((total, item) => total + item.achievement.rewardCoins, 0)}</strong>
+                  <span>可領取金幣</span>
+                  <strong>{achievementStatuses.filter(item => item.progress.completed && !item.claimed).reduce((total, item) => total + item.achievement.rewardCoins, 0)}</strong>
                 </div>
               </div>
               <div className="achievement-grid">
