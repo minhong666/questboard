@@ -125,6 +125,9 @@ function createSpecializationSkill(
   cooldownTurns = effectType === "buff" ? 5 : 3
 ): SpecialCombatSkill {
   const isMage = specialization.jobClass === "mage";
+  const damageReductionLabel = damageReductionPercent >= 0
+    ? `受到傷害 −${damageReductionPercent}%`
+    : `受到傷害 +${Math.abs(damageReductionPercent)}%`;
   return {
     id: `${specialization.id}-level-${level}`,
     name,
@@ -146,10 +149,10 @@ function createSpecializationSkill(
     effectType,
     description:
       effectType === "buff"
-        ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，受到傷害 −${damageReductionPercent}%，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
+        ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，${damageReductionLabel}，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
         : effectType === "passive"
           ? `轉職專精被動：暴擊率增加 ${critRateBonusPercent}%，暴擊傷害增加 ${critDamageBonusPercent}%，閃避增加 ${dodgeRateBonusPercent}%。`
-          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${damageReductionPercent > 0 ? `，受到傷害 −${damageReductionPercent}%，持續 ${durationTurns} 回合` : ""}。`,
+          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${damageReductionPercent !== 0 ? `，${damageReductionLabel}，持續 ${durationTurns} 回合` : ""}。`,
     cooldownTurns,
     durationTurns,
     damageBonusPercent,
@@ -172,19 +175,19 @@ export function getAllSpecializationSkills(
       createSpecializationSkill(specialization, 100, "不滅天斬", "damage", 3.2, 40, 0, 50, 0, 0, 0, 0, 0, 8),
     ],
     "warrior-berserker": [
-      createSpecializationSkill(specialization, 50, "狂怒解放", "buff", 0, 0, 30, 0),
+      createSpecializationSkill(specialization, 50, "狂怒解放", "buff", 0, 0, 40, -20, 0, 0, 2, 0, 0, 5),
       createSpecializationSkill(specialization, 75, "血獄斬", "damage", 2.6, 30),
-      createSpecializationSkill(specialization, 100, "末日狂斬", "damage", 4, 45),
+      createSpecializationSkill(specialization, 100, "末日狂斬", "damage", 4, 50, 0, -30, 0, 0, 3, 0, 0, 5),
     ],
     "archer-ranger": [
       createSpecializationSkill(specialization, 50, "獵王直覺", "passive", 0, 0, 0, 0, 30, 0, 0, 0, 20),
       createSpecializationSkill(specialization, 75, "連環箭雨", "damage", 2.2, 40),
-      createSpecializationSkill(specialization, 100, "森林審判", "damage", 3.4, 55),
+      createSpecializationSkill(specialization, 100, "森林審判", "damage", 4.5, 55, 0, 0, 0, 0, 0, 0, 0, 5),
     ],
     "archer-sniper": [
       createSpecializationSkill(specialization, 50, "致命校準", "passive", 0, 0, 0, 0, 30, 0, 0, 20, 0),
-      createSpecializationSkill(specialization, 75, "貫星射擊", "damage", 2.8, 65),
-      createSpecializationSkill(specialization, 100, "終焉狙殺", "damage", 4.2, 85),
+      createSpecializationSkill(specialization, 75, "貫星射擊", "damage", 3, 35, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, 100, "終焉狙殺", "damage", 4.2, 60, 0, 0, 0, 0, 0, 0, 0, 8),
     ],
     "mage-elementalist": [
       createSpecializationSkill(specialization, 50, "元素共鳴", "damage", 2.2, 25),

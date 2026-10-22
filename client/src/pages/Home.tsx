@@ -189,6 +189,7 @@ type BattleState = {
   dodges: number;
   usedSkillIds: string[];
   skillCooldowns: Record<string, number>;
+  actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   activeBuff: {
     skillId: string;
@@ -2813,6 +2814,7 @@ export default function Home() {
       dodges: 0,
       usedSkillIds: [],
       skillCooldowns: {},
+      actionLockTurns: 0,
       monsterStatuses: [],
       activeBuff: null,
       xpReward: 0,
@@ -2824,6 +2826,11 @@ export default function Home() {
   const runBattleTurn = (skillId?: string) => {
     if (!battle || !activeBattleMonster || battle.outcome !== "fighting")
       return;
+    const actionLocked = (battle.actionLockTurns ?? 0) > 0;
+    if (actionLocked && skillId) {
+      showToast("終焉狙殺的反噬尚未結束，這一回合不能使用技能");
+      return;
+    }
     const selectedSkill = skillId
       ? battleSpecialSkills.find(skill => skill.id === skillId)
       : undefined;
@@ -2876,7 +2883,7 @@ export default function Home() {
     const activeBuff = selectedSkill && (
       selectedSkill.effectType === "buff" ||
       selectedSkill.damageBonusPercent > 0 ||
-      selectedSkill.damageReductionPercent > 0 ||
+      selectedSkill.damageReductionPercent !== 0 ||
       (selectedSkill.healPercentMaxHealth ?? 0) > 0
     )
       ? {
@@ -2901,10 +2908,13 @@ export default function Home() {
       monster.requirements
     );
     const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
-    const monsterDodges = selectedSkill?.effectType === "buff"
+    const monsterDodges = actionLocked
       ? false
-      : Math.random() < monster.dodgeRate / 100;
+      : selectedSkill?.effectType === "buff"
+        ? false
+        : Math.random() < monster.dodgeRate / 100;
     const criticalHit =
+      !actionLocked &&
       !isMage &&
       !monsterDodges &&
       Math.random() < effectiveCombatStats.critRate / 100;
@@ -2918,7 +2928,9 @@ export default function Home() {
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense * (1 + (activeBuff?.damageBonusPercent ?? 0) / 100)
     );
-    const rawDamageDealt = monsterDodges
+    const rawDamageDealt = actionLocked
+      ? 0
+      : monsterDodges
       ? 0
       : selectedSkill?.effectType === "buff"
         ? 0
@@ -2959,11 +2971,11 @@ export default function Home() {
       effectiveAbilities.health,
       battle.playerHealth + lifestealHealing + activeBuffHealing
     );
-    const actionLabel = selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
+    const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - damageDealt - statusDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}`}`,
+      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -2988,6 +3000,7 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         activeBuff: nextActiveBuff,
+        actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [
           ...logs,
@@ -3127,6 +3140,7 @@ export default function Home() {
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
           activeBuff: nextActiveBuff,
+          actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
         logs: [
             ...nextLogs,
@@ -3167,6 +3181,7 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         activeBuff: nextActiveBuff,
+        actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [...nextLogs, `你被${monster.name}擊倒了！`],
         damageDealt: battle.damageDealt + damageDealt + statusDamage,
@@ -3201,6 +3216,7 @@ export default function Home() {
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
       activeBuff: nextActiveBuff,
+      actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
       logs: nextLogs,
       damageDealt: battle.damageDealt + damageDealt + statusDamage,
@@ -6605,7 +6621,7 @@ export default function Home() {
                   <div className="battle-skill-panel">
                     <div className="battle-skill-heading">
                       <strong>職業特殊技能</strong>
-                        <small>技能可重複使用；每次施放後冷卻 3～5 回合</small>
+                        <small>技能可重複使用；每項技能依設定進入冷卻</small>
                     </div>
                     <div className="battle-skill-list">
                     {battleSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
@@ -6615,7 +6631,7 @@ export default function Home() {
                             type="button"
                             className="battle-skill-button"
                             key={skill.id}
-                            disabled={cooldown > 0}
+                            disabled={cooldown > 0 || (battle.actionLockTurns ?? 0) > 0}
                             onClick={() => runBattleTurn(skill.id)}
                             aria-label={`使用${skill.name}，${skill.description}`}
                           >
@@ -6646,7 +6662,7 @@ export default function Home() {
                   className="primary-button battle-action-button"
                   onClick={() => runBattleTurn()}
                 >
-                  普通攻擊 · 第 {battle.turn} 回合 <ChevronRight size={16} />
+                  {(battle.actionLockTurns ?? 0) > 0 ? "停滯中 · 跳過本回合" : `普通攻擊 · 第 ${battle.turn} 回合`} <ChevronRight size={16} />
                 </button>
               </>
             ) : (
