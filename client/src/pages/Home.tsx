@@ -195,6 +195,7 @@ type BattleState = {
     turnsRemaining: number;
     damageBonusPercent: number;
     damageReductionPercent: number;
+    healPercentMaxHealth: number;
   } | null;
   xpReward: number;
   lootDrop: LootItem | null;
@@ -2857,12 +2858,18 @@ export default function Home() {
         selectedSkill.cooldownTurns - cooldownReduction
       );
     }
-    const activeBuff = selectedSkill?.effectType === "buff"
+    const activeBuff = selectedSkill && (
+      selectedSkill.effectType === "buff" ||
+      selectedSkill.damageBonusPercent > 0 ||
+      selectedSkill.damageReductionPercent > 0 ||
+      (selectedSkill.healPercentMaxHealth ?? 0) > 0
+    )
       ? {
           skillId: selectedSkill.id,
           turnsRemaining: selectedSkill.durationTurns,
           damageBonusPercent: selectedSkill.damageBonusPercent,
           damageReductionPercent: selectedSkill.damageReductionPercent,
+          healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
         }
       : battle.activeBuff;
     const nextActiveBuff = activeBuff && activeBuff.turnsRemaining > 1
@@ -2930,9 +2937,12 @@ export default function Home() {
       : 0;
     const reflectedDamage = damageDealt > 0 ? monster.reflectDamage ?? 0 : 0;
     const reactiveDamageOnDeath = reflectedDamage + (monster.explosionDamage ?? 0);
+    const activeBuffHealing = Math.floor(
+      effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
+    );
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
-      battle.playerHealth + lifestealHealing
+      battle.playerHealth + lifestealHealing + activeBuffHealing
     );
     const actionLabel = selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - damageDealt - statusDamage);
@@ -2968,6 +2978,7 @@ export default function Home() {
           ...logs,
           `${monster.name}倒下了！獲得 ${xpReward} XP。`,
           lifestealHealing ? `怪物吸血回復 ${lifestealHealing} 生命。` : "",
+          activeBuffHealing ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。` : "",
           monster.explosionDamage ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！` : "",
           reflectedDamage ? `受到 ${reflectedDamage} 點反傷。` : "",
           lootDrop
@@ -3068,11 +3079,17 @@ export default function Home() {
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
     );
+    const buffReducedDamage = Math.max(
+      1,
+      Math.ceil(
+        reducedDamage * (1 - (activeBuff?.damageReductionPercent ?? 0) / 100)
+      )
+    );
     const incomingDamageTaken = playerDodges
       ? 0
       : monsterCritical
-        ? Math.ceil((reducedDamage * monster.critDamage) / 100)
-        : reducedDamage;
+        ? Math.ceil((buffReducedDamage * monster.critDamage) / 100)
+        : buffReducedDamage;
     const damageTaken = incomingDamageTaken + reflectedDamage;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
     const nextLogs = [

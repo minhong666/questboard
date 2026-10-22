@@ -114,7 +114,9 @@ function createSpecializationSkill(
   defensePiercePercent: number,
   damageBonusPercent = 0,
   damageReductionPercent = 0,
-  critDamageBonusPercent = 0
+  critDamageBonusPercent = 0,
+  healPercentMaxHealth = 0,
+  durationTurns = effectType === "buff" ? 2 : 0
 ): SpecialCombatSkill {
   const isMage = specialization.jobClass === "mage";
   return {
@@ -135,16 +137,17 @@ function createSpecializationSkill(
     effectType,
     description:
       effectType === "buff"
-        ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，受到傷害 −${damageReductionPercent}%，持續 2 回合。`
+        ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，受到傷害 −${damageReductionPercent}%，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
         : effectType === "passive"
           ? `轉職專精被動：暴擊傷害增加 ${critDamageBonusPercent}%。`
           : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害。`,
     cooldownTurns: effectType === "buff" ? 5 : 3,
-    durationTurns: effectType === "buff" ? 2 : 0,
+    durationTurns,
     damageBonusPercent,
     damageReductionPercent,
     flatDamageBonus: 0,
     critDamageBonusPercent,
+    healPercentMaxHealth,
   };
 }
 
@@ -153,8 +156,8 @@ export function getAllSpecializationSkills(
 ): SpecialCombatSkill[] {
   const skillSets: Record<SpecializationId, SpecialCombatSkill[]> = {
     "warrior-guardian": [
-      createSpecializationSkill(specialization, 50, "神聖壁壘", "buff", 0, 0, 15, 15),
-      createSpecializationSkill(specialization, 75, "守護裁決", "damage", 2.2, 45),
+      createSpecializationSkill(specialization, 50, "神聖壁壘", "buff", 0, 0, 20, 30, 0, 5, 3),
+      createSpecializationSkill(specialization, 75, "守護裁決", "damage", 2.5, 45, 0, 20, 0, 0, 2),
       createSpecializationSkill(specialization, 100, "不滅天斬", "damage", 3.2, 60),
     ],
     "warrior-berserker": [

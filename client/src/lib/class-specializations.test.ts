@@ -40,6 +40,21 @@ describe("class specializations", () => {
     expect(berserker.damageBonusPercent).toBe(30);
   });
 
+  it("uses the requested guardian defensive skill effects", () => {
+    const guardianSkills = getAllSpecializationSkills(getSpecializations("warrior")[0]);
+    const holyBastion = guardianSkills[0];
+    const guardianVerdict = guardianSkills[1];
+    expect(holyBastion.damageBonusPercent).toBe(20);
+    expect(holyBastion.damageReductionPercent).toBe(30);
+    expect(holyBastion.healPercentMaxHealth).toBe(5);
+    expect(holyBastion.durationTurns).toBe(3);
+    expect(holyBastion.cooldownTurns).toBe(5);
+    expect(guardianVerdict.damageMultiplier).toBe(2.5);
+    expect(guardianVerdict.damageReductionPercent).toBe(20);
+    expect(guardianVerdict.durationTurns).toBe(2);
+    expect(guardianVerdict.cooldownTurns).toBe(3);
+  });
+
   it("unlocks specialization skills at levels 50, 75, and 100", () => {
     const specialization = getSpecializations("mage")[0];
     expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);
