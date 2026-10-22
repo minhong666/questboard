@@ -105,6 +105,117 @@ export function getSpecialization(
   );
 }
 
+function createSpecializationSkill(
+  specialization: ClassSpecialization,
+  level: number,
+  name: string,
+  effectType: SpecialCombatSkill["effectType"],
+  damageMultiplier: number,
+  defensePiercePercent: number,
+  damageBonusPercent = 0,
+  damageReductionPercent = 0,
+  critDamageBonusPercent = 0
+): SpecialCombatSkill {
+  const isMage = specialization.jobClass === "mage";
+  return {
+    id: `${specialization.id}-level-${level}`,
+    name,
+    jobClass: specialization.jobClass,
+    attributeName:
+      specialization.jobClass === "rogue"
+        ? "暴擊率"
+        : specialization.jobClass === "warrior"
+          ? "力量"
+          : "智力",
+    requiredValue: level,
+    unlockLevel: level,
+    damageType: isMage ? "魔法" : "物理",
+    damageMultiplier,
+    defensePiercePercent,
+    effectType,
+    description:
+      effectType === "buff"
+        ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，受到傷害 −${damageReductionPercent}%，持續 2 回合。`
+        : effectType === "passive"
+          ? `轉職專精被動：暴擊傷害增加 ${critDamageBonusPercent}%。`
+          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害。`,
+    cooldownTurns: effectType === "buff" ? 5 : 3,
+    durationTurns: effectType === "buff" ? 2 : 0,
+    damageBonusPercent,
+    damageReductionPercent,
+    flatDamageBonus: 0,
+    critDamageBonusPercent,
+  };
+}
+
+export function getAllSpecializationSkills(
+  specialization: ClassSpecialization
+): SpecialCombatSkill[] {
+  const skillSets: Record<SpecializationId, SpecialCombatSkill[]> = {
+    "warrior-guardian": [
+      createSpecializationSkill(specialization, 50, "神聖壁壘", "buff", 0, 0, 15, 15),
+      createSpecializationSkill(specialization, 75, "守護裁決", "damage", 2.2, 45),
+      createSpecializationSkill(specialization, 100, "不滅天斬", "damage", 3.2, 60),
+    ],
+    "warrior-berserker": [
+      createSpecializationSkill(specialization, 50, "狂怒解放", "buff", 0, 0, 30, 0),
+      createSpecializationSkill(specialization, 75, "血獄斬", "damage", 2.6, 30),
+      createSpecializationSkill(specialization, 100, "末日狂斬", "damage", 4, 45),
+    ],
+    "archer-ranger": [
+      createSpecializationSkill(specialization, 50, "獵王直覺", "passive", 0, 0, 0, 0, 35),
+      createSpecializationSkill(specialization, 75, "連環箭雨", "damage", 2.2, 40),
+      createSpecializationSkill(specialization, 100, "森林審判", "damage", 3.4, 55),
+    ],
+    "archer-sniper": [
+      createSpecializationSkill(specialization, 50, "致命校準", "passive", 0, 0, 0, 0, 50),
+      createSpecializationSkill(specialization, 75, "貫星射擊", "damage", 2.8, 65),
+      createSpecializationSkill(specialization, 100, "終焉狙殺", "damage", 4.2, 85),
+    ],
+    "mage-elementalist": [
+      createSpecializationSkill(specialization, 50, "元素共鳴", "damage", 2.2, 25),
+      createSpecializationSkill(specialization, 75, "元素爆裂", "damage", 3.1, 45),
+      createSpecializationSkill(specialization, 100, "天災降臨", "damage", 4.2, 65),
+    ],
+    "mage-frostguard": [
+      createSpecializationSkill(specialization, 50, "寒霜護體", "buff", 0, 0, 0, 25),
+      createSpecializationSkill(specialization, 75, "冰封審判", "damage", 2.1, 40),
+      createSpecializationSkill(specialization, 100, "絕對零度", "damage", 3.3, 60),
+    ],
+    "rogue-assassin": [
+      createSpecializationSkill(specialization, 50, "暗殺契約", "damage", 2.5, 55),
+      createSpecializationSkill(specialization, 75, "致命連環", "damage", 3.4, 70),
+      createSpecializationSkill(specialization, 100, "無聲處決", "damage", 4.6, 85),
+    ],
+    "rogue-shadowdancer": [
+      createSpecializationSkill(specialization, 50, "影步幻舞", "passive", 0, 0, 0, 0, 25),
+      createSpecializationSkill(specialization, 75, "月影亂舞", "damage", 2.4, 45),
+      createSpecializationSkill(specialization, 100, "萬影歸寂", "damage", 4, 65),
+    ],
+  };
+  return skillSets[specialization.id];
+}
+
+export function getUnlockedSpecializationSkills(
+  specialization: ClassSpecialization,
+  playerLevel: number
+) {
+  return getAllSpecializationSkills(specialization).filter(
+    skill => (skill.unlockLevel ?? Infinity) <= Math.max(0, playerLevel)
+  );
+}
+
+export function getNextSpecializationSkillLevel(
+  specialization: ClassSpecialization,
+  playerLevel: number
+) {
+  return (
+    getAllSpecializationSkills(specialization).find(
+      skill => (skill.unlockLevel ?? Infinity) > playerLevel
+    )?.unlockLevel ?? null
+  );
+}
+
 export function applySpecializationToSkill(
   skill: SpecialCombatSkill,
   specialization: ClassSpecialization

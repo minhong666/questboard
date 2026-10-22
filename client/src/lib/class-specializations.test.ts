@@ -3,6 +3,9 @@ import { getUnlockedSpecialSkills } from "./class-skills";
 import {
   applySpecializationToSkill,
   getDefaultSpecialization,
+  getAllSpecializationSkills,
+  getNextSpecializationSkillLevel,
+  getUnlockedSpecializationSkills,
   getSpecializations,
   normalizeSpecialization,
 } from "./class-specializations";
@@ -35,5 +38,20 @@ describe("class specializations", () => {
     expect(guardian.name).not.toBe(berserker.name);
     expect(guardian.damageBonusPercent).toBe(25);
     expect(berserker.damageBonusPercent).toBe(30);
+  });
+
+  it("unlocks specialization skills at levels 50, 75, and 100", () => {
+    const specialization = getSpecializations("mage")[0];
+    expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);
+    expect(getUnlockedSpecializationSkills(specialization, 50)).toHaveLength(1);
+    expect(getUnlockedSpecializationSkills(specialization, 75)).toHaveLength(2);
+    expect(getUnlockedSpecializationSkills(specialization, 100)).toHaveLength(3);
+    expect(getAllSpecializationSkills(specialization).map(skill => skill.unlockLevel)).toEqual([
+      50,
+      75,
+      100,
+    ]);
+    expect(getNextSpecializationSkillLevel(specialization, 50)).toBe(75);
+    expect(getNextSpecializationSkillLevel(specialization, 100)).toBeNull();
   });
 });

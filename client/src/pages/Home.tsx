@@ -114,6 +114,9 @@ import {
 import {
   applySpecializationToSkill,
   getDefaultSpecialization,
+  getAllSpecializationSkills,
+  getNextSpecializationSkillLevel,
+  getUnlockedSpecializationSkills,
   getSpecialization,
   getSpecializations,
   normalizeSpecialization,
@@ -1955,6 +1958,7 @@ export default function Home() {
     state.jobClass,
     state.specialization
   );
+  const specializationUnlocked = player.level >= 50;
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
       ? 30 +
@@ -1994,16 +1998,33 @@ export default function Home() {
     effectiveCombatStats.critRate
   ).map(skill =>
     applySkillUpgrade(
-      applySpecializationToSkill(skill, currentSpecialization),
+      specializationUnlocked
+        ? applySpecializationToSkill(skill, currentSpecialization)
+        : skill,
       skillUpgradeLevels[skill.id] ?? 0
     )
   );
-  const allSpecialSkills = getAllSpecialSkills(state.jobClass).map(skill =>
-    applySkillUpgrade(
-      applySpecializationToSkill(skill, currentSpecialization),
-      skillUpgradeLevels[skill.id] ?? 0
-    )
-  );
+  const specializationSkills = specializationUnlocked
+    ? getUnlockedSpecializationSkills(currentSpecialization, player.level).map(
+        skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+      )
+    : [];
+  const allSpecialSkills = [
+    ...getAllSpecialSkills(state.jobClass).map(skill =>
+      applySkillUpgrade(
+        specializationUnlocked
+          ? applySpecializationToSkill(skill, currentSpecialization)
+          : skill,
+        skillUpgradeLevels[skill.id] ?? 0
+      )
+    ),
+    ...(specializationUnlocked
+      ? getAllSpecializationSkills(currentSpecialization).map(skill =>
+          applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+        )
+      : []),
+  ];
+  const battleSpecialSkills = [...unlockedSpecialSkills, ...specializationSkills];
   const achievementContext: AchievementContext = {
     completedTasks: state.tasks.filter(task => task.completed).length,
     totalXp: state.totalXp,
@@ -2015,7 +2036,7 @@ export default function Home() {
     streak: state.streak,
     defeatedMonsters: state.defeatedMonsterIds.length,
     inventoryItems: state.inventory.length,
-    unlockedSkills: unlockedSpecialSkills.length,
+    unlockedSkills: battleSpecialSkills.length,
     skillUpgradeLevels: Object.values(state.skillUpgradeLevels).reduce(
       (total, level) => total + level,
       0
@@ -2035,6 +2056,9 @@ export default function Home() {
     state.abilities.intelligence,
     effectiveCombatStats.critRate
   );
+  const nextSpecializationSkillLevel = specializationUnlocked
+    ? getNextSpecializationSkillLevel(currentSpecialization, player.level)
+    : 50;
   const hasClassSkills =
     state.jobClass === "warrior" ||
     state.jobClass === "archer" ||
@@ -2785,7 +2809,7 @@ export default function Home() {
     if (!battle || !activeBattleMonster || battle.outcome !== "fighting")
       return;
     const selectedSkill = skillId
-      ? unlockedSpecialSkills.find(skill => skill.id === skillId)
+      ? battleSpecialSkills.find(skill => skill.id === skillId)
       : undefined;
     if (skillId && !selectedSkill) {
       showToast("目前職業或能力尚未解鎖這項技能");
@@ -3911,6 +3935,10 @@ export default function Home() {
   };
 
   const selectSpecialization = (specializationId: SpecializationId) => {
+    if (!specializationUnlocked) {
+      showToast(`角色達到 Lv.50 後才能轉職（目前 Lv.${player.level}）`);
+      return;
+    }
     if (specializationId === state.specialization) return;
     const specialization = getSpecializations(state.jobClass).find(
       item => item.id === specializationId
@@ -4634,15 +4662,16 @@ export default function Home() {
                             : "已解鎖全部盜賊技能"}
                         </strong>
                       </div>
-                      {unlockedSpecialSkills.length > 0 ? (
+                      {battleSpecialSkills.length > 0 ? (
                         <div className="class-skill-list">
-                          {unlockedSpecialSkills.map(skill => (
+                          {battleSpecialSkills.map(skill => (
                             <div className="class-skill-card" key={skill.id}>
                               <div>
                                 <strong>{skill.name}</strong>
                                 <span>
-                                  {skill.attributeName} {skill.requiredValue}
-                                  {skill.attributeName === "暴擊率" ? "%" : " 點"}
+                                  {skill.unlockLevel
+                                    ? `角色 Lv.${skill.unlockLevel} 解鎖`
+                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
                                 </span>
                               </div>
                               <small>{skill.description}</small>
@@ -4683,9 +4712,19 @@ export default function Home() {
                 <div className="specialization-branch-heading">
                   <div>
                     <span className="mini-kicker">CLASS SPECIALIZATION</span>
-                    <strong>{currentSpecialization.name}專精</strong>
+                    <strong>
+                      {specializationUnlocked
+                        ? `${currentSpecialization.name}專精`
+                        : `Lv.50 開放轉職（目前 Lv.${player.level}）`}
+                    </strong>
                   </div>
-                  <small>選擇分支後，技能名稱與戰鬥效果會立即改變。</small>
+                  <small>
+                    {specializationUnlocked
+                      ? nextSpecializationSkillLevel === null
+                        ? "已解鎖此專精的全部 50／75／100 級技能。"
+                        : `下一個專精技能：Lv.${nextSpecializationSkillLevel}`
+                      : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
+                  </small>
                 </div>
                 <div className="specialization-branch-grid">
                   {getSpecializations(state.jobClass).map(specialization => (
@@ -4693,6 +4732,7 @@ export default function Home() {
                       type="button"
                       key={specialization.id}
                       className={`specialization-branch-option ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      disabled={!specializationUnlocked}
                       onClick={() => selectSpecialization(specialization.id)}
                     >
                       <strong>{specialization.name}</strong>
@@ -4712,7 +4752,7 @@ export default function Home() {
                 </div>
                 <div>
                   <span>已解鎖</span>
-                  <strong>{unlockedSpecialSkills.length} / {allSpecialSkills.length}</strong>
+                  <strong>{battleSpecialSkills.length} / {allSpecialSkills.length}</strong>
                 </div>
                 <div>
                   <span>下一門檻</span>
@@ -4729,7 +4769,7 @@ export default function Home() {
               </div>
               <div className="skill-archive-grid">
                 {allSpecialSkills.map(skill => {
-                  const unlocked = unlockedSpecialSkills.some(item => item.id === skill.id);
+                  const unlocked = battleSpecialSkills.some(item => item.id === skill.id);
                   const isBuff = skill.effectType === "buff";
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
                   const upgradeBonusLabel =
@@ -4752,7 +4792,11 @@ export default function Home() {
                           <span>{unlocked ? "已解鎖" : "尚未解鎖"}</span>
                           <h3>{skill.name}</h3>
                         </div>
-                        <strong>{skill.requiredValue}{skill.attributeName === "暴擊率" ? "%" : " 點"}</strong>
+                        <strong>
+                          {skill.unlockLevel
+                            ? `Lv.${skill.unlockLevel}`
+                            : `${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
+                        </strong>
                       </div>
                       <p>{skill.description}</p>
                       {upgradeBonusLabel && (
@@ -6525,14 +6569,14 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
-                {unlockedSpecialSkills.some(skill => skill.effectType !== "passive") && (
+                {battleSpecialSkills.some(skill => skill.effectType !== "passive") && (
                   <div className="battle-skill-panel">
                     <div className="battle-skill-heading">
                       <strong>職業特殊技能</strong>
                         <small>技能可重複使用；每次施放後冷卻 3～5 回合</small>
                     </div>
                     <div className="battle-skill-list">
-                    {unlockedSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
+                    {battleSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
                         const cooldown = battle.skillCooldowns[skill.id] ?? 0;
                         return (
                           <button
