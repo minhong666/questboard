@@ -1649,7 +1649,7 @@ function LootProbabilityGuide({
 }
 
 export default function Home() {
-  const [state, setState] = useState<AppState>(() => loadState());
+  const [state, setState] = useState<AppState>(() => normalizeProfileLoot(loadState()));
   const [profiles, setProfiles] = useState<SaveProfile[]>(() => loadProfiles());
   const [activeProfileId, setActiveProfileId] = useState<string | null>(() =>
     loadActiveProfileId()
@@ -1987,10 +1987,13 @@ export default function Home() {
       0
     ),
   };
+  const claimedAchievementIds = Array.isArray(state.achievementClaimedIds)
+    ? state.achievementClaimedIds
+    : [];
   const achievementStatuses = ACHIEVEMENTS.map(achievement => ({
     achievement,
     progress: getAchievementProgress(achievement, achievementContext),
-    claimed: state.achievementClaimedIds.includes(achievement.id),
+    claimed: claimedAchievementIds.includes(achievement.id),
   }));
   const nextSkillUnlockThreshold = getNextSkillUnlockThreshold(
     state.jobClass,
@@ -3269,7 +3272,7 @@ export default function Home() {
     setProfiles(nextProfiles);
     if (profile.id === activeProfileId) {
       const next = nextProfiles[0];
-      setState(next.state);
+      setState(normalizeProfileLoot(next.state));
       setActiveProfileId(next.id);
     }
     showToast(`已刪除存檔「${profile.name}」`);
@@ -3859,7 +3862,12 @@ export default function Home() {
       coins: previous.coins + achievement.rewardCoins,
       skillUpgradePoints:
         previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
-      achievementClaimedIds: [...previous.achievementClaimedIds, achievement.id],
+      achievementClaimedIds: [
+        ...(Array.isArray(previous.achievementClaimedIds)
+          ? previous.achievementClaimedIds
+          : []),
+        achievement.id,
+      ],
     }));
     showToast(
       `成就「${achievement.title}」已領取：+${achievement.rewardCoins} 金幣${
