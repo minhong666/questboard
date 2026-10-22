@@ -108,6 +108,12 @@ import {
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
+import {
+  ACHIEVEMENTS,
+  getAchievementProgress,
+  getNewAchievementIds,
+  normalizeAchievementIds,
+} from "../lib/achievements";
 
 type Category = "工作" | "學習" | "健康" | "生活" | "心情";
 type TaskDifficulty = "輕量" | "標準" | "挑戰";
@@ -273,6 +279,7 @@ type AppState = {
   allTasksBonusClaimed: boolean;
   inventory: LootItem[];
   equippedItemIds: string[];
+  achievementIds: string[];
   dailyResetMinutes: number;
   boardRefreshPeriodKey?: string;
   userName: string;
@@ -314,7 +321,8 @@ type PageKey =
   | "codex"
   | "fusion"
   | "rewards"
-  | "timers";
+  | "timers"
+  | "achievements";
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
@@ -341,6 +349,9 @@ const iconMap: Record<string, LucideIcon> = {
   target: Target,
   sword: Sword,
   star: Star,
+  clock: Clock3,
+  flame: Flame,
+  skull: Skull,
   "shield-check": ShieldCheck,
 };
 
@@ -970,6 +981,7 @@ const initialState: AppState = {
   allTasksBonusClaimed: false,
   inventory: [],
   equippedItemIds: [],
+  achievementIds: [],
   dailyResetMinutes: 240,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   userName: "Mira Chen",
@@ -1111,6 +1123,7 @@ function loadState(): AppState {
       parsed.equippedItemIds,
       jobClass
     );
+    const achievementIds = normalizeAchievementIds(parsed.achievementIds);
     const timerState = normalizeTimerSaveState(
       parsed.timerActivities,
       parsed.runningTimer
@@ -1176,6 +1189,7 @@ function loadState(): AppState {
       allTasksBonusClaimed: parsed.allTasksBonusClaimed === true,
       inventory,
       equippedItemIds,
+      achievementIds,
       dailyResetMinutes,
       boardRefreshPeriodKey:
         typeof parsed.boardRefreshPeriodKey === "string"
@@ -1232,6 +1246,7 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     ),
     inventory,
     equippedItemIds,
+    achievementIds: normalizeAchievementIds(profileState.achievementIds),
     currentHealth: clampCurrentHealth(
       profileState.currentHealth,
       getEffectiveHealthCap(abilities, jobClass, inventory, equippedItemIds)
@@ -1680,6 +1695,7 @@ export default function Home() {
     allTasksBonusClaimed: false,
     inventory: [],
     equippedItemIds: [],
+    achievementIds: [],
     userName: name.slice(0, 24),
     jobClass,
   });
@@ -1705,6 +1721,10 @@ export default function Home() {
   const totalTimerXp = state.timerActivities.reduce(
     (total, activity) => total + activity.xpEarned,
     0
+  );
+  const achievementProgress = useMemo(
+    () => getAchievementProgress(state),
+    [state]
   );
   const activeTimerProfile = profiles.find(
     profile => profile.state.runningTimer !== null
@@ -2016,6 +2036,21 @@ export default function Home() {
       );
     }
   }, [state, activeProfileId]);
+  useEffect(() => {
+    const newlyUnlockedIds = getNewAchievementIds(state, state.achievementIds);
+    if (newlyUnlockedIds.length === 0) return;
+    setState(previous => ({
+      ...previous,
+      achievementIds: Array.from(
+        new Set([...previous.achievementIds, ...newlyUnlockedIds])
+      ),
+    }));
+    const titles = newlyUnlockedIds
+      .map(id => ACHIEVEMENTS.find(achievement => achievement.id === id)?.title)
+      .filter(Boolean)
+      .join("、");
+    showToast(`成就解鎖：${titles}`);
+  }, [state]);
 
   useEffect(() => {
     window.localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
@@ -3918,11 +3953,12 @@ export default function Home() {
             {activePage === "timers" && <span className="active-dot" />}
           </button>
           <button
-            className="sidebar-link"
-            onClick={() => navigateTo("dashboard")}
+            className={`sidebar-link ${activePage === "achievements" ? "active" : ""}`}
+            onClick={() => navigateTo("achievements")}
           >
             <Trophy size={18} />
             <span>成就里程碑</span>
+            {activePage === "achievements" && <span className="active-dot" />}
           </button>
         </nav>
         <div className="sidebar-section-label sidebar-label-spaced">系統</div>
@@ -4002,6 +4038,7 @@ export default function Home() {
                   fusion: "裝備合成",
                   rewards: "獎勵寶庫",
                   timers: "事務計時",
+                  achievements: "成就里程碑",
                 }[activePage]
               }
             </strong>
@@ -4549,6 +4586,60 @@ export default function Home() {
               <div className="skill-archive-note panel-card">
                 <strong>戰鬥規則</strong>
                 <span>已解鎖技能可在回合制戰鬥中點擊使用；技能冷卻與持續回合只在該場戰鬥內計算。</span>
+              </div>
+            </section>
+          )}
+
+          {activePage === "achievements" && (
+            <section className="achievements-page">
+              <div className="section-heading">
+                <div>
+                  <div className="section-kicker"><Trophy size={15} /> ACHIEVEMENTS</div>
+                  <h2>成就里程碑</h2>
+                  <p>完成任務、累積 XP、專注計時與挑戰戰鬥，留下你的冒險紀錄。</p>
+                </div>
+              </div>
+              <div className="achievement-summary panel-card">
+                <div>
+                  <span>已解鎖成就</span>
+                  <strong>{state.achievementIds.length} / {ACHIEVEMENTS.length}</strong>
+                </div>
+                <div>
+                  <span>目前等級</span>
+                  <strong>Lv.{player.level}</strong>
+                </div>
+                <div>
+                  <span>目前連勝</span>
+                  <strong>{state.streak} 天</strong>
+                </div>
+              </div>
+              <div className="achievement-grid">
+                {ACHIEVEMENTS.map(achievement => {
+                  const unlocked =
+                    state.achievementIds.includes(achievement.id) ||
+                    achievementProgress[achievement.id];
+                  return (
+                    <article
+                      className={`achievement-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`}
+                      key={achievement.id}
+                    >
+                      <div className="achievement-card-icon">
+                        {getTaskIcon(achievement.icon, 22)}
+                      </div>
+                      <div className="achievement-card-copy">
+                        <div className="achievement-card-heading">
+                          <h3>{achievement.title}</h3>
+                          <span>{unlocked ? "已解鎖" : "尚未解鎖"}</span>
+                        </div>
+                        <p>{achievement.description}</p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <div className="achievement-note panel-card">
+                <Award size={17} />
+                <span>成就只會解鎖一次，並會隨角色存檔保存在此裝置。</span>
               </div>
             </section>
           )}

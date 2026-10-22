@@ -3262,6 +3262,107 @@ h2 {
   color: #73809c;
   font-size: 9px;
 }
+.achievements-page {
+  display: grid;
+  gap: 18px;
+}
+.achievement-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+}
+.achievement-summary div {
+  display: grid;
+  gap: 5px;
+}
+.achievement-summary span {
+  color: #7f8baa;
+  font-size: 10px;
+}
+.achievement-summary strong {
+  color: #f0c87c;
+  font-size: 20px;
+}
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.achievement-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-height: 112px;
+  padding: 17px;
+  border: 1px solid rgba(127, 143, 182, 0.13);
+}
+.achievement-card.is-locked {
+  opacity: 0.62;
+}
+.achievement-card.is-unlocked {
+  border-color: rgba(239, 187, 114, 0.34);
+  background: linear-gradient(135deg, rgba(239, 187, 114, 0.1), rgba(33, 39, 70, 0.72));
+}
+.achievement-card-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  color: #697695;
+  border: 1px solid rgba(127, 143, 182, 0.2);
+  background: rgba(116, 130, 166, 0.09);
+}
+.achievement-card.is-unlocked .achievement-card-icon {
+  color: #2f2819;
+  border-color: #e3af60;
+  background: #efbb72;
+  box-shadow: 0 0 14px rgba(239, 187, 114, 0.22);
+}
+.achievement-card-copy {
+  min-width: 0;
+  flex: 1;
+}
+.achievement-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.achievement-card-heading h3 {
+  margin: 0;
+  color: #dce2fb;
+  font-size: 14px;
+}
+.achievement-card-heading span {
+  flex: 0 0 auto;
+  color: #6e7b9a;
+  font-size: 9px;
+  font-weight: 750;
+}
+.achievement-card.is-unlocked .achievement-card-heading span {
+  color: #72d8b1;
+}
+.achievement-card-copy p {
+  margin: 8px 0 0;
+  color: #7f8baa;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.achievement-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  color: #8793b0;
+  font-size: 11px;
+}
+.achievement-note svg {
+  flex: 0 0 auto;
+  color: #efbb72;
+}
 .achieved-label,
 .locked-label {
   font-size: 8px;
@@ -5504,6 +5605,11 @@ h2 {
 .timer-empty-state span {
   color: #7f8ba5;
   font-size: 10px;
+}
+@media (max-width: 760px) {
+  .achievement-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 760px) {
   .timer-activity-list {
