@@ -28,6 +28,8 @@ export type SpecialCombatSkill = {
   damageReductionPercent: number;
   flatDamageBonus: number;
   critDamageBonusPercent: number;
+  critRateBonusPercent?: number;
+  dodgeRateBonusPercent?: number;
   healPercentMaxHealth?: number;
   unlockLevel?: number;
   statusEffect?: SkillStatusEffect;

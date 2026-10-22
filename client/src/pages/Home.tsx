@@ -1947,10 +1947,6 @@ export default function Home() {
       classDefinition.bonuses.intelligence +
       equipmentBonuses.abilities.intelligence,
   };
-  const normalDodgeRate =
-    combatStatsBase(state.combatStats).dodgeRate +
-    (classDefinition.combat.dodgeRate ?? 0) +
-    (equipmentBonuses.combat.dodgeRate ?? 0);
   const archerTalentBonuses = getArcherTalentBonuses(
     state.archerDodgeFailStacks
   );
@@ -1960,11 +1956,28 @@ export default function Home() {
     state.specialization
   );
   const specializationUnlocked = player.level >= 50;
+  const unlockedSpecializationSkillsForStats = specializationUnlocked
+    ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
+    : [];
+  const specializationPassiveBonuses = unlockedSpecializationSkillsForStats
+    .filter(skill => skill.effectType === "passive")
+    .reduce(
+      (total, skill) => ({
+        critRate: total.critRate + (skill.critRateBonusPercent ?? 0),
+        critDamage: total.critDamage + (skill.critDamageBonusPercent ?? 0),
+        dodgeRate: total.dodgeRate + (skill.dodgeRateBonusPercent ?? 0),
+      }),
+      { critRate: 0, critDamage: 0, dodgeRate: 0 }
+    );
+  const normalDodgeRate =
+    combatStatsBase(state.combatStats).dodgeRate +
+    (classDefinition.combat.dodgeRate ?? 0) +
+    (equipmentBonuses.combat.dodgeRate ?? 0) +
+    specializationPassiveBonuses.dodgeRate;
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
       ? 30 +
-        (skillUpgradeLevels["archer-5"] ?? 0) * 5 +
-        (state.specialization === "archer-sniper" ? 15 : 0)
+        (skillUpgradeLevels["archer-5"] ?? 0) * 5
       : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
@@ -1973,13 +1986,15 @@ export default function Home() {
           100,
           combatStatsBase(state.combatStats).critRate +
             (classDefinition.combat.critRate ?? 0) +
-            (equipmentBonuses.combat.critRate ?? 0)
+            (equipmentBonuses.combat.critRate ?? 0) +
+            specializationPassiveBonuses.critRate
         ),
     critDamage:
       combatStatsBase(state.combatStats).critDamage +
       (classDefinition.combat.critDamage ?? 0) +
       (equipmentBonuses.combat.critDamage ?? 0) +
-      archerSkillCritDamageBonus,
+      archerSkillCritDamageBonus +
+      specializationPassiveBonuses.critDamage,
     dodgeRate: isArcher
       ? getArcherEffectiveDodgeRate(
           normalDodgeRate,

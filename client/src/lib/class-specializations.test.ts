@@ -55,6 +55,22 @@ describe("class specializations", () => {
     expect(guardianVerdict.cooldownTurns).toBe(3);
   });
 
+  it("uses the requested ranger and sniper passive effects", () => {
+    const rangerPassive = getAllSpecializationSkills(
+      getSpecializations("archer")[0]
+    )[0];
+    expect(rangerPassive.effectType).toBe("passive");
+    expect(rangerPassive.critDamageBonusPercent).toBe(30);
+    expect(rangerPassive.dodgeRateBonusPercent).toBe(20);
+
+    const sniperPassive = getAllSpecializationSkills(
+      getSpecializations("archer")[1]
+    )[0];
+    expect(sniperPassive.effectType).toBe("passive");
+    expect(sniperPassive.critRateBonusPercent).toBe(20);
+    expect(sniperPassive.critDamageBonusPercent).toBe(30);
+  });
+
   it("unlocks specialization skills at levels 50, 75, and 100", () => {
     const specialization = getSpecializations("mage")[0];
     expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);

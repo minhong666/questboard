@@ -116,7 +116,9 @@ function createSpecializationSkill(
   damageReductionPercent = 0,
   critDamageBonusPercent = 0,
   healPercentMaxHealth = 0,
-  durationTurns = effectType === "buff" ? 2 : 0
+  durationTurns = effectType === "buff" ? 2 : 0,
+  critRateBonusPercent = 0,
+  dodgeRateBonusPercent = 0
 ): SpecialCombatSkill {
   const isMage = specialization.jobClass === "mage";
   return {
@@ -139,7 +141,7 @@ function createSpecializationSkill(
       effectType === "buff"
         ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，受到傷害 −${damageReductionPercent}%，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
         : effectType === "passive"
-          ? `轉職專精被動：暴擊傷害增加 ${critDamageBonusPercent}%。`
+          ? `轉職專精被動：暴擊率增加 ${critRateBonusPercent}%，暴擊傷害增加 ${critDamageBonusPercent}%，閃避增加 ${dodgeRateBonusPercent}%。`
           : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害。`,
     cooldownTurns: effectType === "buff" ? 5 : 3,
     durationTurns,
@@ -147,6 +149,8 @@ function createSpecializationSkill(
     damageReductionPercent,
     flatDamageBonus: 0,
     critDamageBonusPercent,
+    critRateBonusPercent,
+    dodgeRateBonusPercent,
     healPercentMaxHealth,
   };
 }
@@ -166,12 +170,12 @@ export function getAllSpecializationSkills(
       createSpecializationSkill(specialization, 100, "末日狂斬", "damage", 4, 45),
     ],
     "archer-ranger": [
-      createSpecializationSkill(specialization, 50, "獵王直覺", "passive", 0, 0, 0, 0, 35),
+      createSpecializationSkill(specialization, 50, "獵王直覺", "passive", 0, 0, 0, 0, 30, 0, 0, 0, 20),
       createSpecializationSkill(specialization, 75, "連環箭雨", "damage", 2.2, 40),
       createSpecializationSkill(specialization, 100, "森林審判", "damage", 3.4, 55),
     ],
     "archer-sniper": [
-      createSpecializationSkill(specialization, 50, "致命校準", "passive", 0, 0, 0, 0, 50),
+      createSpecializationSkill(specialization, 50, "致命校準", "passive", 0, 0, 0, 0, 30, 0, 0, 20, 0),
       createSpecializationSkill(specialization, 75, "貫星射擊", "damage", 2.8, 65),
       createSpecializationSkill(specialization, 100, "終焉狙殺", "damage", 4.2, 85),
     ],
