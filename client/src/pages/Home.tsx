@@ -4586,7 +4586,7 @@ export default function Home() {
                 <div>
                   <span className="mini-kicker">SKILL UPGRADE POINTS</span>
                   <strong>{state.skillUpgradePoints}</strong>
-                  <small>每升 1 級獲得 1 點；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。</small>
+                  <small>每升 1 級獲得 1 點；增益技能每級 +1% 增益，傷害技能每級 +5% 傷害；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。</small>
                 </div>
                 <Zap size={24} />
               </div>

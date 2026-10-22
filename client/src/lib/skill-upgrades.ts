@@ -1,6 +1,6 @@
 import type { SpecialCombatSkill } from "./class-skills";
 
-export const MAX_SKILL_UPGRADE_LEVEL = 5;
+export const MAX_SKILL_UPGRADE_LEVEL = 50;
 
 export type SkillUpgradeLevels = Record<string, number>;
 
@@ -36,16 +36,16 @@ export function applySkillUpgrade(
   return {
     ...skill,
     damageMultiplier: damageSkill
-      ? skill.damageMultiplier + level * 0.1
+      ? skill.damageMultiplier * (1 + level * 0.05)
       : skill.damageMultiplier,
     defensePiercePercent: damageSkill
       ? Math.min(90, skill.defensePiercePercent + level * 2)
       : skill.defensePiercePercent,
     damageBonusPercent: buffSkill
-      ? skill.damageBonusPercent + level * 5
+      ? skill.damageBonusPercent + level
       : skill.damageBonusPercent,
     damageReductionPercent: buffSkill
-      ? skill.damageReductionPercent + level * 5
+      ? skill.damageReductionPercent + level
       : skill.damageReductionPercent,
     critDamageBonusPercent: passiveSkill
       ? skill.critDamageBonusPercent + level * 5
