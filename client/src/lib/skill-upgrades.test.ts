@@ -18,14 +18,22 @@ describe("skill upgrades", () => {
     expect(
       normalizeSkillUpgradeLevels({ "warrior-50": 2.9, "warrior-75": 99, invalid: -1 })
     ).toEqual({ "warrior-50": 2, "warrior-75": MAX_SKILL_UPGRADE_LEVEL });
+    expect(MAX_SKILL_UPGRADE_LEVEL).toBe(50);
   });
 
   it("increases damage skill power without changing its unlock requirement", () => {
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     const upgraded = applySkillUpgrade(skill, 2);
     expect(upgraded.requiredValue).toBe(skill.requiredValue);
-    expect(upgraded.damageMultiplier).toBe(skill.damageMultiplier + 0.2);
+    expect(upgraded.damageMultiplier).toBeCloseTo(skill.damageMultiplier * 1.1);
     expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent + 4);
     expect(upgraded.description).toContain("技能升級 Lv.2");
+  });
+
+  it("adds one percent to each buff effect per upgrade level", () => {
+    const skill = getUnlockedSpecialSkills("warrior", 25, 0)[0];
+    const upgraded = applySkillUpgrade(skill, 3);
+    expect(upgraded.damageBonusPercent).toBe(23);
+    expect(upgraded.damageReductionPercent).toBe(23);
   });
 });
