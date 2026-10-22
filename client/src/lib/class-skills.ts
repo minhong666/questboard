@@ -34,7 +34,8 @@ export type SpecialCombatSkill = {
 const SKILL_STEP = 25;
 const ROGUE_SKILL_STEP = 10;
 const ROGUE_SKILL_LIMIT = 3;
-const warriorSkillNames = ["騎士之心", "戰騎斬"];
+const WARRIOR_SKILL_LIMIT = 4;
+const warriorSkillNames = ["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"];
 const archerSkillNames = ["鷹眼"];
 const mageSkillNames = ["火球術", "冰霜矛", "雷霆風暴", "隕星術"];
 const rogueSkillNames = ["背刺", "影刃連擊", "死亡標記"];
@@ -58,7 +59,7 @@ export function getNextSkillUnlockThreshold(
       ? (unlockedCount + 1) * ROGUE_SKILL_STEP
       : null;
   }
-  if (jobClass === "warrior" && safeAttributeValue(strength) >= 50) return null;
+  if (jobClass === "warrior" && safeAttributeValue(strength) >= 100) return null;
   if (jobClass === "archer") {
     return safeAttributeValue(intelligence) < 5 ? 5 : null;
   }
@@ -67,7 +68,7 @@ export function getNextSkillUnlockThreshold(
     jobClass === "warrior" ? strength : intelligence
   );
   const next = (Math.floor(currentValue / SKILL_STEP) + 1) * SKILL_STEP;
-  return jobClass === "warrior" && next > 50 ? null : next;
+  return jobClass === "warrior" && next > 100 ? null : next;
 }
 
 export function getUnlockedSpecialSkills(
@@ -103,7 +104,7 @@ export function getUnlockedSpecialSkills(
   const skillCount = isArcher
     ? Math.min(1, Math.floor(currentValue / skillStep))
     : jobClass === "warrior"
-    ? Math.min(2, Math.floor(currentValue / skillStep))
+    ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
     : isRogue
     ? Math.min(ROGUE_SKILL_LIMIT, Math.floor(currentValue / skillStep))
     : Math.floor(currentValue / skillStep);
@@ -167,7 +168,7 @@ export function getUnlockedSpecialSkills(
 }
 
 export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 50 : jobClass === "archer" ? 5 : 100;
+  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 5 : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,

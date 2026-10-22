@@ -12,16 +12,20 @@ describe("class-specific special skills", () => {
     expect(getNextSkillUnlockThreshold("warrior", 24, 500)).toBe(25);
 
     const skills = getUnlockedSpecialSkills("warrior", 100, 0);
-    expect(skills.map(skill => skill.requiredValue)).toEqual([25, 50]);
-    expect(skills.map(skill => skill.name)).toEqual(["騎士之心", "戰騎斬"]);
-    expect(skills.map(skill => skill.requiredValue)).toEqual([25, 50]);
+    expect(skills.map(skill => skill.requiredValue)).toEqual([25, 50, 75, 100]);
+    expect(skills.map(skill => skill.name)).toEqual(["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"]);
     expect(skills.every(skill => skill.jobClass === "warrior")).toBe(true);
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
+    expect(skills.slice(2).every(skill => skill.effectType === "damage")).toBe(true);
   });
 
-  it("caps warrior skills at the 50-point milestone", () => {
+  it("adds warrior damage skills at 75 and 100 strength, then caps", () => {
+    expect(getUnlockedSpecialSkills("warrior", 74, 0)).toHaveLength(2);
+    expect(getNextSkillUnlockThreshold("warrior", 74, 0)).toBe(75);
+    expect(getUnlockedSpecialSkills("warrior", 75, 0)).toHaveLength(3);
+    expect(getNextSkillUnlockThreshold("warrior", 75, 0)).toBe(100);
     const skills = getUnlockedSpecialSkills("warrior", 125, 0);
-    expect(skills).toHaveLength(2);
+    expect(skills).toHaveLength(4);
     expect(getNextSkillUnlockThreshold("warrior", 125, 0)).toBeNull();
   });
 
@@ -95,6 +99,8 @@ describe("class-specific special skills", () => {
     expect(getAllSpecialSkills("warrior").map(skill => skill.name)).toEqual([
       "騎士之心",
       "戰騎斬",
+      "狂戰重擊",
+      "滅世斬",
     ]);
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     expect(skill.description).toContain("150% + 20");
@@ -108,6 +114,6 @@ describe("class-specific special skills", () => {
       expect(skills.length).toBeGreaterThan(0);
       expect(skills.every(skill => skill.cooldownTurns >= 3 && skill.cooldownTurns <= 5)).toBe(true);
     }
-    expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4]);
+    expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4, 5, 3]);
   });
 });
