@@ -160,7 +160,7 @@ export function getUnlockedSpecialSkills(
       durationTurns: isKnightHeart ? 2 : 0,
       damageBonusPercent: isKnightHeart ? 20 : 0,
       damageReductionPercent: isKnightHeart ? 20 : 0,
-      flatDamageBonus: isWarriorSlash ? 20 : 0,
+      flatDamageBonus: 0,
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
       statusEffect,
     };

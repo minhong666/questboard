@@ -104,7 +104,10 @@ describe("class-specific special skills", () => {
     ]);
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     expect(skill.description).toBe("造成自身1.5倍的傷害；冷卻 4 回合。");
-    expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(156);
+    expect(skill.damageMultiplier).toBe(1.5);
+    expect(skill.flatDamageBonus).toBe(0);
+    expect(skill.cooldownTurns).toBe(4);
+    expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(136);
     expect(calculateSpecialSkillDamage(1, 1000, skill)).toBe(1);
   });
 
