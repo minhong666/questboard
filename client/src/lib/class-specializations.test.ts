@@ -50,9 +50,15 @@ describe("class specializations", () => {
     expect(holyBastion.durationTurns).toBe(3);
     expect(holyBastion.cooldownTurns).toBe(5);
     expect(guardianVerdict.damageMultiplier).toBe(2.5);
+    expect(guardianVerdict.defensePiercePercent).toBe(30);
     expect(guardianVerdict.damageReductionPercent).toBe(20);
     expect(guardianVerdict.durationTurns).toBe(2);
     expect(guardianVerdict.cooldownTurns).toBe(3);
+    const immortalSlash = guardianSkills[2];
+    expect(immortalSlash.defensePiercePercent).toBe(40);
+    expect(immortalSlash.damageReductionPercent).toBe(50);
+    expect(immortalSlash.durationTurns).toBe(0);
+    expect(immortalSlash.cooldownTurns).toBe(8);
   });
 
   it("uses the requested ranger and sniper passive effects", () => {
