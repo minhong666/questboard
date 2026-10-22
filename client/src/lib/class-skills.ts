@@ -154,7 +154,7 @@ export function getUnlockedSpecialSkills(
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
         : isWarriorSlash
-          ? `造成自身 150% + 20 的物理傷害；冷卻 ${cooldownTurns} 回合。`
+          ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
           : `${damageType}技能，造成 ${isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
       cooldownTurns,
       durationTurns: isKnightHeart ? 2 : 0,

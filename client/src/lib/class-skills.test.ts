@@ -103,7 +103,7 @@ describe("class-specific special skills", () => {
       "滅世斬",
     ]);
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
-    expect(skill.description).toContain("150% + 20");
+    expect(skill.description).toBe("造成自身1.5倍的傷害；冷卻 4 回合。");
     expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(156);
     expect(calculateSpecialSkillDamage(1, 1000, skill)).toBe(1);
   });
