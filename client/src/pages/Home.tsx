@@ -112,6 +112,14 @@ import {
   type AchievementContext,
 } from "../lib/achievements";
 import {
+  applySpecializationToSkill,
+  getDefaultSpecialization,
+  getSpecialization,
+  getSpecializations,
+  normalizeSpecialization,
+  type SpecializationId,
+} from "../lib/class-specializations";
+import {
   findFailedAbilityRequirement,
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
@@ -287,6 +295,7 @@ type AppState = {
   equippedItemIds: string[];
   skillUpgradePoints: number;
   skillUpgradeLevels: SkillUpgradeLevels;
+  specialization: SpecializationId;
   achievementClaimedIds: string[];
   dailyResetMinutes: number;
   boardRefreshPeriodKey?: string;
@@ -995,6 +1004,7 @@ const initialState: AppState = {
   equippedItemIds: [],
   skillUpgradePoints: 14,
   skillUpgradeLevels: {},
+  specialization: "warrior-guardian",
   achievementClaimedIds: [],
   dailyResetMinutes: 240,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
@@ -1132,6 +1142,10 @@ function loadState(): AppState {
       parsed.jobClass && parsed.jobClass in jobClasses
         ? (parsed.jobClass as JobClass)
         : initialState.jobClass;
+    const specialization = normalizeSpecialization(
+      parsed.specialization,
+      jobClass
+    );
     const equippedItemIds = normalizeEquippedItemIds(
       inventory,
       parsed.equippedItemIds,
@@ -1211,6 +1225,7 @@ function loadState(): AppState {
       equippedItemIds,
       skillUpgradePoints,
       skillUpgradeLevels,
+      specialization,
       achievementClaimedIds: Array.isArray(parsed.achievementClaimedIds)
         ? parsed.achievementClaimedIds.filter((id): id is string => typeof id === "string")
         : [],
@@ -1276,6 +1291,10 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     ),
     skillUpgradeLevels: normalizeSkillUpgradeLevels(
       profileState.skillUpgradeLevels
+    ),
+    specialization: normalizeSpecialization(
+      profileState.specialization,
+      jobClass
     ),
     achievementClaimedIds: Array.isArray(profileState.achievementClaimedIds)
       ? profileState.achievementClaimedIds.filter(
@@ -1723,6 +1742,7 @@ export default function Home() {
     abilityAutoGrowthApplied: true,
     skillUpgradePoints: 0,
     skillUpgradeLevels: {},
+    specialization: getDefaultSpecialization(jobClass),
     defeatedMonsterIds: [],
     currentHealth: defaultAbilities.health,
     nextHealthRecoveryAt: 0,
@@ -1931,9 +1951,15 @@ export default function Home() {
     state.archerDodgeFailStacks
   );
   const skillUpgradeLevels = state.skillUpgradeLevels ?? {};
+  const currentSpecialization = getSpecialization(
+    state.jobClass,
+    state.specialization
+  );
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
-      ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
+      ? 30 +
+        (skillUpgradeLevels["archer-5"] ?? 0) * 5 +
+        (state.specialization === "archer-sniper" ? 15 : 0)
       : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
@@ -1966,9 +1992,17 @@ export default function Home() {
     state.abilities.strength,
     state.abilities.intelligence,
     effectiveCombatStats.critRate
-  ).map(skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0));
+  ).map(skill =>
+    applySkillUpgrade(
+      applySpecializationToSkill(skill, currentSpecialization),
+      skillUpgradeLevels[skill.id] ?? 0
+    )
+  );
   const allSpecialSkills = getAllSpecialSkills(state.jobClass).map(skill =>
-    applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+    applySkillUpgrade(
+      applySpecializationToSkill(skill, currentSpecialization),
+      skillUpgradeLevels[skill.id] ?? 0
+    )
   );
   const achievementContext: AchievementContext = {
     completedTasks: state.tasks.filter(task => task.completed).length,
@@ -3876,6 +3910,15 @@ export default function Home() {
     );
   };
 
+  const selectSpecialization = (specializationId: SpecializationId) => {
+    if (specializationId === state.specialization) return;
+    const specialization = getSpecializations(state.jobClass).find(
+      item => item.id === specializationId
+    );
+    if (!specialization) return;
+    setState(previous => ({ ...previous, specialization: specialization.id }));
+    showToast(`已轉職為「${specialization.name}」專精`);
+  };
   const navigateTo = (page: PageKey) => {
     setActivePage(page);
     setMobileMenuOpen(false);
@@ -4634,6 +4677,28 @@ export default function Home() {
                 </div>
                 <div className="skill-page-class-badge">
                   {getTaskIcon(classDefinition.icon, 18)} {classDefinition.name}
+                </div>
+              </div>
+              <div className="specialization-branch-panel panel-card">
+                <div className="specialization-branch-heading">
+                  <div>
+                    <span className="mini-kicker">CLASS SPECIALIZATION</span>
+                    <strong>{currentSpecialization.name}專精</strong>
+                  </div>
+                  <small>選擇分支後，技能名稱與戰鬥效果會立即改變。</small>
+                </div>
+                <div className="specialization-branch-grid">
+                  {getSpecializations(state.jobClass).map(specialization => (
+                    <button
+                      type="button"
+                      key={specialization.id}
+                      className={`specialization-branch-option ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      onClick={() => selectSpecialization(specialization.id)}
+                    >
+                      <strong>{specialization.name}</strong>
+                      <span>{specialization.description}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="skill-page-summary panel-card">
