@@ -274,6 +274,7 @@ type AppState = {
   inventory: LootItem[];
   equippedItemIds: string[];
   dailyResetMinutes: number;
+  boardRefreshPeriodKey?: string;
   userName: string;
   jobClass: JobClass;
 };
@@ -970,6 +971,7 @@ const initialState: AppState = {
   inventory: [],
   equippedItemIds: [],
   dailyResetMinutes: 240,
+  boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   userName: "Mira Chen",
   jobClass: "warrior",
 };
@@ -1123,6 +1125,10 @@ function loadState(): AppState {
       typeof parsed.currentHealth === "number"
         ? clampCurrentHealth(parsed.currentHealth, maxHealth)
         : maxHealth;
+    const dailyResetMinutes =
+      typeof parsed.dailyResetMinutes === "number"
+        ? normalizeResetMinutes(parsed.dailyResetMinutes)
+        : initialState.dailyResetMinutes;
     return {
       ...initialState,
       ...parsed,
@@ -1170,10 +1176,11 @@ function loadState(): AppState {
       allTasksBonusClaimed: parsed.allTasksBonusClaimed === true,
       inventory,
       equippedItemIds,
-      dailyResetMinutes:
-        typeof parsed.dailyResetMinutes === "number"
-          ? normalizeResetMinutes(parsed.dailyResetMinutes)
-          : initialState.dailyResetMinutes,
+      dailyResetMinutes,
+      boardRefreshPeriodKey:
+        typeof parsed.boardRefreshPeriodKey === "string"
+          ? parsed.boardRefreshPeriodKey
+          : getRepeatPeriodKey("daily", new Date(), dailyResetMinutes),
       userName:
         typeof parsed.userName === "string" && parsed.userName.trim()
           ? parsed.userName.trim().slice(0, 24)
@@ -2282,7 +2289,34 @@ export default function Home() {
     const now = new Date();
     setState(previous => {
       let changed = false;
-      const tasks = previous.tasks.map(task => {
+      const dailyPeriodKey = getRepeatPeriodKey(
+        "daily",
+        now,
+        previous.dailyResetMinutes
+      );
+      const boardPeriodChanged =
+        previous.boardRefreshPeriodKey !== dailyPeriodKey;
+      const boardSlotCount = boardSize * boardSize;
+      const tasksToRefresh = boardPeriodChanged
+        ? previous.tasks.filter(task => task.repeat === "daily")
+        : [];
+      const dailyTaskIds = new Set(tasksToRefresh.map(task => task.id));
+      const refreshSourceTasks = boardPeriodChanged
+        ? [
+            ...previous.tasks.filter(
+              task => task.slot >= boardSlotCount && !dailyTaskIds.has(task.id)
+            ),
+            ...tasksToRefresh.map((task, index) => ({
+              ...task,
+              slot: index,
+              completed: false,
+              awardedXp: undefined,
+              completedPeriodKey: undefined,
+            })),
+          ]
+        : previous.tasks;
+      if (boardPeriodChanged) changed = true;
+      const tasks = refreshSourceTasks.map(task => {
         const repeat: TaskRepeat =
           task.repeat === "daily" || task.repeat === "weekly"
             ? task.repeat
@@ -2319,11 +2353,16 @@ export default function Home() {
         }
         return task;
       });
-      return changed
-        ? { ...previous, tasks, allTasksBonusClaimed: false }
+      return changed || boardPeriodChanged
+        ? {
+            ...previous,
+            tasks,
+            boardRefreshPeriodKey: dailyPeriodKey,
+            allTasksBonusClaimed: false,
+          }
         : previous;
     });
-  }, [repeatPeriodSignature]);
+  }, [boardSize, repeatPeriodSignature]);
 
   useEffect(() => {
     const availableIds = new Set(
@@ -3191,7 +3230,15 @@ export default function Home() {
       return;
     }
     const nextMinutes = hours * 60 + minutes;
-    setState(previous => ({ ...previous, dailyResetMinutes: nextMinutes }));
+    setState(previous => ({
+      ...previous,
+      dailyResetMinutes: nextMinutes,
+      boardRefreshPeriodKey: getRepeatPeriodKey(
+        "daily",
+        new Date(),
+        nextMinutes
+      ),
+    }));
     setModal(null);
     showToast(`每日任務刷新時間已設定為 ${formatResetTime(nextMinutes)}`);
   };
@@ -6566,7 +6613,7 @@ export default function Home() {
                     onChange={event => setRefreshDraft(event.target.value)}
                   />
                   <small className="form-help">
-                    每日任務會在這個時間重置；每週任務則在每週一的同一時間重置。
+                    時間到會刪除九宮格內全部任務，再將「每天重複」任務重新生成到九宮格；累積 XP、計時資料與九宮格外任務會保留。
                   </small>
                 </label>
                 <div className="refresh-setting-note">
