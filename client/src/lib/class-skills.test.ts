@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateSpecialSkillDamage,
+  MAX_DEFENSE_PIERCE_PERCENT,
+  MIN_DEFENSE_PIERCE_PERCENT,
   getAllSpecialSkills,
   getNextSkillUnlockThreshold,
   getUnlockedSpecialSkills,
@@ -118,5 +120,22 @@ describe("class-specific special skills", () => {
       expect(skills.every(skill => skill.cooldownTurns >= 3 && skill.cooldownTurns <= 5)).toBe(true);
     }
     expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4, 5, 3]);
+  });
+
+  it("keeps applicable defense penetration between 25% and 60%", () => {
+    for (const jobClass of ["warrior", "archer", "mage", "rogue"] as const) {
+      for (const skill of getAllSpecialSkills(jobClass)) {
+        if (skill.effectType === "damage") {
+          expect(skill.defensePiercePercent).toBeGreaterThanOrEqual(
+            MIN_DEFENSE_PIERCE_PERCENT
+          );
+          expect(skill.defensePiercePercent).toBeLessThanOrEqual(
+            MAX_DEFENSE_PIERCE_PERCENT
+          );
+        } else {
+          expect(skill.defensePiercePercent).toBe(0);
+        }
+      }
+    }
   });
 });

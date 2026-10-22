@@ -112,6 +112,17 @@ import {
   type AchievementContext,
 } from "../lib/achievements";
 import {
+  applySpecializationToSkill,
+  getDefaultSpecialization,
+  getAllSpecializationSkills,
+  getNextSpecializationSkillLevel,
+  getUnlockedSpecializationSkills,
+  getSpecialization,
+  getSpecializations,
+  normalizeSpecialization,
+  type SpecializationId,
+} from "../lib/class-specializations";
+import {
   findFailedAbilityRequirement,
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
@@ -178,12 +189,15 @@ type BattleState = {
   dodges: number;
   usedSkillIds: string[];
   skillCooldowns: Record<string, number>;
+  actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   activeBuff: {
     skillId: string;
     turnsRemaining: number;
     damageBonusPercent: number;
     damageReductionPercent: number;
+    healPercentMaxHealth: number;
+    dodgeRateBonusPercent: number;
   } | null;
   xpReward: number;
   lootDrop: LootItem | null;
@@ -287,6 +301,7 @@ type AppState = {
   equippedItemIds: string[];
   skillUpgradePoints: number;
   skillUpgradeLevels: SkillUpgradeLevels;
+  specialization: SpecializationId;
   achievementClaimedIds: string[];
   dailyResetMinutes: number;
   boardRefreshPeriodKey?: string;
@@ -995,6 +1010,7 @@ const initialState: AppState = {
   equippedItemIds: [],
   skillUpgradePoints: 14,
   skillUpgradeLevels: {},
+  specialization: "warrior-guardian",
   achievementClaimedIds: [],
   dailyResetMinutes: 240,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
@@ -1132,6 +1148,10 @@ function loadState(): AppState {
       parsed.jobClass && parsed.jobClass in jobClasses
         ? (parsed.jobClass as JobClass)
         : initialState.jobClass;
+    const specialization = normalizeSpecialization(
+      parsed.specialization,
+      jobClass
+    );
     const equippedItemIds = normalizeEquippedItemIds(
       inventory,
       parsed.equippedItemIds,
@@ -1211,6 +1231,7 @@ function loadState(): AppState {
       equippedItemIds,
       skillUpgradePoints,
       skillUpgradeLevels,
+      specialization,
       achievementClaimedIds: Array.isArray(parsed.achievementClaimedIds)
         ? parsed.achievementClaimedIds.filter((id): id is string => typeof id === "string")
         : [],
@@ -1276,6 +1297,10 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     ),
     skillUpgradeLevels: normalizeSkillUpgradeLevels(
       profileState.skillUpgradeLevels
+    ),
+    specialization: normalizeSpecialization(
+      profileState.specialization,
+      jobClass
     ),
     achievementClaimedIds: Array.isArray(profileState.achievementClaimedIds)
       ? profileState.achievementClaimedIds.filter(
@@ -1723,6 +1748,7 @@ export default function Home() {
     abilityAutoGrowthApplied: true,
     skillUpgradePoints: 0,
     skillUpgradeLevels: {},
+    specialization: getDefaultSpecialization(jobClass),
     defeatedMonsterIds: [],
     currentHealth: defaultAbilities.health,
     nextHealthRecoveryAt: 0,
@@ -1923,17 +1949,37 @@ export default function Home() {
       classDefinition.bonuses.intelligence +
       equipmentBonuses.abilities.intelligence,
   };
-  const normalDodgeRate =
-    combatStatsBase(state.combatStats).dodgeRate +
-    (classDefinition.combat.dodgeRate ?? 0) +
-    (equipmentBonuses.combat.dodgeRate ?? 0);
   const archerTalentBonuses = getArcherTalentBonuses(
     state.archerDodgeFailStacks
   );
   const skillUpgradeLevels = state.skillUpgradeLevels ?? {};
+  const currentSpecialization = getSpecialization(
+    state.jobClass,
+    state.specialization
+  );
+  const specializationUnlocked = player.level >= 50;
+  const unlockedSpecializationSkillsForStats = specializationUnlocked
+    ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
+    : [];
+  const specializationPassiveBonuses = unlockedSpecializationSkillsForStats
+    .filter(skill => skill.effectType === "passive")
+    .reduce(
+      (total, skill) => ({
+        critRate: total.critRate + (skill.critRateBonusPercent ?? 0),
+        critDamage: total.critDamage + (skill.critDamageBonusPercent ?? 0),
+        dodgeRate: total.dodgeRate + (skill.dodgeRateBonusPercent ?? 0),
+      }),
+      { critRate: 0, critDamage: 0, dodgeRate: 0 }
+    );
+  const normalDodgeRate =
+    combatStatsBase(state.combatStats).dodgeRate +
+    (classDefinition.combat.dodgeRate ?? 0) +
+    (equipmentBonuses.combat.dodgeRate ?? 0) +
+    specializationPassiveBonuses.dodgeRate;
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
-      ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
+      ? 30 +
+        (skillUpgradeLevels["archer-5"] ?? 0) * 5
       : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
@@ -1942,13 +1988,15 @@ export default function Home() {
           100,
           combatStatsBase(state.combatStats).critRate +
             (classDefinition.combat.critRate ?? 0) +
-            (equipmentBonuses.combat.critRate ?? 0)
+            (equipmentBonuses.combat.critRate ?? 0) +
+            specializationPassiveBonuses.critRate
         ),
     critDamage:
       combatStatsBase(state.combatStats).critDamage +
       (classDefinition.combat.critDamage ?? 0) +
       (equipmentBonuses.combat.critDamage ?? 0) +
-      archerSkillCritDamageBonus,
+      archerSkillCritDamageBonus +
+      specializationPassiveBonuses.critDamage,
     dodgeRate: isArcher
       ? getArcherEffectiveDodgeRate(
           normalDodgeRate,
@@ -1966,10 +2014,35 @@ export default function Home() {
     state.abilities.strength,
     state.abilities.intelligence,
     effectiveCombatStats.critRate
-  ).map(skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0));
-  const allSpecialSkills = getAllSpecialSkills(state.jobClass).map(skill =>
-    applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+  ).map(skill =>
+    applySkillUpgrade(
+      specializationUnlocked
+        ? applySpecializationToSkill(skill, currentSpecialization)
+        : skill,
+      skillUpgradeLevels[skill.id] ?? 0
+    )
   );
+  const specializationSkills = specializationUnlocked
+    ? getUnlockedSpecializationSkills(currentSpecialization, player.level).map(
+        skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+      )
+    : [];
+  const allSpecialSkills = [
+    ...getAllSpecialSkills(state.jobClass).map(skill =>
+      applySkillUpgrade(
+        specializationUnlocked
+          ? applySpecializationToSkill(skill, currentSpecialization)
+          : skill,
+        skillUpgradeLevels[skill.id] ?? 0
+      )
+    ),
+    ...(specializationUnlocked
+      ? getAllSpecializationSkills(currentSpecialization).map(skill =>
+          applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+        )
+      : []),
+  ];
+  const battleSpecialSkills = [...unlockedSpecialSkills, ...specializationSkills];
   const achievementContext: AchievementContext = {
     completedTasks: state.tasks.filter(task => task.completed).length,
     totalXp: state.totalXp,
@@ -1981,7 +2054,7 @@ export default function Home() {
     streak: state.streak,
     defeatedMonsters: state.defeatedMonsterIds.length,
     inventoryItems: state.inventory.length,
-    unlockedSkills: unlockedSpecialSkills.length,
+    unlockedSkills: battleSpecialSkills.length,
     skillUpgradeLevels: Object.values(state.skillUpgradeLevels).reduce(
       (total, level) => total + level,
       0
@@ -2001,6 +2074,9 @@ export default function Home() {
     state.abilities.intelligence,
     effectiveCombatStats.critRate
   );
+  const nextSpecializationSkillLevel = specializationUnlocked
+    ? getNextSpecializationSkillLevel(currentSpecialization, player.level)
+    : 50;
   const hasClassSkills =
     state.jobClass === "warrior" ||
     state.jobClass === "archer" ||
@@ -2739,6 +2815,7 @@ export default function Home() {
       dodges: 0,
       usedSkillIds: [],
       skillCooldowns: {},
+      actionLockTurns: 0,
       monsterStatuses: [],
       activeBuff: null,
       xpReward: 0,
@@ -2750,8 +2827,13 @@ export default function Home() {
   const runBattleTurn = (skillId?: string) => {
     if (!battle || !activeBattleMonster || battle.outcome !== "fighting")
       return;
+    const actionLocked = (battle.actionLockTurns ?? 0) > 0;
+    if (actionLocked && skillId) {
+      showToast("終焉狙殺的反噬尚未結束，這一回合不能使用技能");
+      return;
+    }
     const selectedSkill = skillId
-      ? unlockedSpecialSkills.find(skill => skill.id === skillId)
+      ? battleSpecialSkills.find(skill => skill.id === skillId)
       : undefined;
     if (skillId && !selectedSkill) {
       showToast("目前職業或能力尚未解鎖這項技能");
@@ -2799,12 +2881,20 @@ export default function Home() {
         selectedSkill.cooldownTurns - cooldownReduction
       );
     }
-    const activeBuff = selectedSkill?.effectType === "buff"
+    const activeBuff = selectedSkill && (
+      selectedSkill.effectType === "buff" ||
+      selectedSkill.damageBonusPercent > 0 ||
+      selectedSkill.damageReductionPercent !== 0 ||
+      (selectedSkill.healPercentMaxHealth ?? 0) > 0 ||
+      (selectedSkill.dodgeRateBonusPercent ?? 0) > 0
+    )
       ? {
           skillId: selectedSkill.id,
           turnsRemaining: selectedSkill.durationTurns,
           damageBonusPercent: selectedSkill.damageBonusPercent,
           damageReductionPercent: selectedSkill.damageReductionPercent,
+          healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
+          dodgeRateBonusPercent: selectedSkill.dodgeRateBonusPercent ?? 0,
         }
       : battle.activeBuff;
     const nextActiveBuff = activeBuff && activeBuff.turnsRemaining > 1
@@ -2821,10 +2911,13 @@ export default function Home() {
       monster.requirements
     );
     const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
-    const monsterDodges = selectedSkill?.effectType === "buff"
+    const monsterDodges = actionLocked
       ? false
-      : Math.random() < monster.dodgeRate / 100;
+      : selectedSkill?.effectType === "buff"
+        ? false
+        : Math.random() < monster.dodgeRate / 100;
     const criticalHit =
+      !actionLocked &&
       !isMage &&
       !monsterDodges &&
       Math.random() < effectiveCombatStats.critRate / 100;
@@ -2838,7 +2931,16 @@ export default function Home() {
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense * (1 + (activeBuff?.damageBonusPercent ?? 0) / 100)
     );
-    const rawDamageDealt = monsterDodges
+    const instantExecute = Boolean(
+      selectedSkill?.executeBelowHealthPercent &&
+      battle.monsterHealth <
+        monster.health * (selectedSkill.executeBelowHealthPercent / 100)
+    );
+    const rawDamageDealt = instantExecute
+      ? battle.monsterHealth
+      : actionLocked
+      ? 0
+      : monsterDodges
       ? 0
       : selectedSkill?.effectType === "buff"
         ? 0
@@ -2855,7 +2957,9 @@ export default function Home() {
     const resistancePercent = damageType === "魔法"
       ? monster.magicResistancePercent ?? 0
       : monster.physicalResistancePercent ?? 0;
-    const damageDealt = rawDamageDealt === 0
+    const damageDealt = instantExecute
+      ? battle.monsterHealth
+      : rawDamageDealt === 0
       ? 0
       : Math.max(1, Math.round(rawDamageDealt * (1 - resistancePercent / 100)));
     const nextMonsterStatuses = applyBattleStatusEffects(
@@ -2872,15 +2976,18 @@ export default function Home() {
       : 0;
     const reflectedDamage = damageDealt > 0 ? monster.reflectDamage ?? 0 : 0;
     const reactiveDamageOnDeath = reflectedDamage + (monster.explosionDamage ?? 0);
+    const activeBuffHealing = Math.floor(
+      effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
+    );
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
-      battle.playerHealth + lifestealHealing
+      battle.playerHealth + lifestealHealing + activeBuffHealing
     );
-    const actionLabel = selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
+    const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - damageDealt - statusDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}`}`,
+      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -2905,11 +3012,13 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         activeBuff: nextActiveBuff,
+        actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [
           ...logs,
           `${monster.name}倒下了！獲得 ${xpReward} XP。`,
           lifestealHealing ? `怪物吸血回復 ${lifestealHealing} 生命。` : "",
+          activeBuffHealing ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。` : "",
           monster.explosionDamage ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！` : "",
           reflectedDamage ? `受到 ${reflectedDamage} 點反傷。` : "",
           lootDrop
@@ -2983,7 +3092,8 @@ export default function Home() {
       );
       return;
     }
-    const effectivePlayerDodgeRate = effectiveCombatStats.dodgeRate *
+    const effectivePlayerDodgeRate = (effectiveCombatStats.dodgeRate +
+      (activeBuff?.dodgeRateBonusPercent ?? 0)) *
       (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
     const playerDodges = statusTick.frozen
       ? false
@@ -3010,11 +3120,17 @@ export default function Home() {
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
     );
+    const buffReducedDamage = Math.max(
+      1,
+      Math.ceil(
+        reducedDamage * (1 - (activeBuff?.damageReductionPercent ?? 0) / 100)
+      )
+    );
     const incomingDamageTaken = playerDodges
       ? 0
       : monsterCritical
-        ? Math.ceil((reducedDamage * monster.critDamage) / 100)
-        : reducedDamage;
+        ? Math.ceil((buffReducedDamage * monster.critDamage) / 100)
+        : buffReducedDamage;
     const damageTaken = incomingDamageTaken + reflectedDamage;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
     const nextLogs = [
@@ -3037,6 +3153,7 @@ export default function Home() {
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
           activeBuff: nextActiveBuff,
+          actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
         logs: [
             ...nextLogs,
@@ -3077,6 +3194,7 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         activeBuff: nextActiveBuff,
+        actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [...nextLogs, `你被${monster.name}擊倒了！`],
         damageDealt: battle.damageDealt + damageDealt + statusDamage,
@@ -3111,6 +3229,7 @@ export default function Home() {
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
       activeBuff: nextActiveBuff,
+      actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
       logs: nextLogs,
       damageDealt: battle.damageDealt + damageDealt + statusDamage,
@@ -3876,6 +3995,19 @@ export default function Home() {
     );
   };
 
+  const selectSpecialization = (specializationId: SpecializationId) => {
+    if (!specializationUnlocked) {
+      showToast(`角色達到 Lv.50 後才能轉職（目前 Lv.${player.level}）`);
+      return;
+    }
+    if (specializationId === state.specialization) return;
+    const specialization = getSpecializations(state.jobClass).find(
+      item => item.id === specializationId
+    );
+    if (!specialization) return;
+    setState(previous => ({ ...previous, specialization: specialization.id }));
+    showToast(`已轉職為「${specialization.name}」專精`);
+  };
   const navigateTo = (page: PageKey) => {
     setActivePage(page);
     setMobileMenuOpen(false);
@@ -4591,15 +4723,16 @@ export default function Home() {
                             : "已解鎖全部盜賊技能"}
                         </strong>
                       </div>
-                      {unlockedSpecialSkills.length > 0 ? (
+                      {battleSpecialSkills.length > 0 ? (
                         <div className="class-skill-list">
-                          {unlockedSpecialSkills.map(skill => (
+                          {battleSpecialSkills.map(skill => (
                             <div className="class-skill-card" key={skill.id}>
                               <div>
                                 <strong>{skill.name}</strong>
                                 <span>
-                                  {skill.attributeName} {skill.requiredValue}
-                                  {skill.attributeName === "暴擊率" ? "%" : " 點"}
+                                  {skill.unlockLevel
+                                    ? `角色 Lv.${skill.unlockLevel} 解鎖`
+                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
                                 </span>
                               </div>
                               <small>{skill.description}</small>
@@ -4636,6 +4769,39 @@ export default function Home() {
                   {getTaskIcon(classDefinition.icon, 18)} {classDefinition.name}
                 </div>
               </div>
+              <div className="specialization-branch-panel panel-card">
+                <div className="specialization-branch-heading">
+                  <div>
+                    <span className="mini-kicker">CLASS SPECIALIZATION</span>
+                    <strong>
+                      {specializationUnlocked
+                        ? `${currentSpecialization.name}專精`
+                        : `Lv.50 開放轉職（目前 Lv.${player.level}）`}
+                    </strong>
+                  </div>
+                  <small>
+                    {specializationUnlocked
+                      ? nextSpecializationSkillLevel === null
+                        ? "已解鎖此專精的全部 50／75／100 級技能。"
+                        : `下一個專精技能：Lv.${nextSpecializationSkillLevel}`
+                      : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
+                  </small>
+                </div>
+                <div className="specialization-branch-grid">
+                  {getSpecializations(state.jobClass).map(specialization => (
+                    <button
+                      type="button"
+                      key={specialization.id}
+                      className={`specialization-branch-option ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      disabled={!specializationUnlocked}
+                      onClick={() => selectSpecialization(specialization.id)}
+                    >
+                      <strong>{specialization.name}</strong>
+                      <span>{specialization.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="skill-page-summary panel-card">
                 <div>
                   <span className="mini-kicker">CURRENT PROGRESS</span>
@@ -4647,7 +4813,7 @@ export default function Home() {
                 </div>
                 <div>
                   <span>已解鎖</span>
-                  <strong>{unlockedSpecialSkills.length} / {allSpecialSkills.length}</strong>
+                  <strong>{battleSpecialSkills.length} / {allSpecialSkills.length}</strong>
                 </div>
                 <div>
                   <span>下一門檻</span>
@@ -4664,13 +4830,13 @@ export default function Home() {
               </div>
               <div className="skill-archive-grid">
                 {allSpecialSkills.map(skill => {
-                  const unlocked = unlockedSpecialSkills.some(item => item.id === skill.id);
+                  const unlocked = battleSpecialSkills.some(item => item.id === skill.id);
                   const isBuff = skill.effectType === "buff";
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
                   const upgradeBonusLabel =
                     upgradeLevel > 0
                       ? skill.effectType === "damage"
-                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(90, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
+                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(60, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
                         : skill.effectType === "buff"
                         ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
                         : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
@@ -4687,7 +4853,11 @@ export default function Home() {
                           <span>{unlocked ? "已解鎖" : "尚未解鎖"}</span>
                           <h3>{skill.name}</h3>
                         </div>
-                        <strong>{skill.requiredValue}{skill.attributeName === "暴擊率" ? "%" : " 點"}</strong>
+                        <strong>
+                          {skill.unlockLevel
+                            ? `Lv.${skill.unlockLevel}`
+                            : `${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
+                        </strong>
                       </div>
                       <p>{skill.description}</p>
                       {upgradeBonusLabel && (
@@ -6460,21 +6630,21 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
-                {unlockedSpecialSkills.some(skill => skill.effectType !== "passive") && (
+                {battleSpecialSkills.some(skill => skill.effectType !== "passive") && (
                   <div className="battle-skill-panel">
                     <div className="battle-skill-heading">
                       <strong>職業特殊技能</strong>
-                        <small>技能可重複使用；每次施放後冷卻 3～5 回合</small>
+                        <small>技能可重複使用；每項技能依設定進入冷卻</small>
                     </div>
                     <div className="battle-skill-list">
-                    {unlockedSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
+                    {battleSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
                         const cooldown = battle.skillCooldowns[skill.id] ?? 0;
                         return (
                           <button
                             type="button"
                             className="battle-skill-button"
                             key={skill.id}
-                            disabled={cooldown > 0}
+                            disabled={cooldown > 0 || (battle.actionLockTurns ?? 0) > 0}
                             onClick={() => runBattleTurn(skill.id)}
                             aria-label={`使用${skill.name}，${skill.description}`}
                           >
@@ -6505,7 +6675,7 @@ export default function Home() {
                   className="primary-button battle-action-button"
                   onClick={() => runBattleTurn()}
                 >
-                  普通攻擊 · 第 {battle.turn} 回合 <ChevronRight size={16} />
+                  {(battle.actionLockTurns ?? 0) > 0 ? "停滯中 · 跳過本回合" : `普通攻擊 · 第 ${battle.turn} 回合`} <ChevronRight size={16} />
                 </button>
               </>
             ) : (
