@@ -35,6 +35,19 @@ export type SpecialCombatSkill = {
   statusEffect?: SkillStatusEffect;
 };
 
+export const MIN_DEFENSE_PIERCE_PERCENT = 25;
+export const MAX_DEFENSE_PIERCE_PERCENT = 60;
+
+export function clampDefensePiercePercent(value: number) {
+  return Math.min(
+    MAX_DEFENSE_PIERCE_PERCENT,
+    Math.max(
+      MIN_DEFENSE_PIERCE_PERCENT,
+      Number.isFinite(value) ? value : MIN_DEFENSE_PIERCE_PERCENT
+    )
+  );
+}
+
 const SKILL_STEP = 25;
 const ROGUE_SKILL_STEP = 10;
 const ROGUE_SKILL_LIMIT = 3;
@@ -149,9 +162,9 @@ export function getUnlockedSpecialSkills(
           : 1.5 + requiredValue / 100,
       defensePiercePercent: isKnightHeart || isArcherFocus
         ? 0
-        : isRogue
-        ? Math.min(80, 35 + index * 15)
-        : Math.min(80, 20 + index * 10),
+        : clampDefensePiercePercent(
+            isRogue ? 35 + index * 15 : 20 + index * 10
+          ),
       effectType: isKnightHeart ? "buff" : isArcherFocus ? "passive" : "damage",
       description: isKnightHeart
         ? "自身造成傷害 +20%，受到傷害 −20%，持續 2 回合；冷卻 5 回合。"

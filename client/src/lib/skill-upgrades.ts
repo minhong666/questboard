@@ -1,4 +1,7 @@
-import type { SpecialCombatSkill } from "./class-skills";
+import {
+  clampDefensePiercePercent,
+  type SpecialCombatSkill,
+} from "./class-skills";
 
 export const MAX_SKILL_UPGRADE_LEVEL = 50;
 
@@ -39,7 +42,7 @@ export function applySkillUpgrade(
       ? skill.damageMultiplier * (1 + level * 0.05)
       : skill.damageMultiplier,
     defensePiercePercent: damageSkill
-      ? Math.min(90, skill.defensePiercePercent + level * 2)
+      ? clampDefensePiercePercent(skill.defensePiercePercent + level * 2)
       : skill.defensePiercePercent,
     damageBonusPercent: buffSkill
       ? skill.damageBonusPercent + level

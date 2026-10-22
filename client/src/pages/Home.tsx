@@ -4807,7 +4807,7 @@ export default function Home() {
                   const upgradeBonusLabel =
                     upgradeLevel > 0
                       ? skill.effectType === "damage"
-                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(90, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
+                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(60, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
                         : skill.effectType === "buff"
                         ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
                         : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`

@@ -1,4 +1,7 @@
-import type { SpecialCombatSkill } from "./class-skills";
+import {
+  clampDefensePiercePercent,
+  type SpecialCombatSkill,
+} from "./class-skills";
 
 export type JobClass = "warrior" | "archer" | "mage" | "rogue";
 
@@ -135,7 +138,10 @@ function createSpecializationSkill(
     unlockLevel: level,
     damageType: isMage ? "魔法" : "物理",
     damageMultiplier,
-    defensePiercePercent,
+    defensePiercePercent:
+      effectType === "damage"
+        ? clampDefensePiercePercent(defensePiercePercent)
+        : 0,
     effectType,
     description:
       effectType === "buff"
@@ -252,9 +258,9 @@ export function applySpecializationToSkill(
               : skill.damageMultiplier,
     defensePiercePercent:
       isGuardian && isDamage
-        ? Math.min(90, skill.defensePiercePercent + 5)
+        ? clampDefensePiercePercent(skill.defensePiercePercent + 5)
         : isBerserker && isDamage
-          ? Math.max(0, skill.defensePiercePercent - 5)
+          ? clampDefensePiercePercent(skill.defensePiercePercent - 5)
           : skill.defensePiercePercent,
     damageBonusPercent:
       isGuardian && skill.effectType === "buff"
