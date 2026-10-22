@@ -197,6 +197,7 @@ type BattleState = {
     damageBonusPercent: number;
     damageReductionPercent: number;
     healPercentMaxHealth: number;
+    dodgeRateBonusPercent: number;
   } | null;
   xpReward: number;
   lootDrop: LootItem | null;
@@ -2884,7 +2885,8 @@ export default function Home() {
       selectedSkill.effectType === "buff" ||
       selectedSkill.damageBonusPercent > 0 ||
       selectedSkill.damageReductionPercent !== 0 ||
-      (selectedSkill.healPercentMaxHealth ?? 0) > 0
+      (selectedSkill.healPercentMaxHealth ?? 0) > 0 ||
+      (selectedSkill.dodgeRateBonusPercent ?? 0) > 0
     )
       ? {
           skillId: selectedSkill.id,
@@ -2892,6 +2894,7 @@ export default function Home() {
           damageBonusPercent: selectedSkill.damageBonusPercent,
           damageReductionPercent: selectedSkill.damageReductionPercent,
           healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
+          dodgeRateBonusPercent: selectedSkill.dodgeRateBonusPercent ?? 0,
         }
       : battle.activeBuff;
     const nextActiveBuff = activeBuff && activeBuff.turnsRemaining > 1
@@ -2928,7 +2931,14 @@ export default function Home() {
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense * (1 + (activeBuff?.damageBonusPercent ?? 0) / 100)
     );
-    const rawDamageDealt = actionLocked
+    const instantExecute = Boolean(
+      selectedSkill?.executeBelowHealthPercent &&
+      battle.monsterHealth <
+        monster.health * (selectedSkill.executeBelowHealthPercent / 100)
+    );
+    const rawDamageDealt = instantExecute
+      ? battle.monsterHealth
+      : actionLocked
       ? 0
       : monsterDodges
       ? 0
@@ -2947,7 +2957,9 @@ export default function Home() {
     const resistancePercent = damageType === "魔法"
       ? monster.magicResistancePercent ?? 0
       : monster.physicalResistancePercent ?? 0;
-    const damageDealt = rawDamageDealt === 0
+    const damageDealt = instantExecute
+      ? battle.monsterHealth
+      : rawDamageDealt === 0
       ? 0
       : Math.max(1, Math.round(rawDamageDealt * (1 - resistancePercent / 100)));
     const nextMonsterStatuses = applyBattleStatusEffects(
@@ -3080,7 +3092,8 @@ export default function Home() {
       );
       return;
     }
-    const effectivePlayerDodgeRate = effectiveCombatStats.dodgeRate *
+    const effectivePlayerDodgeRate = (effectiveCombatStats.dodgeRate +
+      (activeBuff?.dodgeRateBonusPercent ?? 0)) *
       (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
     const playerDodges = statusTick.frozen
       ? false

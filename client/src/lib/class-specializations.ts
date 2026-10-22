@@ -122,7 +122,8 @@ function createSpecializationSkill(
   durationTurns = effectType === "buff" ? 2 : 0,
   critRateBonusPercent = 0,
   dodgeRateBonusPercent = 0,
-  cooldownTurns = effectType === "buff" ? 5 : 3
+  cooldownTurns = effectType === "buff" ? 5 : 3,
+  executeBelowHealthPercent = 0
 ): SpecialCombatSkill {
   const isMage = specialization.jobClass === "mage";
   const damageReductionLabel = damageReductionPercent >= 0
@@ -152,7 +153,7 @@ function createSpecializationSkill(
         ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，${damageReductionLabel}，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
         : effectType === "passive"
           ? `轉職專精被動：暴擊率增加 ${critRateBonusPercent}%，暴擊傷害增加 ${critDamageBonusPercent}%，閃避增加 ${dodgeRateBonusPercent}%。`
-          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${damageReductionPercent !== 0 ? `，${damageReductionLabel}，持續 ${durationTurns} 回合` : ""}。`,
+          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${damageReductionPercent !== 0 ? `，${damageReductionLabel}，持續 ${durationTurns} 回合` : ""}${executeBelowHealthPercent > 0 ? `，敵人生命低於 ${executeBelowHealthPercent}% 時直接斬殺` : ""}。`,
     cooldownTurns,
     durationTurns,
     damageBonusPercent,
@@ -161,6 +162,7 @@ function createSpecializationSkill(
     critDamageBonusPercent,
     critRateBonusPercent,
     dodgeRateBonusPercent,
+    executeBelowHealthPercent,
     healPercentMaxHealth,
   };
 }
@@ -200,14 +202,14 @@ export function getAllSpecializationSkills(
       createSpecializationSkill(specialization, 100, "絕對零度", "damage", 3.3, 60),
     ],
     "rogue-assassin": [
-      createSpecializationSkill(specialization, 50, "暗殺契約", "damage", 2.5, 55),
-      createSpecializationSkill(specialization, 75, "致命連環", "damage", 3.4, 70),
-      createSpecializationSkill(specialization, 100, "無聲處決", "damage", 4.6, 85),
+      createSpecializationSkill(specialization, 50, "暗殺契約", "damage", 2.5, 30),
+      createSpecializationSkill(specialization, 75, "致命連環", "damage", 3.4, 60, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, 100, "無聲處決", "damage", 4.6, 60, 0, 0, 0, 0, 0, 0, 0, 8, 10),
     ],
     "rogue-shadowdancer": [
-      createSpecializationSkill(specialization, 50, "影步幻舞", "passive", 0, 0, 0, 0, 25),
-      createSpecializationSkill(specialization, 75, "月影亂舞", "damage", 2.4, 45),
-      createSpecializationSkill(specialization, 100, "萬影歸寂", "damage", 4, 65),
+      createSpecializationSkill(specialization, 50, "影步幻舞", "passive", 0, 0, 0, 0, 25, 0, 0, 0, 10),
+      createSpecializationSkill(specialization, 75, "月影亂舞", "damage", 2.4, 45, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, 100, "萬影歸寂", "damage", 4, 30, 0, 0, 0, 0, 3, 0, 30, 8),
     ],
   };
   return skillSets[specialization.id];

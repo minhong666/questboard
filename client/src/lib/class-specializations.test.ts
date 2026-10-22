@@ -101,6 +101,27 @@ describe("class specializations", () => {
     expect(sniperSkills[2].cooldownTurns).toBe(8);
   });
 
+  it("uses the requested assassin and shadowdancer skill effects", () => {
+    const assassinSkills = getAllSpecializationSkills(getSpecializations("rogue")[0]);
+    expect(assassinSkills[0].defensePiercePercent).toBe(30);
+    expect(assassinSkills[0].cooldownTurns).toBe(3);
+    expect(assassinSkills[1].defensePiercePercent).toBe(60);
+    expect(assassinSkills[1].cooldownTurns).toBe(5);
+    expect(assassinSkills[2].damageMultiplier).toBe(4.6);
+    expect(assassinSkills[2].executeBelowHealthPercent).toBe(10);
+    expect(assassinSkills[2].cooldownTurns).toBe(8);
+
+    const shadowSkills = getAllSpecializationSkills(getSpecializations("rogue")[1]);
+    expect(shadowSkills[0].critDamageBonusPercent).toBe(25);
+    expect(shadowSkills[0].dodgeRateBonusPercent).toBe(10);
+    expect(shadowSkills[1].defensePiercePercent).toBe(45);
+    expect(shadowSkills[1].cooldownTurns).toBe(5);
+    expect(shadowSkills[2].defensePiercePercent).toBe(30);
+    expect(shadowSkills[2].dodgeRateBonusPercent).toBe(30);
+    expect(shadowSkills[2].durationTurns).toBe(3);
+    expect(shadowSkills[2].cooldownTurns).toBe(8);
+  });
+
   it("unlocks specialization skills at levels 50, 75, and 100", () => {
     const specialization = getSpecializations("mage")[0];
     expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);
