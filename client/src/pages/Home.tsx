@@ -100,6 +100,13 @@ import {
   type SkillStatusKind,
 } from "../lib/class-skills";
 import {
+  applySkillUpgrade,
+  getSkillUpgradePointsForLevelUps,
+  MAX_SKILL_UPGRADE_LEVEL,
+  normalizeSkillUpgradeLevels,
+  type SkillUpgradeLevels,
+} from "../lib/skill-upgrades";
+import {
   findFailedAbilityRequirement,
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
@@ -273,6 +280,8 @@ type AppState = {
   allTasksBonusClaimed: boolean;
   inventory: LootItem[];
   equippedItemIds: string[];
+  skillUpgradePoints: number;
+  skillUpgradeLevels: SkillUpgradeLevels;
   dailyResetMinutes: number;
   boardRefreshPeriodKey?: string;
   userName: string;
@@ -929,6 +938,8 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
     ...state,
     totalXp: nextTotalXp,
     abilityPoints: state.abilityPoints + levelUps * 5,
+    skillUpgradePoints:
+      state.skillUpgradePoints + getSkillUpgradePointsForLevelUps(levelUps),
     abilityLevel: Math.max(state.abilityLevel, nextLevel),
     abilities: {
       health: state.abilities.health + growth.abilities.health,
@@ -970,6 +981,8 @@ const initialState: AppState = {
   allTasksBonusClaimed: false,
   inventory: [],
   equippedItemIds: [],
+  skillUpgradePoints: 14,
+  skillUpgradeLevels: {},
   dailyResetMinutes: 240,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   userName: "Mira Chen",
@@ -1111,6 +1124,13 @@ function loadState(): AppState {
       parsed.equippedItemIds,
       jobClass
     );
+    const skillUpgradeLevels = normalizeSkillUpgradeLevels(
+      parsed.skillUpgradeLevels
+    );
+    const skillUpgradePoints =
+      typeof parsed.skillUpgradePoints === "number"
+        ? Math.max(0, Math.floor(parsed.skillUpgradePoints) + levelUpsSinceSave)
+        : playerLevel;
     const timerState = normalizeTimerSaveState(
       parsed.timerActivities,
       parsed.runningTimer
@@ -1176,6 +1196,8 @@ function loadState(): AppState {
       allTasksBonusClaimed: parsed.allTasksBonusClaimed === true,
       inventory,
       equippedItemIds,
+      skillUpgradePoints,
+      skillUpgradeLevels,
       dailyResetMinutes,
       boardRefreshPeriodKey:
         typeof parsed.boardRefreshPeriodKey === "string"
@@ -1232,6 +1254,13 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     ),
     inventory,
     equippedItemIds,
+    skillUpgradePoints: Math.max(
+      0,
+      profileState.skillUpgradePoints ?? profileState.abilityLevel ?? 0
+    ),
+    skillUpgradeLevels: normalizeSkillUpgradeLevels(
+      profileState.skillUpgradeLevels
+    ),
     currentHealth: clampCurrentHealth(
       profileState.currentHealth,
       getEffectiveHealthCap(abilities, jobClass, inventory, equippedItemIds)
@@ -1671,6 +1700,8 @@ export default function Home() {
     abilityPoints: 0,
     abilityLevel: 0,
     abilityAutoGrowthApplied: true,
+    skillUpgradePoints: 0,
+    skillUpgradeLevels: {},
     defeatedMonsterIds: [],
     currentHealth: defaultAbilities.health,
     nextHealthRecoveryAt: 0,
@@ -1878,8 +1909,11 @@ export default function Home() {
   const archerTalentBonuses = getArcherTalentBonuses(
     state.archerDodgeFailStacks
   );
+  const skillUpgradeLevels = state.skillUpgradeLevels ?? {};
   const archerSkillCritDamageBonus =
-    isArcher && state.abilities.intelligence >= 5 ? 30 : 0;
+    isArcher && state.abilities.intelligence >= 5
+      ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
+      : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
       ? 0
@@ -1911,8 +1945,10 @@ export default function Home() {
     state.abilities.strength,
     state.abilities.intelligence,
     effectiveCombatStats.critRate
+  ).map(skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0));
+  const allSpecialSkills = getAllSpecialSkills(state.jobClass).map(skill =>
+    applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
   );
-  const allSpecialSkills = getAllSpecialSkills(state.jobClass);
   const nextSkillUnlockThreshold = getNextSkillUnlockThreshold(
     state.jobClass,
     state.abilities.strength,
@@ -2864,6 +2900,7 @@ export default function Home() {
             ? [...previousInventory, lootDrop]
             : previousInventory,
           abilityPoints: previous.abilityPoints + levelUps * 5,
+          skillUpgradePoints: previous.skillUpgradePoints + levelUps,
           abilityLevel: Math.max(previous.abilityLevel, nextLevel),
           abilities: {
             health:
@@ -2896,7 +2933,7 @@ export default function Home() {
         };
       });
       showToast(
-        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrop ? ` · 掉落${lootDrop.name}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${levelUps * 5} 點能力點` : ""}`
+        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrop ? ` · 掉落${lootDrop.name}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${levelUps * 5} 點能力點與 ${levelUps} 點技能升級點數` : ""}`
       );
       return;
     }
@@ -3011,6 +3048,7 @@ export default function Home() {
         totalXp: getXpForLevel(reducedLevel),
         abilityLevel: reducedLevel,
         abilityPoints: Math.floor(previous.abilityPoints / 2),
+        skillUpgradePoints: Math.floor(previous.skillUpgradePoints / 2),
         coins: Math.floor(previous.coins / 2),
         combatCooldownUntil: Date.now() + 30 * 60 * 1000,
       }));
@@ -3403,6 +3441,7 @@ export default function Home() {
           previous.abilityPoints +
           earnedAbilityPoints +
           (allTasksBonus ? 5 : 0),
+        skillUpgradePoints: previous.skillUpgradePoints + levelUps,
         abilityLevel: Math.max(previous.abilityLevel, nextLevel),
         allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
         abilities: {
@@ -3453,7 +3492,7 @@ export default function Home() {
           : "";
       const levelUpMessage =
         levelUps > 0
-          ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${earnedAbilityPoints} 點能力點`
+          ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${earnedAbilityPoints} 點能力點與 ${levelUps} 點技能升級點數`
           : "";
       showToast(
         newLines > bingoLines.length
@@ -3743,6 +3782,27 @@ export default function Home() {
       ),
     }));
     showToast(`已刪除「${activity.name}」計時器`);
+  };
+
+  const upgradeSkill = (skillId: string, skillName: string) => {
+    const currentLevel = state.skillUpgradeLevels[skillId] ?? 0;
+    if (state.skillUpgradePoints <= 0) {
+      showToast("技能升級點數不足，請先提升角色等級");
+      return;
+    }
+    if (currentLevel >= MAX_SKILL_UPGRADE_LEVEL) {
+      showToast(`「${skillName}」已達技能升級上限`);
+      return;
+    }
+    setState(previous => ({
+      ...previous,
+      skillUpgradePoints: previous.skillUpgradePoints - 1,
+      skillUpgradeLevels: {
+        ...previous.skillUpgradeLevels,
+        [skillId]: (previous.skillUpgradeLevels[skillId] ?? 0) + 1,
+      },
+    }));
+    showToast(`「${skillName}」已升級至 Lv.${currentLevel + 1}`);
   };
 
   const navigateTo = (page: PageKey) => {
@@ -4522,10 +4582,19 @@ export default function Home() {
                   <strong>{nextSkillUnlockThreshold === null ? "全部解鎖" : `${nextSkillUnlockThreshold}${state.jobClass === "rogue" ? "%" : " 點"}`}</strong>
                 </div>
               </div>
+              <div className="skill-upgrade-points panel-card">
+                <div>
+                  <span className="mini-kicker">SKILL UPGRADE POINTS</span>
+                  <strong>{state.skillUpgradePoints}</strong>
+                  <small>每升 1 級獲得 1 點；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。</small>
+                </div>
+                <Zap size={24} />
+              </div>
               <div className="skill-archive-grid">
                 {allSpecialSkills.map(skill => {
                   const unlocked = unlockedSpecialSkills.some(item => item.id === skill.id);
                   const isBuff = skill.effectType === "buff";
+                  const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
                   return (
                     <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
                       <div className="skill-archive-card-top">
@@ -4541,6 +4610,14 @@ export default function Home() {
                         <span>{skill.attributeName}門檻</span>
                         {isBuff ? <span>增益技能 · {skill.durationTurns} 回合</span> : <span>{skill.damageMultiplier.toFixed(2)}×{skill.damageType}傷害</span>}
                         {skill.cooldownTurns > 0 && <span>冷卻 {skill.cooldownTurns} 回合</span>}
+                        <button
+                          type="button"
+                          className="skill-upgrade-button"
+                          disabled={!unlocked || state.skillUpgradePoints <= 0 || upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL}
+                          onClick={() => upgradeSkill(skill.id, skill.name)}
+                        >
+                          {upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL ? "已滿級" : `升級 ${upgradeLevel}/${MAX_SKILL_UPGRADE_LEVEL}`}
+                        </button>
                       </div>
                     </article>
                   );
