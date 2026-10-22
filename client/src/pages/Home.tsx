@@ -4603,6 +4603,10 @@ export default function Home() {
                         ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
                         : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
                       : "";
+                  const nextUpgradeSkill =
+                    unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
+                      ? applySkillUpgrade(skill, upgradeLevel + 1)
+                      : null;
                   return (
                     <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
                       <div className="skill-archive-card-top">
@@ -4618,6 +4622,25 @@ export default function Home() {
                         <div className="skill-upgrade-bonus">
                           <Zap size={13} />
                           <span>{upgradeBonusLabel}（Lv.{upgradeLevel}）</span>
+                        </div>
+                      )}
+                      {nextUpgradeSkill && (
+                        <div className="skill-upgrade-preview">
+                          <strong>下一級預覽</strong>
+                          {skill.effectType === "damage" ? (
+                            <span>
+                              {skill.damageMultiplier.toFixed(2)}× → {nextUpgradeSkill.damageMultiplier.toFixed(2)}× {skill.damageType}傷害
+                            </span>
+                          ) : skill.effectType === "buff" ? (
+                            <span>
+                              傷害增益 {skill.damageBonusPercent}% → {nextUpgradeSkill.damageBonusPercent}% · 減傷 {skill.damageReductionPercent}% → {nextUpgradeSkill.damageReductionPercent}%
+                            </span>
+                          ) : (
+                            <span>
+                              暴擊傷害 +{skill.critDamageBonusPercent}% → +{nextUpgradeSkill.critDamageBonusPercent}%
+                            </span>
+                          )}
+                          <small>升級消耗：1 點技能升級點數</small>
                         </div>
                       )}
                       <div className="skill-archive-meta">
