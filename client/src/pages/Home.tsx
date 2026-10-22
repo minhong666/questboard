@@ -107,6 +107,11 @@ import {
   type SkillUpgradeLevels,
 } from "../lib/skill-upgrades";
 import {
+  ACHIEVEMENTS,
+  getAchievementProgress,
+  type AchievementContext,
+} from "../lib/achievements";
+import {
   findFailedAbilityRequirement,
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
@@ -282,6 +287,7 @@ type AppState = {
   equippedItemIds: string[];
   skillUpgradePoints: number;
   skillUpgradeLevels: SkillUpgradeLevels;
+  achievementClaimedIds: string[];
   dailyResetMinutes: number;
   boardRefreshPeriodKey?: string;
   userName: string;
@@ -323,7 +329,8 @@ type PageKey =
   | "codex"
   | "fusion"
   | "rewards"
-  | "timers";
+  | "timers"
+  | "achievements";
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
@@ -351,6 +358,11 @@ const iconMap: Record<string, LucideIcon> = {
   sword: Sword,
   star: Star,
   "shield-check": ShieldCheck,
+  clock: Clock3,
+  flame: Flame,
+  skull: Skull,
+  zap: Zap,
+  award: Award,
 };
 
 const categoryTone: Record<Category, string> = {
@@ -983,6 +995,7 @@ const initialState: AppState = {
   equippedItemIds: [],
   skillUpgradePoints: 14,
   skillUpgradeLevels: {},
+  achievementClaimedIds: [],
   dailyResetMinutes: 240,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   userName: "Mira Chen",
@@ -1198,6 +1211,9 @@ function loadState(): AppState {
       equippedItemIds,
       skillUpgradePoints,
       skillUpgradeLevels,
+      achievementClaimedIds: Array.isArray(parsed.achievementClaimedIds)
+        ? parsed.achievementClaimedIds.filter((id): id is string => typeof id === "string")
+        : [],
       dailyResetMinutes,
       boardRefreshPeriodKey:
         typeof parsed.boardRefreshPeriodKey === "string"
@@ -1261,6 +1277,11 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     skillUpgradeLevels: normalizeSkillUpgradeLevels(
       profileState.skillUpgradeLevels
     ),
+    achievementClaimedIds: Array.isArray(profileState.achievementClaimedIds)
+      ? profileState.achievementClaimedIds.filter(
+          (id): id is string => typeof id === "string"
+        )
+      : [],
     currentHealth: clampCurrentHealth(
       profileState.currentHealth,
       getEffectiveHealthCap(abilities, jobClass, inventory, equippedItemIds)
@@ -1949,6 +1970,28 @@ export default function Home() {
   const allSpecialSkills = getAllSpecialSkills(state.jobClass).map(skill =>
     applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
   );
+  const achievementContext: AchievementContext = {
+    completedTasks: state.tasks.filter(task => task.completed).length,
+    totalXp: state.totalXp,
+    timerSeconds:
+      state.timerActivities.reduce((total, activity) => total + activity.totalSeconds, 0) +
+      (state.runningTimer
+        ? getTimerElapsedSeconds(0, state.runningTimer.startedAt, currentTime)
+        : 0),
+    streak: state.streak,
+    defeatedMonsters: state.defeatedMonsterIds.length,
+    inventoryItems: state.inventory.length,
+    unlockedSkills: unlockedSpecialSkills.length,
+    skillUpgradeLevels: Object.values(state.skillUpgradeLevels).reduce(
+      (total, level) => total + level,
+      0
+    ),
+  };
+  const achievementStatuses = ACHIEVEMENTS.map(achievement => ({
+    achievement,
+    progress: getAchievementProgress(achievement, achievementContext),
+    claimed: state.achievementClaimedIds.includes(achievement.id),
+  }));
   const nextSkillUnlockThreshold = getNextSkillUnlockThreshold(
     state.jobClass,
     state.abilities.strength,
@@ -3805,6 +3848,26 @@ export default function Home() {
     showToast(`「${skillName}」已升級至 Lv.${currentLevel + 1}`);
   };
 
+  const claimAchievement = (achievementId: string) => {
+    const status = achievementStatuses.find(
+      item => item.achievement.id === achievementId
+    );
+    if (!status || !status.progress.completed || status.claimed) return;
+    const { achievement } = status;
+    setState(previous => ({
+      ...previous,
+      coins: previous.coins + achievement.rewardCoins,
+      skillUpgradePoints:
+        previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
+      achievementClaimedIds: [...previous.achievementClaimedIds, achievement.id],
+    }));
+    showToast(
+      `成就「${achievement.title}」已領取：+${achievement.rewardCoins} 金幣${
+        achievement.rewardSkillPoints ? `、+${achievement.rewardSkillPoints} 技能點` : ""
+      }`
+    );
+  };
+
   const navigateTo = (page: PageKey) => {
     setActivePage(page);
     setMobileMenuOpen(false);
@@ -3979,7 +4042,7 @@ export default function Home() {
           </button>
           <button
             className="sidebar-link"
-            onClick={() => navigateTo("dashboard")}
+            onClick={() => navigateTo("achievements")}
           >
             <Trophy size={18} />
             <span>成就里程碑</span>
@@ -4062,6 +4125,7 @@ export default function Home() {
                   fusion: "裝備合成",
                   rewards: "獎勵寶庫",
                   timers: "事務計時",
+                  achievements: "成就里程碑",
                 }[activePage]
               }
             </strong>
@@ -5320,6 +5384,69 @@ export default function Home() {
                 </div>
               </section>
             </>
+          )}
+
+          {activePage === "achievements" && (
+            <section className="achievements-section" id="achievements">
+              <div className="section-heading achievements-heading">
+                <div>
+                  <div className="section-kicker"><Trophy size={15} /> ACHIEVEMENT HALL</div>
+                  <h2>成就里程碑</h2>
+                  <p>完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵。</p>
+                </div>
+                <div className="achievement-trophy-count">
+                  <strong>{achievementStatuses.filter(item => item.claimed).length}</strong>
+                  <span>/ {ACHIEVEMENTS.length} 已領取</span>
+                </div>
+              </div>
+              <div className="achievement-summary-grid">
+                <div className="achievement-summary-card panel-card">
+                  <span>已解鎖</span>
+                  <strong>{achievementStatuses.filter(item => item.progress.completed).length}</strong>
+                </div>
+                <div className="achievement-summary-card panel-card">
+                  <span>待領取</span>
+                  <strong>{achievementStatuses.filter(item => item.progress.completed && !item.claimed).length}</strong>
+                </div>
+                <div className="achievement-summary-card panel-card">
+                  <span>可得金幣</span>
+                  <strong>{achievementStatuses.filter(item => !item.claimed).reduce((total, item) => total + item.achievement.rewardCoins, 0)}</strong>
+                </div>
+              </div>
+              <div className="achievement-grid">
+                {achievementStatuses.map(({ achievement, progress, claimed }) => {
+                  const progressPercent = Math.min(100, Math.round((progress.value / progress.goal) * 100));
+                  return (
+                    <article className={`achievement-card panel-card ${progress.completed ? "is-complete" : ""} ${claimed ? "is-claimed" : ""}`} key={achievement.id}>
+                      <div className="achievement-card-top">
+                        <div className="achievement-icon">{getTaskIcon(achievement.icon, 20)}</div>
+                        <div>
+                          <span>{achievement.category}</span>
+                          <h3>{achievement.title}</h3>
+                        </div>
+                        {progress.completed && <CheckCircle2 size={18} className="achievement-complete-icon" />}
+                      </div>
+                      <p>{achievement.description}</p>
+                      <div className="achievement-progress-label">
+                        <span>{progress.label}</span>
+                        <strong>{progressPercent}%</strong>
+                      </div>
+                      <div className="achievement-progress-track"><span style={{ width: `${progressPercent}%` }} /></div>
+                      <div className="achievement-reward-row">
+                        <span>獎勵：+{achievement.rewardCoins} 金幣{achievement.rewardSkillPoints ? ` · +${achievement.rewardSkillPoints} 技能點` : ""}</span>
+                        {claimed ? (
+                          <strong>已領取</strong>
+                        ) : progress.completed ? (
+                          <button type="button" onClick={() => claimAchievement(achievement.id)}>領取獎勵</button>
+                        ) : (
+                          <small>尚未完成</small>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
           {activePage === "loot" && (
