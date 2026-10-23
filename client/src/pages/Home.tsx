@@ -374,6 +374,16 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
+type ScreenWakeLock = {
+  release: () => Promise<void>;
+};
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<ScreenWakeLock>;
+  };
+};
+
 type ModalState =
   | { kind: "task"; taskId?: string; slot?: number }
   | { kind: "reward"; rewardId?: string }
@@ -499,7 +509,12 @@ function getNotificationPermission(): NotificationPermission | "unsupported" {
   return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
 }
 
-async function showQuestNotification(title: string, body: string, tag: string) {
+async function showQuestNotification(
+  title: string,
+  body: string,
+  tag: string,
+  extraOptions: NotificationOptions = {}
+) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") {
     return false;
   }
@@ -508,6 +523,7 @@ async function showQuestNotification(title: string, body: string, tag: string) {
     icon: "/questboard-logo.svg",
     badge: "/questboard-logo.svg",
     tag,
+    ...extraOptions,
   };
   try {
     if ("serviceWorker" in navigator) {
@@ -520,6 +536,17 @@ async function showQuestNotification(title: string, body: string, tag: string) {
   }
   new Notification(title, options);
   return true;
+}
+
+async function closeQuestNotification(tag: string) {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications({ tag });
+    notifications.forEach(notification => notification.close());
+  } catch {
+    // Notification closing is best effort because some mobile browsers omit this API.
+  }
 }
 
 const iconMap: Record<string, LucideIcon> = {
@@ -1997,6 +2024,8 @@ export default function Home() {
   const [toast, setToast] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const wakeLockRef = useRef<ScreenWakeLock | null>(null);
+  const liveTimerNotificationRef = useRef(0);
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [battleFx, setBattleFx] = useState<BattleFx | null>(null);
   const battleFxIdRef = useRef(0);
@@ -2077,6 +2106,11 @@ export default function Home() {
     (total, activity) => total + activity.xpEarned,
     0
   );
+  const runningTimerActivity = state.runningTimer
+    ? state.timerActivities.find(
+        activity => activity.id === state.runningTimer?.activityId
+      ) ?? null
+    : null;
   const activeTimerProfile = profiles.find(
     profile => profile.state.runningTimer !== null
   );
@@ -3096,6 +3130,101 @@ export default function Home() {
       };
     });
   }, [currentTime, state.runningTimer, state.timerActivities, timerLockOwned]);
+
+  useEffect(() => {
+    const running = state.runningTimer;
+    const activity = running
+      ? state.timerActivities.find(item => item.id === running.activityId)
+      : null;
+    const liveTag = "questboard-live-timer";
+
+    if (!running || !activity) {
+      document.title = "QuestBoard";
+      if (liveTimerNotificationRef.current !== 0) {
+        liveTimerNotificationRef.current = 0;
+        void closeQuestNotification(liveTag);
+      }
+      return;
+    }
+
+    const elapsedSeconds = getTimerElapsedSeconds(
+      activity.totalSeconds,
+      running.startedAt,
+      currentTime
+    );
+    document.title = `${formatTimerDuration(elapsedSeconds)} · ${activity.name} · QuestBoard`;
+
+    const notificationsEnabled =
+      notificationSettings.enabled && notificationPermission === "granted";
+    if (!notificationsEnabled) {
+      if (liveTimerNotificationRef.current !== 0) {
+        liveTimerNotificationRef.current = 0;
+        void closeQuestNotification(liveTag);
+      }
+      return;
+    }
+
+    if (currentTime - liveTimerNotificationRef.current < 5000) return;
+    liveTimerNotificationRef.current = currentTime;
+    void showQuestNotification(
+      `QuestBoard · ${activity.name}`,
+      `事務計時中 · ${formatTimerDuration(elapsedSeconds)} · 點擊回到計時器`,
+      liveTag,
+      {
+        requireInteraction: true,
+        silent: true,
+        data: { type: "live-timer", activityId: activity.id },
+      }
+    );
+  }, [
+    currentTime,
+    notificationPermission,
+    notificationSettings.enabled,
+    state.runningTimer,
+    state.timerActivities,
+  ]);
+
+  useEffect(() => {
+    const running = state.runningTimer;
+    const navigatorWithWakeLock = window.navigator as NavigatorWithWakeLock;
+    let disposed = false;
+
+    const releaseWakeLock = async () => {
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (lock) await lock.release().catch(() => undefined);
+    };
+
+    const requestWakeLock = async () => {
+      if (
+        disposed ||
+        !running ||
+        document.visibilityState !== "visible" ||
+        !navigatorWithWakeLock.wakeLock ||
+        wakeLockRef.current
+      )
+        return;
+      try {
+        wakeLockRef.current = await navigatorWithWakeLock.wakeLock.request("screen");
+        if (disposed) await releaseWakeLock();
+      } catch {
+        // Some browsers require a user gesture or do not support Wake Lock.
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void requestWakeLock();
+      else void releaseWakeLock();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (running) void requestWakeLock();
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void releaseWakeLock();
+    };
+  }, [state.runningTimer?.activityId, state.runningTimer?.startedAt]);
 
   useEffect(() => {
     setState(previous => {
@@ -7448,6 +7577,29 @@ export default function Home() {
                     ` 目前「${activeTimerProfile.name}」存檔${activeTimerProfileActivity ? ` 的「${activeTimerProfileActivity.name}」` : ""}正在計時；請在持有計時鎖的分頁停止後再開始其他事務。`}
                 </p>
               </div>
+
+              {state.runningTimer && runningTimerActivity && (
+                <div className="timer-mobile-live panel-card">
+                  <div className="timer-mobile-live-copy">
+                    <span><span className="timer-live-dot" /> 手機即時計時</span>
+                    <strong>{runningTimerActivity.name}</strong>
+                    <small>
+                      {notificationSettings.enabled && notificationPermission === "granted"
+                        ? "通知列同步中 · 螢幕保持喚醒"
+                        : "開啟手機通知後，可在通知列查看即時時間"}
+                    </small>
+                  </div>
+                  <strong className="timer-mobile-live-clock">
+                    {formatTimerDuration(
+                      getTimerElapsedSeconds(
+                        runningTimerActivity.totalSeconds,
+                        state.runningTimer.startedAt,
+                        currentTime
+                      )
+                    )}
+                  </strong>
+                </div>
+              )}
 
               <div className="timer-summary-grid">
                 <div className="timer-summary-card">
