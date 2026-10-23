@@ -4678,6 +4678,42 @@ h2 {
   background: rgba(125, 111, 255, 0.07);
   font-size: 11px;
 }
+.setting-toggle-row {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  color: #dfe5fb !important;
+  border: 1px solid rgba(133, 150, 190, 0.16);
+  border-radius: 8px;
+  background: rgba(11, 17, 32, 0.4);
+}
+.setting-toggle-row > span {
+  display: grid;
+  gap: 4px;
+}
+.setting-toggle-row strong {
+  color: #e7eaff;
+  font-size: 11px;
+}
+.setting-toggle-row small {
+  color: #73809c;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.setting-toggle-row input[type="checkbox"] {
+  width: 38px;
+  height: 21px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  accent-color: #8f82ff;
+}
+.setting-toggle-row input[type="checkbox"]:disabled {
+  opacity: 0.45;
+}
 .avatar-preview {
   width: 34px;
   height: 34px;

@@ -361,11 +361,22 @@ type RewardDraft = {
   icon: string;
 };
 
+type NotificationSettings = {
+  enabled: boolean;
+  dailyTaskReminder: boolean;
+};
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 type ModalState =
   | { kind: "task"; taskId?: string; slot?: number }
   | { kind: "reward"; rewardId?: string }
   | { kind: "profile" }
   | { kind: "refresh" }
+  | { kind: "notifications" }
   | { kind: "saves" }
   | null;
 
@@ -446,6 +457,8 @@ const lootCategoryMeta: Record<
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
 const SHARED_ACHIEVEMENTS_STORAGE_KEY = "questboard-shared-achievements-v1";
+const NOTIFICATION_SETTINGS_KEY = "questboard-notification-settings-v1";
+const NOTIFICATION_LAST_REMINDER_KEY = "questboard-notification-last-reminder-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
 const ACTIVE_PROFILE_KEY = "questboard-active-profile-v1";
 const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
@@ -457,6 +470,53 @@ function normalizeAchievementIds(value: unknown): string[] {
   return Array.isArray(value)
     ? [...new Set(value.filter((id): id is string => typeof id === "string"))]
     : [];
+}
+
+const defaultNotificationSettings: NotificationSettings = {
+  enabled: false,
+  dailyTaskReminder: true,
+};
+
+function loadNotificationSettings(): NotificationSettings {
+  if (typeof window === "undefined") return defaultNotificationSettings;
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(NOTIFICATION_SETTINGS_KEY) ?? "null"
+    ) as Partial<NotificationSettings> | null;
+    return {
+      enabled: parsed?.enabled === true,
+      dailyTaskReminder: parsed?.dailyTaskReminder !== false,
+    };
+  } catch {
+    return defaultNotificationSettings;
+  }
+}
+
+function getNotificationPermission(): NotificationPermission | "unsupported" {
+  return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+}
+
+async function showQuestNotification(title: string, body: string, tag: string) {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+    return false;
+  }
+  const options: NotificationOptions = {
+    body,
+    icon: "/questboard-logo.svg",
+    badge: "/questboard-logo.svg",
+    tag,
+  };
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, options);
+      return true;
+    }
+  } catch {
+    // Fall back to the page notification when the service worker is unavailable.
+  }
+  new Notification(title, options);
+  return true;
 }
 
 const iconMap: Record<string, LucideIcon> = {
@@ -1864,6 +1924,13 @@ export default function Home() {
   const [profiles, setProfiles] = useState<SaveProfile[]>(() => loadProfiles());
   const [sharedAchievementClaimedIds, setSharedAchievementClaimedIds] =
     useState<string[]>(() => loadSharedAchievementClaimedIds());
+  const [notificationSettings, setNotificationSettings] =
+    useState<NotificationSettings>(() => loadNotificationSettings());
+  const [notificationPermission, setNotificationPermission] = useState<
+    NotificationPermission | "unsupported"
+  >(() => getNotificationPermission());
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(() =>
     loadActiveProfileId()
   );
@@ -2712,6 +2779,54 @@ export default function Home() {
       JSON.stringify({ claimedIds: sharedAchievementClaimedIds })
     );
   }, [sharedAchievementClaimedIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      NOTIFICATION_SETTINGS_KEY,
+      JSON.stringify(notificationSettings)
+    );
+  }, [notificationSettings]);
+
+  useEffect(() => {
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !notificationSettings.enabled ||
+      !notificationSettings.dailyTaskReminder ||
+      notificationPermission !== "granted"
+    ) {
+      return;
+    }
+    const date = new Date(currentTime);
+    const currentMinute = date.getHours() * 60 + date.getMinutes();
+    if (currentMinute !== state.dailyResetMinutes) return;
+    const reminderKey = getRepeatPeriodKey("daily", date, state.dailyResetMinutes);
+    if (window.localStorage.getItem(NOTIFICATION_LAST_REMINDER_KEY) === reminderKey) {
+      return;
+    }
+    showQuestNotification(
+      "QuestBoard · 每日任務刷新",
+      state.tasks.some(task => !task.completed)
+        ? "新的每日冒險已準備好，還有任務等待完成。"
+        : "今日任務已刷新，準備開始新的冒險吧。",
+      "daily-task-reminder"
+    ).then(sent => {
+      if (sent) window.localStorage.setItem(NOTIFICATION_LAST_REMINDER_KEY, reminderKey);
+    });
+  }, [
+    currentTime,
+    notificationPermission,
+    notificationSettings,
+    state.dailyResetMinutes,
+    state.tasks,
+  ]);
 
   useEffect(() => {
     const syncStoredProfiles = (event: StorageEvent) => {
@@ -3898,6 +4013,41 @@ export default function Home() {
     setModal({ kind: "refresh" });
   };
 
+  const openNotificationSettings = () => {
+    setModal({ kind: "notifications" });
+  };
+
+  const requestNotificationAccess = async () => {
+    if (notificationPermission === "unsupported") {
+      showToast("此瀏覽器不支援手機通知");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === "granted") {
+      setNotificationSettings(previous => ({ ...previous, enabled: true }));
+      await showQuestNotification(
+        "QuestBoard 通知已啟用",
+        "每日任務刷新時會提醒你回到冒險中。",
+        "notification-enabled"
+      );
+      showToast("手機通知已啟用");
+    } else if (permission === "denied") {
+      showToast("通知權限已被拒絕，請到瀏覽器設定中重新允許");
+    }
+  };
+
+  const installQuestBoard = async () => {
+    if (!installPrompt) {
+      showToast("請使用瀏覽器選單中的「加入主畫面」安裝");
+      return;
+    }
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") showToast("QuestBoard 已加入主畫面");
+    setInstallPrompt(null);
+  };
+
   const openProfileSettings = () => {
     setProfileDraft(state.userName);
     setModal({ kind: "profile" });
@@ -4948,7 +5098,7 @@ export default function Home() {
             <button
               className="notification-button"
               aria-label="通知"
-              onClick={() => showToast("今天有 3 個任務等待你的回應")}
+              onClick={openNotificationSettings}
             >
               <Bell size={18} />
               <span />
@@ -7990,8 +8140,10 @@ export default function Home() {
                     ? "NEW QUEST"
                     : modal.kind === "profile"
                       ? "PROFILE SETTINGS"
-                      : modal.kind === "refresh"
+                    : modal.kind === "refresh"
                         ? "REFRESH SETTINGS"
+                        : modal.kind === "notifications"
+                          ? "MOBILE APP"
                         : modal.kind === "saves"
                           ? "SAVE PROFILES"
                           : "NEW REWARD"}
@@ -8005,6 +8157,8 @@ export default function Home() {
                       ? "使用者設定"
                       : modal.kind === "refresh"
                         ? "調整刷新時間"
+                        : modal.kind === "notifications"
+                          ? "手機 App 與通知"
                         : modal.kind === "saves"
                           ? "冒險存檔"
                           : "建立自訂獎勵"}
@@ -8019,7 +8173,79 @@ export default function Home() {
                 <X size={18} />
               </button>
             </div>
-            {modal.kind === "saves" ? (
+            {modal.kind === "notifications" ? (
+              <div className="modal-form notification-settings-form">
+                <div className="profile-setting-note">
+                  <Bell size={20} />
+                  <span>
+                    {notificationPermission === "granted"
+                      ? "此裝置已允許 QuestBoard 顯示通知。"
+                      : notificationPermission === "denied"
+                        ? "通知目前被瀏覽器拒絕，請至網站權限重新允許。"
+                        : "允許通知後，在手機上接收每日任務提醒。"}
+                  </span>
+                </div>
+                <label className="setting-toggle-row">
+                  <span>
+                    <strong>手機通知</strong>
+                    <small>每日刷新時間提醒未完成任務</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={notificationSettings.enabled && notificationPermission === "granted"}
+                    onChange={() => {
+                      if (notificationPermission !== "granted") {
+                        void requestNotificationAccess();
+                      } else {
+                        setNotificationSettings(previous => ({
+                          ...previous,
+                          enabled: !previous.enabled,
+                        }));
+                      }
+                    }}
+                  />
+                </label>
+                <label className="setting-toggle-row">
+                  <span>
+                    <strong>每日任務提醒</strong>
+                    <small>使用目前設定的每日刷新時間</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={notificationSettings.dailyTaskReminder}
+                    disabled={!notificationSettings.enabled || notificationPermission !== "granted"}
+                    onChange={event =>
+                      setNotificationSettings(previous => ({
+                        ...previous,
+                        dailyTaskReminder: event.target.checked,
+                      }))
+                    }
+                  />
+                </label>
+                <small className="form-help">
+                  通知使用瀏覽器權限與本機 Service Worker；若瀏覽器限制背景執行，請重新開啟 QuestBoard 以接收最新提醒。
+                </small>
+                <div className="save-manager-actions">
+                  {notificationPermission !== "granted" && (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => void requestNotificationAccess()}
+                      disabled={notificationPermission === "unsupported"}
+                    >
+                      <Bell size={15} /> 允許手機通知
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void installQuestBoard()}
+                  >
+                    加入手機主畫面
+                  </button>
+                </div>
+              </div>
+            ) : modal.kind === "saves" ? (
               <div className="modal-form save-manager-form">
                 <label>
                   目前存檔名稱
