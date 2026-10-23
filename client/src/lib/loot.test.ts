@@ -295,8 +295,8 @@ describe("QuestBoard loot", () => {
       activeSets: [{ name: "曙光聖衛·普通", equippedCount: 2, activeBonuses: [{ pieces: 2 }] }],
     });
     expect(getEquipmentSetBonuses(pieces)).toMatchObject({
-      abilities: { health: 180, defense: 24 },
-      combat: { critDamage: 10 },
+      abilities: { health: 120, defense: 16 },
+      combat: { critDamage: 0, damageReductionPercent: 10 },
       activeSets: [{ equippedCount: 4, activeBonuses: [{ pieces: 2 }, { pieces: 4 }] }],
     });
   });

@@ -77,7 +77,7 @@ export type EquipmentSetBonus = {
   pieces: 2 | 4;
   label: string;
   description: string;
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>;
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>;
 };
 
 export type EquipmentSetDefinition = {
@@ -91,15 +91,15 @@ const equipmentSetThemes: Array<{
   id: string;
   name: string;
   description: string;
-  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>> };
-  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>> };
+  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>> };
+  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>> };
 }> = [
   {
     id: "dawn-warden",
     name: "曙光聖衛",
     description: "以堅定防線守住每一個黎明。",
     two: { label: "曙光誓約", bonuses: { health: 60, defense: 8 } },
-    four: { label: "聖衛壁壘", bonuses: { health: 120, defense: 16, critDamage: 10 } },
+    four: { label: "聖衛壁壘", bonuses: { health: 60, defense: 8, damageReductionPercent: 10 } },
   },
   {
     id: "moon-stalker",
@@ -147,7 +147,7 @@ const setRarityMultiplier: Record<LootRarity, number> = {
   神話: 4.5,
 };
 
-const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent", { label: string; unit: string }> = {
+const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", { label: string; unit: string }> = {
   health: { label: "生命", unit: "" },
   strength: { label: "力量", unit: "" },
   defense: { label: "防禦", unit: "" },
@@ -156,10 +156,11 @@ const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent", { label: s
   critDamage: { label: "暴擊傷害", unit: "%" },
   dodgeRate: { label: "閃避率", unit: "%" },
   castSpeedPercent: { label: "施法速度", unit: "%" },
+  damageReductionPercent: { label: "受到傷害", unit: "%" },
 };
 
 function scaleSetBonuses(
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>,
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>,
   multiplier: number
 ) {
   return Object.fromEntries(
@@ -167,16 +168,17 @@ function scaleSetBonuses(
       stat,
       Math.max(1, Math.round((value ?? 0) * multiplier)),
     ])
-  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>;
+  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>;
 }
 
 function describeSetBonuses(
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>
 ) {
   return Object.entries(bonuses)
     .map(([stat, value]) => {
       const info = setBonusLabels[stat as EquipmentAffixStat | "castSpeedPercent"];
-      return `${info.label} +${value}${info.unit}`;
+      const sign = stat === "damageReductionPercent" ? "−" : "+";
+      return `${info.label} ${sign}${value}${info.unit}`;
     })
     .join(" · ");
 }
@@ -206,11 +208,11 @@ export type ActiveEquipmentSet = EquipmentSetDefinition & {
 
 export function getEquipmentSetBonuses(items: EquipmentItem[]): {
   abilities: Required<Pick<EquipmentAffixBonuses, "health" | "strength" | "defense" | "intelligence">>;
-  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number };
+  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number; damageReductionPercent: number };
   activeSets: ActiveEquipmentSet[];
 } {
   const abilities = { health: 0, strength: 0, defense: 0, intelligence: 0 };
-  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0 };
+  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0, damageReductionPercent: 0 };
   const counts = new Map<string, number>();
   for (const item of items) {
     if (item.setId) counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1);
@@ -229,6 +231,7 @@ export function getEquipmentSetBonuses(items: EquipmentItem[]): {
       combat.critDamage += bonus.bonuses.critDamage ?? 0;
       combat.dodgeRate += bonus.bonuses.dodgeRate ?? 0;
       combat.castSpeedPercent += bonus.bonuses.castSpeedPercent ?? 0;
+      combat.damageReductionPercent += bonus.bonuses.damageReductionPercent ?? 0;
     }
     return [{ ...set, equippedCount, activeBonuses }];
   });

@@ -156,6 +156,7 @@ type CombatStats = {
   critDamage: number;
   dodgeRate: number;
   castSpeedPercent?: number;
+  damageReductionPercent?: number;
 };
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
@@ -1015,6 +1016,8 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   combat.dodgeRate = (combat.dodgeRate ?? 0) + setBonuses.combat.dodgeRate;
   combat.castSpeedPercent =
     (combat.castSpeedPercent ?? 0) + setBonuses.combat.castSpeedPercent;
+  combat.damageReductionPercent =
+    (combat.damageReductionPercent ?? 0) + setBonuses.combat.damageReductionPercent;
   return { abilities, combat, activeSets: setBonuses.activeSets };
 }
 
@@ -2416,6 +2419,10 @@ export default function Home() {
       80,
       (combatStatsBase(state.combatStats).castSpeedPercent ?? 0) +
         (equipmentBonuses.combat.castSpeedPercent ?? 0)
+    ),
+    damageReductionPercent: Math.min(
+      80,
+      equipmentBonuses.combat.damageReductionPercent ?? 0
     ),
   };
   const unlockedSpecialSkills = getUnlockedSpecialSkills(
@@ -3848,7 +3855,14 @@ export default function Home() {
     const buffReducedDamage = Math.max(
       1,
       Math.ceil(
-        reducedDamage * (1 - (activeBuff?.damageReductionPercent ?? 0) / 100)
+        reducedDamage *
+          (1 -
+            Math.min(
+              80,
+              (effectiveCombatStats.damageReductionPercent ?? 0) +
+                (activeBuff?.damageReductionPercent ?? 0)
+            ) /
+              100)
       )
     );
     const incomingDamageTaken = playerDodges
@@ -5383,6 +5397,9 @@ export default function Home() {
                     ) : null}
                     {equipmentBonuses.combat.castSpeedPercent ? (
                       <b>施法速度 +{equipmentBonuses.combat.castSpeedPercent}%</b>
+                    ) : null}
+                    {equipmentBonuses.combat.damageReductionPercent ? (
+                      <b>受到傷害 −{equipmentBonuses.combat.damageReductionPercent}%</b>
                     ) : null}
                   </div>
                   <div className="equipment-set-summary">
