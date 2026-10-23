@@ -382,6 +382,52 @@ type PageKey =
   | "timers"
   | "achievements";
 
+const specializationVisuals: Record<
+  SpecializationId,
+  { icon: string; subtitle: string; colorClass: string }
+> = {
+  "warrior-guardian": {
+    icon: "shield-check",
+    subtitle: "鋼鐵壁壘 · 守護隊友",
+    colorClass: "guardian",
+  },
+  "warrior-berserker": {
+    icon: "flame",
+    subtitle: "狂怒戰意 · 以傷換傷",
+    colorClass: "berserker",
+  },
+  "archer-ranger": {
+    icon: "leaf",
+    subtitle: "荒野獵手 · 靈活追擊",
+    colorClass: "ranger",
+  },
+  "archer-sniper": {
+    icon: "target",
+    subtitle: "致命瞄準 · 一擊破局",
+    colorClass: "sniper",
+  },
+  "mage-elementalist": {
+    icon: "sparkles",
+    subtitle: "元素共鳴 · 掌控災厄",
+    colorClass: "elementalist",
+  },
+  "mage-frostguard": {
+    icon: "moon",
+    subtitle: "寒霜結界 · 凍結戰場",
+    colorClass: "frostguard",
+  },
+  "rogue-assassin": {
+    icon: "sword",
+    subtitle: "暗影獵殺 · 穿透要害",
+    colorClass: "assassin",
+  },
+  "rogue-shadowdancer": {
+    icon: "zap",
+    subtitle: "幻影舞步 · 閃避連擊",
+    colorClass: "shadowdancer",
+  },
+};
+
 const LOOT_CATEGORY_KEYS = [...EQUIPMENT_SLOTS, "寶物"] as const;
 type LootCategory = (typeof LOOT_CATEGORY_KEYS)[number];
 
@@ -2158,6 +2204,7 @@ export default function Home() {
     state.jobClass,
     state.specialization
   );
+  const currentSpecializationVisual = specializationVisuals[currentSpecialization.id];
   const specializationUnlocked = player.level >= 50;
   const unlockedSpecializationSkillsForStats = specializationUnlocked
     ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
@@ -5371,18 +5418,39 @@ export default function Home() {
                       : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
                   </small>
                 </div>
+                <div className={`specialization-identity specialization-identity-${currentSpecializationVisual.colorClass}`}>
+                  <div className="specialization-identity-art">
+                    {getTaskIcon(currentSpecializationVisual.icon, 30)}
+                  </div>
+                  <div>
+                    <span className="mini-kicker">CURRENT ASPECT</span>
+                    <strong>{currentSpecialization.name}</strong>
+                    <small>{currentSpecializationVisual.subtitle}</small>
+                  </div>
+                  <div className="specialization-identity-skills">
+                    <span>專精技能</span>
+                    <b>{unlockedSpecializationSkillsForStats.length} / 3</b>
+                  </div>
+                </div>
                 <div className="specialization-branch-grid">
                   {getSpecializations(state.jobClass).map(specialization => (
+                    (() => {
+                      const visual = specializationVisuals[specialization.id];
+                      return (
                     <button
                       type="button"
                       key={specialization.id}
-                      className={`specialization-branch-option ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      className={`specialization-branch-option specialization-option-${visual.colorClass} ${state.specialization === specialization.id ? "is-selected" : ""}`}
                       disabled={!specializationUnlocked}
                       onClick={() => selectSpecialization(specialization.id)}
                     >
+                      <span className="specialization-option-icon">{getTaskIcon(visual.icon, 21)}</span>
                       <strong>{specialization.name}</strong>
+                      <small>{visual.subtitle}</small>
                       <span>{specialization.description}</span>
                     </button>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -7391,11 +7459,12 @@ export default function Home() {
             </div>
             <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
               <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
-                <div className={`battle-visual battle-visual-player battle-hero-${state.jobClass} ${battleFx?.action === "attack" || battleFx?.action === "skill" ? "is-attacking" : ""}`}>
+                <div className={`battle-visual battle-visual-player battle-hero-${state.jobClass} battle-specialization-${currentSpecializationVisual.colorClass} ${battleFx?.action === "attack" || battleFx?.action === "skill" ? "is-attacking" : ""}`}>
                   <div className="battle-hero-aura" />
                   <div className="battle-character-art">
                     {getTaskIcon(classDefinition.icon, 48)}
                   </div>
+                  <span className="battle-specialization-badge">{currentSpecialization.name}</span>
                   {battleFx?.playerDamage ? (
                     <span className="battle-float battle-float-damage">−{battleFx.playerDamage}</span>
                   ) : null}

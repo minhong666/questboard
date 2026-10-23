@@ -6464,3 +6464,119 @@ h2 {
 
 /* 技能實際傷害預覽 */
 .skill-damage-preview{display:grid;gap:8px;padding:9px 10px;border:1px solid rgba(114,213,174,.25);border-radius:8px;background:linear-gradient(135deg,rgba(85,205,191,.1),rgba(8,14,29,.3));font-size:10px;line-height:1.45}.skill-damage-preview.is-locked{display:block;color:#8794af;border-color:rgba(133,150,190,.16);background:rgba(8,14,29,.24);font-size:9px}.skill-damage-preview-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.skill-damage-preview-heading strong{color:#9fe4d3;font-size:10px}.skill-damage-preview-heading small{color:#8794af;font-size:8px}.skill-damage-preview-grid{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}.skill-damage-preview-grid span{color:#9da9c0;font-size:9px}.skill-damage-preview-grid b{color:#e8f8ed;font-size:10px;text-align:right}.skill-damage-preview-note{color:#71809d;font-size:8px;line-height:1.45}
+
+/* 職業專精形象 */
+.specialization-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(176, 168, 255, 0.3);
+  border-radius: 12px;
+  background: linear-gradient(110deg, rgba(139, 124, 255, 0.16), rgba(8, 14, 29, 0.32));
+}
+.specialization-identity-art,
+.specialization-option-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #d7d0ff;
+  border: 1px solid rgba(176, 168, 255, 0.42);
+  background: rgba(139, 124, 255, 0.16);
+}
+.specialization-identity-art {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  box-shadow: 0 0 22px rgba(139, 124, 255, 0.2);
+}
+.specialization-identity > div:nth-child(2) {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+.specialization-identity > div:nth-child(2) strong {
+  color: #f0eaff;
+  font-size: 17px;
+}
+.specialization-identity > div:nth-child(2) small {
+  color: #aaa6cd;
+  font-size: 9px;
+}
+.specialization-identity-skills {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  color: #8794af;
+  font-size: 9px;
+}
+.specialization-identity-skills b {
+  color: #e7bc71;
+  font-size: 16px;
+}
+.specialization-branch-option {
+  position: relative;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 9px;
+}
+.specialization-option-icon {
+  grid-row: span 3;
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+}
+.specialization-branch-option strong,
+.specialization-branch-option small,
+.specialization-branch-option span:last-child {
+  grid-column: 2;
+}
+.specialization-branch-option small {
+  color: #8e9abb;
+  font-size: 8px;
+}
+.specialization-branch-option span:last-child {
+  line-height: 1.55;
+}
+.specialization-option-guardian .specialization-option-icon,
+.specialization-identity-guardian .specialization-identity-art { color: #a9d7ff; border-color: rgba(119, 190, 255, .45); background: rgba(74, 137, 207, .16); }
+.specialization-option-berserker .specialization-option-icon,
+.specialization-identity-berserker .specialization-identity-art { color: #ffb178; border-color: rgba(255, 139, 82, .45); background: rgba(180, 76, 55, .16); }
+.specialization-option-ranger .specialization-option-icon,
+.specialization-identity-ranger .specialization-identity-art { color: #9be4b6; border-color: rgba(105, 224, 170, .45); background: rgba(56, 168, 116, .16); }
+.specialization-option-sniper .specialization-option-icon,
+.specialization-identity-sniper .specialization-identity-art { color: #a9d8ff; border-color: rgba(106, 180, 255, .45); background: rgba(51, 111, 180, .16); }
+.specialization-option-elementalist .specialization-option-icon,
+.specialization-identity-elementalist .specialization-identity-art { color: #f4c7ff; border-color: rgba(219, 139, 255, .45); background: rgba(133, 77, 180, .16); }
+.specialization-option-frostguard .specialization-option-icon,
+.specialization-identity-frostguard .specialization-identity-art { color: #9be7ff; border-color: rgba(106, 211, 255, .45); background: rgba(45, 130, 180, .16); }
+.specialization-option-assassin .specialization-option-icon,
+.specialization-identity-assassin .specialization-identity-art { color: #ffaccf; border-color: rgba(238, 135, 202, .45); background: rgba(157, 69, 133, .16); }
+.specialization-option-shadowdancer .specialization-option-icon,
+.specialization-identity-shadowdancer .specialization-identity-art { color: #d5c5ff; border-color: rgba(164, 137, 255, .45); background: rgba(95, 74, 173, .16); }
+.battle-specialization-badge {
+  position: absolute;
+  z-index: 3;
+  bottom: 3px;
+  padding: 4px 7px;
+  color: #eeeaff;
+  border: 1px solid rgba(176, 168, 255, .35);
+  border-radius: 999px;
+  background: rgba(20, 24, 53, .84);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.battle-specialization-guardian .battle-character-art { color: #a9d7ff; border-color: rgba(119, 190, 255, .55); background: linear-gradient(145deg, rgba(74, 137, 207, .78), rgba(32, 57, 93, .96)); }
+.battle-specialization-berserker .battle-character-art { color: #ffb178; border-color: rgba(255, 139, 82, .55); background: linear-gradient(145deg, rgba(180, 76, 55, .78), rgba(74, 33, 43, .96)); }
+.battle-specialization-ranger .battle-character-art { color: #9be4b6; border-color: rgba(105, 224, 170, .55); background: linear-gradient(145deg, rgba(56, 168, 116, .78), rgba(27, 75, 67, .96)); }
+.battle-specialization-sniper .battle-character-art { color: #a9d8ff; border-color: rgba(106, 180, 255, .55); background: linear-gradient(145deg, rgba(51, 111, 180, .78), rgba(29, 50, 81, .96)); }
+.battle-specialization-elementalist .battle-character-art { color: #f4c7ff; border-color: rgba(219, 139, 255, .55); background: linear-gradient(145deg, rgba(133, 77, 180, .78), rgba(59, 34, 82, .96)); }
+.battle-specialization-frostguard .battle-character-art { color: #9be7ff; border-color: rgba(106, 211, 255, .55); background: linear-gradient(145deg, rgba(45, 130, 180, .78), rgba(25, 59, 84, .96)); }
+.battle-specialization-assassin .battle-character-art { color: #ffaccf; border-color: rgba(238, 135, 202, .55); background: linear-gradient(145deg, rgba(157, 69, 133, .78), rgba(64, 30, 70, .96)); }
+.battle-specialization-shadowdancer .battle-character-art { color: #d5c5ff; border-color: rgba(164, 137, 255, .55); background: linear-gradient(145deg, rgba(95, 74, 173, .78), rgba(42, 34, 78, .96)); }
+@media (max-width: 520px) {
+  .specialization-identity { align-items: flex-start; }
+  .specialization-identity-skills { margin-left: auto; }
+  .specialization-identity > div:nth-child(2) strong { font-size: 14px; }
+}
