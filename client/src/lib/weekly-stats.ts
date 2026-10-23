@@ -8,6 +8,7 @@ export type WeeklyAbilityIncrease = {
 export type WeeklyStats = {
   weekKey: string;
   tasksCompleted: number;
+  monstersDefeated: number;
   levelsGained: number;
   coinsEarned: number;
   abilitiesGained: WeeklyAbilityIncrease;
@@ -16,6 +17,7 @@ export type WeeklyStats = {
 
 export type WeeklyStatsChanges = {
   tasksCompleted?: number;
+  monstersDefeated?: number;
   levelsGained?: number;
   coinsEarned?: number;
   abilitiesGained?: Partial<WeeklyAbilityIncrease>;
@@ -46,6 +48,7 @@ export function createWeeklyStats(date: Date) {
   return {
     weekKey: getWeeklyStatsKey(date),
     tasksCompleted: 0,
+    monstersDefeated: 0,
     levelsGained: 0,
     coinsEarned: 0,
     abilitiesGained: { ...EMPTY_ABILITIES },
@@ -64,6 +67,7 @@ export function normalizeWeeklyStats(value: unknown, date: Date) {
   return {
     ...fallback,
     tasksCompleted: safeInteger(entry.tasksCompleted),
+    monstersDefeated: safeInteger(entry.monstersDefeated),
     levelsGained: safeInteger(entry.levelsGained),
     coinsEarned: safeInteger(entry.coinsEarned),
     abilitiesGained: {
@@ -89,6 +93,8 @@ export function addWeeklyStats(
   return {
     ...base,
     tasksCompleted: base.tasksCompleted + safeInteger(changes.tasksCompleted),
+    monstersDefeated:
+      base.monstersDefeated + safeInteger(changes.monstersDefeated),
     levelsGained: base.levelsGained + safeInteger(changes.levelsGained),
     coinsEarned: base.coinsEarned + safeInteger(changes.coinsEarned),
     abilitiesGained: {

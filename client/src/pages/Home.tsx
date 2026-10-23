@@ -3393,6 +3393,7 @@ export default function Home() {
           weeklyStats: addWeeklyStats(
             previous.weeklyStats,
             {
+              monstersDefeated: 1,
               coinsEarned: monster.reward,
               levelsGained: levelUps,
               abilitiesGained: levelGrowth.abilities,
@@ -7424,6 +7425,12 @@ export default function Home() {
                 <span>完成任務</span>
                 <strong>{state.weeklyStats.tasksCompleted}</strong>
                 <small>個任務</small>
+              </div>
+              <div>
+                <Skull size={17} />
+                <span>打倒魔物</span>
+                <strong>{state.weeklyStats.monstersDefeated}</strong>
+                <small>隻魔物</small>
               </div>
               <div>
                 <Trophy size={17} />

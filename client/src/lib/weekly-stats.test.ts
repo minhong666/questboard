@@ -27,12 +27,14 @@ describe("weekly stats", () => {
     const date = new Date(2026, 9, 21);
     const next = addWeeklyStats(createWeeklyStats(date), {
       tasksCompleted: 3,
+      monstersDefeated: 4,
       levelsGained: 2,
       coinsEarned: 95,
       abilitiesGained: { health: 20, strength: 2, intelligence: 4 },
     }, date);
     expect(next).toMatchObject({
       tasksCompleted: 3,
+      monstersDefeated: 4,
       levelsGained: 2,
       coinsEarned: 95,
       abilitiesGained: { health: 20, strength: 2, defense: 0, intelligence: 4 },
@@ -49,6 +51,7 @@ describe("weekly stats", () => {
         {
           weekKey: getWeeklyStatsKey(date),
           tasksCompleted: 4.8,
+          monstersDefeated: 3.9,
           levelsGained: -2,
           coinsEarned: 80.9,
           abilitiesGained: { health: 10.4 },
@@ -58,6 +61,7 @@ describe("weekly stats", () => {
       )
     ).toMatchObject({
       tasksCompleted: 4,
+      monstersDefeated: 3,
       levelsGained: 0,
       coinsEarned: 80,
       abilitiesGained: { health: 10, strength: 0 },
