@@ -905,7 +905,7 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   for (const item of items) {
     const bonus = item.bonus;
     const value = (label: string) =>
-      Number(bonus.match(new RegExp(`${label} \\+(\\d+)`))?.[1] ?? 0);
+      Number(bonus.match(new RegExp(`${label} \\+(\\d+(?:\\.\\d+)?)`))?.[1] ?? 0);
     if (bonus.includes("全能力")) {
       const all = value("全能力");
       abilities.health += all;
@@ -1885,6 +1885,8 @@ export default function Home() {
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [selectedLootCategory, setSelectedLootCategory] =
     useState<LootCategory>("頭盔");
+  const [selectedEquipmentForComparison, setSelectedEquipmentForComparison] =
+    useState<EquipmentItem | null>(null);
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
   const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
   const [monsterCodexSearch, setMonsterCodexSearch] = useState("");
@@ -2066,6 +2068,56 @@ export default function Home() {
   const equippedItems = equippedItemIds
     .map(id => inventory.find(item => item.id === id))
     .filter((item): item is EquipmentItem => item?.kind === "equipment");
+  const equipmentComparison = selectedEquipmentForComparison
+    ? (() => {
+        const currentItem = equippedItems.find(
+          item => item.slot === selectedEquipmentForComparison.slot
+        );
+        const replacementItems = [
+          ...equippedItems.filter(item => item.slot !== selectedEquipmentForComparison.slot),
+          selectedEquipmentForComparison,
+        ];
+        const currentBonuses = getEquipmentBonuses(equippedItems);
+        const replacementBonuses = getEquipmentBonuses(replacementItems);
+        const abilitiesWith = (bonuses: ReturnType<typeof getEquipmentBonuses>) => ({
+          health: state.abilities.health + bonuses.abilities.health,
+          strength: state.abilities.strength + bonuses.abilities.strength,
+          defense: state.abilities.defense + bonuses.abilities.defense,
+          intelligence: state.abilities.intelligence + bonuses.abilities.intelligence,
+        });
+        const currentAbilities = abilitiesWith(currentBonuses);
+        const replacementAbilities = abilitiesWith(replacementBonuses);
+        const currentCombat = {
+          critRate: (state.combatStats.critRate ?? 0) + (currentBonuses.combat.critRate ?? 0),
+          critDamage: (state.combatStats.critDamage ?? 0) + (currentBonuses.combat.critDamage ?? 0),
+          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (currentBonuses.combat.dodgeRate ?? 0),
+        };
+        const replacementCombat = {
+          critRate: (state.combatStats.critRate ?? 0) + (replacementBonuses.combat.critRate ?? 0),
+          critDamage: (state.combatStats.critDamage ?? 0) + (replacementBonuses.combat.critDamage ?? 0),
+          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (replacementBonuses.combat.dodgeRate ?? 0),
+        };
+        const currentMagicPenetration = Number(
+          currentItem?.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
+        );
+        const replacementMagicPenetration = Number(
+          selectedEquipmentForComparison.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
+        );
+        return {
+          currentItem,
+          stats: [
+            { label: "物理攻擊", unit: "", current: getPhysicalAttackDamage(currentAbilities), replacement: getPhysicalAttackDamage(replacementAbilities) },
+            { label: "魔法攻擊", unit: "", current: getMagicAttackDamage(currentAbilities), replacement: getMagicAttackDamage(replacementAbilities) },
+            { label: "生命", unit: "", current: currentAbilities.health, replacement: replacementAbilities.health },
+            { label: "防禦", unit: "", current: currentAbilities.defense, replacement: replacementAbilities.defense },
+            { label: "暴擊率", unit: "%", current: currentCombat.critRate, replacement: replacementCombat.critRate },
+            { label: "暴擊傷害", unit: "%", current: currentCombat.critDamage, replacement: replacementCombat.critDamage },
+            { label: "閃避率", unit: "%", current: currentCombat.dodgeRate, replacement: replacementCombat.dodgeRate },
+            { label: "魔法穿透", unit: "%", current: currentMagicPenetration, replacement: replacementMagicPenetration },
+          ],
+        };
+      })()
+    : null;
   const codexItems = RPG_EQUIPMENT_TEMPLATES.filter(item =>
     (codexRarity === "all" || item.rarity === codexRarity) &&
     (codexSlot === "all" || item.slot === codexSlot)
@@ -6423,6 +6475,30 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              {equipmentComparison && selectedEquipmentForComparison ? (
+                <div className="equipment-comparison panel-card" aria-live="polite">
+                  <div className="equipment-comparison-heading">
+                    <div>
+                      <span className="mini-kicker">EQUIPMENT COMPARISON</span>
+                      <h3>裝備比較</h3>
+                      <p>比較替換同一部位後的角色實際屬性變化。</p>
+                    </div>
+                    <button type="button" className="equipment-comparison-close" aria-label="關閉裝備比較" onClick={() => setSelectedEquipmentForComparison(null)}><X size={16} /></button>
+                  </div>
+                  <div className="equipment-comparison-items">
+                    <div className="equipment-comparison-item is-new"><span>新裝備</span><strong>{selectedEquipmentForComparison.name}</strong><small>{selectedEquipmentForComparison.bonus}</small></div>
+                    <div className="equipment-comparison-arrow">→</div>
+                    <div className="equipment-comparison-item is-current"><span>目前裝備</span><strong>{equipmentComparison.currentItem?.name ?? "尚未裝備"}</strong><small>{equipmentComparison.currentItem?.bonus ?? "此部位目前沒有裝備"}</small></div>
+                  </div>
+                  <div className="equipment-comparison-stats">
+                    {equipmentComparison.stats.map(stat => {
+                      const delta = stat.replacement - stat.current;
+                      return <div className="equipment-comparison-stat" key={stat.label}><span>{stat.label}</span><strong>{stat.replacement}{stat.unit}</strong><small className={delta > 0 ? "is-positive" : delta < 0 ? "is-negative" : ""}>{delta > 0 ? "+" : ""}{delta}{stat.unit}</small></div>;
+                    })}
+                  </div>
+                  <small className="equipment-comparison-note">魔法穿透目前由技能提供，裝備若未標示全域穿透則顯示 0；替換不會改變既有存檔格式。</small>
+                </div>
+              ) : null}
               <div className="loot-grid">
                 {selectedLootItems.length === 0 ? (
                   <div className="loot-empty panel-card">
@@ -6523,6 +6599,9 @@ export default function Home() {
                                   : "裝備"
                               : `出售 +${item.sellValue} 金幣`}
                           </button>
+                          {item.kind === "equipment" && !equippedItemIds.includes(item.id) && canEquipEquipment(item, state.jobClass) ? (
+                            <button type="button" className="loot-compare-button" onClick={() => setSelectedEquipmentForComparison(item)}>比較替換</button>
+                          ) : null}
                         </div>
                       </div>
                     ))
