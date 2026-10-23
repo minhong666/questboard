@@ -2339,6 +2339,52 @@ export default function Home() {
       allAvailableMonsters.find(monster => monster.id === battle.monsterId) ??
       null)
     : null;
+  const skillPreviewMonster =
+    activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
+  const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
+    if (skill.effectType !== "damage" || !skillPreviewMonster) return null;
+    const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
+    const basePlayerDamage = isArcher
+      ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
+      : rawPlayerDamage;
+    const buffedPlayerDamage = Math.round(
+      basePlayerDamage * (1 + (battle?.activeBuff?.damageBonusPercent ?? 0) / 100)
+    );
+    const normalDamage = calculateSpecialSkillDamage(
+      buffedPlayerDamage,
+      skillPreviewMonster.defense,
+      skill
+    );
+    const canCrit = !isMage && effectiveCombatStats.critRate > 0;
+    const criticalBaseDamage = canCrit
+      ? Math.round((buffedPlayerDamage * effectiveCombatStats.critDamage) / 100)
+      : buffedPlayerDamage;
+    const criticalDamage = canCrit
+      ? calculateSpecialSkillDamage(
+          criticalBaseDamage,
+          skillPreviewMonster.defense,
+          skill
+        )
+      : normalDamage;
+    const resistancePercent =
+      skill.damageType === "魔法"
+        ? skillPreviewMonster.magicResistancePercent ?? 0
+        : skillPreviewMonster.physicalResistancePercent ?? 0;
+    const afterResistance = (damage: number) =>
+      Math.max(1, Math.round(damage * (1 - resistancePercent / 100)));
+    const minimumDamage = Math.min(normalDamage, criticalDamage);
+    const maximumDamage = Math.max(normalDamage, criticalDamage);
+    return {
+      damageType: skill.damageType,
+      penetration: skill.defensePiercePercent,
+      resistancePercent,
+      minimumDamage,
+      maximumDamage,
+      minimumAfterResistance: afterResistance(minimumDamage),
+      maximumAfterResistance: afterResistance(maximumDamage),
+      monsterName: skillPreviewMonster.name,
+    };
+  };
   const repeatPeriodSignature = useMemo(() => {
     const date = new Date(currentTime);
     return `${getRepeatPeriodKey("daily", date, state.dailyResetMinutes)}|${getRepeatPeriodKey("weekly", date, state.dailyResetMinutes)}`;
@@ -5104,6 +5150,9 @@ export default function Home() {
                     unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
                       ? applySkillUpgrade(skill, upgradeLevel + 1)
                       : null;
+                  const damagePreview = unlocked
+                    ? getSkillDamagePreview(skill)
+                    : null;
                   return (
                     <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
                       <div className="skill-archive-card-top">
@@ -5125,6 +5174,31 @@ export default function Home() {
                           <span>{upgradeBonusLabel}（Lv.{upgradeLevel}）</span>
                         </div>
                       )}
+                      {damagePreview ? (
+                        <div className="skill-damage-preview">
+                          <div className="skill-damage-preview-heading">
+                            <strong>實際傷害預覽</strong>
+                            <small>對 {damagePreview.monsterName}</small>
+                          </div>
+                          <div className="skill-damage-preview-grid">
+                            <span>預估傷害</span>
+                            <b>{damagePreview.minimumDamage}～{damagePreview.maximumDamage}</b>
+                            <span>傷害類型</span>
+                            <b>{damagePreview.damageType}</b>
+                            <span>{damagePreview.damageType === "魔法" ? "魔法穿透" : "物理穿透"}</span>
+                            <b>{damagePreview.penetration}%</b>
+                            <span>{damagePreview.damageType === "魔法" ? "魔法抗性" : "物理抗性"}後</span>
+                            <b>約 {damagePreview.minimumAfterResistance}～{damagePreview.maximumAfterResistance}</b>
+                          </div>
+                          <small className="skill-damage-preview-note">
+                            目標{damagePreview.damageType === "魔法" ? "魔法" : "物理"}抗性 {damagePreview.resistancePercent}%；預覽已套用技能穿透與目前裝備／能力值。
+                          </small>
+                        </div>
+                      ) : skill.effectType === "damage" ? (
+                        <div className="skill-damage-preview is-locked">
+                          解鎖後顯示實際傷害、穿透與抗性後數值
+                        </div>
+                      ) : null}
                       {nextUpgradeSkill && (
                         <div className="skill-upgrade-preview">
                           <strong>下一級預覽</strong>
