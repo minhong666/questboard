@@ -538,17 +538,6 @@ async function showQuestNotification(
   return true;
 }
 
-async function closeQuestNotification(tag: string) {
-  if (!("serviceWorker" in navigator)) return;
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    const notifications = await registration.getNotifications({ tag });
-    notifications.forEach(notification => notification.close());
-  } catch {
-    // Notification closing is best effort because some mobile browsers omit this API.
-  }
-}
-
 const iconMap: Record<string, LucideIcon> = {
   sparkles: Sparkles,
   mail: Mail,
@@ -2025,7 +2014,6 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const wakeLockRef = useRef<ScreenWakeLock | null>(null);
-  const liveTimerNotificationRef = useRef(0);
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [battleFx, setBattleFx] = useState<BattleFx | null>(null);
   const battleFxIdRef = useRef(0);
@@ -3136,14 +3124,9 @@ export default function Home() {
     const activity = running
       ? state.timerActivities.find(item => item.id === running.activityId)
       : null;
-    const liveTag = "questboard-live-timer";
 
     if (!running || !activity) {
       document.title = "QuestBoard";
-      if (liveTimerNotificationRef.current !== 0) {
-        liveTimerNotificationRef.current = 0;
-        void closeQuestNotification(liveTag);
-      }
       return;
     }
 
@@ -3153,36 +3136,7 @@ export default function Home() {
       currentTime
     );
     document.title = `${formatTimerDuration(elapsedSeconds)} · ${activity.name} · QuestBoard`;
-
-    const notificationsEnabled =
-      notificationSettings.enabled && notificationPermission === "granted";
-    if (!notificationsEnabled) {
-      if (liveTimerNotificationRef.current !== 0) {
-        liveTimerNotificationRef.current = 0;
-        void closeQuestNotification(liveTag);
-      }
-      return;
-    }
-
-    if (currentTime - liveTimerNotificationRef.current < 5000) return;
-    liveTimerNotificationRef.current = currentTime;
-    void showQuestNotification(
-      `QuestBoard · ${activity.name}`,
-      `事務計時中 · ${formatTimerDuration(elapsedSeconds)} · 點擊回到計時器`,
-      liveTag,
-      {
-        requireInteraction: true,
-        silent: true,
-        data: { type: "live-timer", activityId: activity.id },
-      }
-    );
-  }, [
-    currentTime,
-    notificationPermission,
-    notificationSettings.enabled,
-    state.runningTimer,
-    state.timerActivities,
-  ]);
+  }, [currentTime, state.runningTimer, state.timerActivities]);
 
   useEffect(() => {
     const running = state.runningTimer;
@@ -7584,9 +7538,7 @@ export default function Home() {
                     <span><span className="timer-live-dot" /> 手機即時計時</span>
                     <strong>{runningTimerActivity.name}</strong>
                     <small>
-                      {notificationSettings.enabled && notificationPermission === "granted"
-                        ? "通知列同步中 · 螢幕保持喚醒"
-                        : "開啟手機通知後，可在通知列查看即時時間"}
+                      網頁內即時更新 · 支援的裝置會保持螢幕喚醒
                     </small>
                   </div>
                   <strong className="timer-mobile-live-clock">
