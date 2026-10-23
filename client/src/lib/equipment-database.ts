@@ -254,13 +254,15 @@ function applyEquipmentSetMetadata(
     const groupIndex = counters.get(counterKey) ?? 0;
     counters.set(counterKey, groupIndex + 1);
     const theme = equipmentSetThemes[groupIndex % equipmentSetThemes.length];
+    const variantIndex = Math.floor(groupIndex / equipmentSetThemes.length) + 1;
     const pieceName = template.weaponType
       ? `${template.weaponType}${equipmentSlotNames.武器}`
       : equipmentSlotNames[template.slot];
+    const variantName = variantIndex > 1 ? `·款${variantIndex}` : "";
     return {
       ...template,
       setId: `${theme.id}-${template.rarity}`,
-      name: `${theme.name}·${template.rarity}${pieceName}`,
+      name: `${theme.name}·${template.rarity}${pieceName}${variantName}`,
       description: `${theme.name}套裝的${template.rarity}${pieceName}，同系列裝備可啟用套裝效果。`,
     };
   });
