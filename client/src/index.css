@@ -6580,3 +6580,41 @@ h2 {
   .specialization-identity-skills { margin-left: auto; }
   .specialization-identity > div:nth-child(2) strong { font-size: 14px; }
 }
+
+/* 裝備工坊頁內分區 */
+.equipment-workshop-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 18px;
+  padding: 4px;
+  border: 1px solid rgba(224, 176, 110, .2);
+  border-radius: 10px;
+  background: rgba(8, 14, 29, .42);
+}
+.equipment-workshop-tabs a {
+  padding: 8px 13px;
+  color: #8794af;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: .18s ease;
+}
+.equipment-workshop-tabs a:hover,
+.equipment-workshop-tabs a.is-active {
+  color: #261c0e;
+  background: #e7bc71;
+}
+.fusion-page#fusion {
+  scroll-margin-top: 22px;
+}
+@media (max-width: 520px) {
+  .equipment-workshop-tabs {
+    display: flex;
+  }
+  .equipment-workshop-tabs a {
+    flex: 1;
+    text-align: center;
+  }
+}

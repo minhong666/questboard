@@ -377,7 +377,6 @@ type PageKey =
   | "loot"
   | "codex"
   | "monsterCodex"
-  | "fusion"
   | "rewards"
   | "timers"
   | "achievements";
@@ -4693,7 +4692,7 @@ export default function Home() {
             onClick={() => navigateTo("loot")}
           >
             <Gift size={18} />
-            <span>戰利品庫</span>
+            <span>裝備工坊</span>
             {activePage === "loot" && <span className="active-dot" />}
           </button>
           <button
@@ -4711,14 +4710,6 @@ export default function Home() {
             <Skull size={18} />
             <span>怪物圖鑑</span>
             {activePage === "monsterCodex" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "fusion" ? "active" : ""}`}
-            onClick={() => navigateTo("fusion")}
-          >
-            <Sparkles size={18} />
-            <span>裝備合成</span>
-            {activePage === "fusion" && <span className="active-dot" />}
           </button>
           <button
             className={`sidebar-link ${activePage === "rewards" ? "active" : ""}`}
@@ -4816,10 +4807,9 @@ export default function Home() {
                   skills: "角色技能",
                   monsters: "怪物與魔王",
                   soulTrial: "靈魂的試煉",
-                  loot: "戰利品庫",
+                  loot: "裝備工坊",
                   codex: "裝備圖鑑",
                   monsterCodex: "怪物圖鑑",
-                  fusion: "裝備合成",
                   rewards: "獎勵寶庫",
                   timers: "事務計時",
                   achievements: "成就里程碑",
@@ -6314,14 +6304,18 @@ export default function Home() {
                   <div className="section-kicker">
                     <Gift size={15} /> LOOT VAULT
                   </div>
-                  <h2>戰利品庫</h2>
-                  <p>擊敗怪物有機會帶回裝備與道具；區域魔王必定留下戰利品。</p>
+                  <h2>裝備工坊</h2>
+                  <p>集中管理戰利品、裝備欄位與裝備合成；擊敗怪物有機會帶回新的裝備與道具。</p>
                 </div>
                 <div className="loot-count">
                   <strong>{inventory.length}</strong>
                   <span>件收藏</span>
                 </div>
               </div>
+              <nav className="equipment-workshop-tabs" aria-label="裝備工坊分區">
+                <a className="is-active" href="#loot">戰利品庫</a>
+                <a href="#fusion">裝備合成</a>
+              </nav>
               <div className="equipment-benchmark-strip panel-card">
                 <div className="equipment-benchmark-title">
                   <span className="mini-kicker">EQUIPMENT LEVEL BENCHMARK</span>
@@ -6780,8 +6774,8 @@ export default function Home() {
             </section>
           )}
 
-          {activePage === "fusion" && (
-            <section className="fusion-page">
+          {activePage === "loot" && (
+            <section className="fusion-page" id="fusion">
               <div className="section-heading fusion-page-heading">
                 <div>
                   <div className="section-kicker">
