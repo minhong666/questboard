@@ -880,6 +880,15 @@ function getAttackDamage(
     )
   );
 }
+function getPhysicalAttackDamage(abilities: CharacterAbilities) {
+  return Math.max(
+    1,
+    Math.round(abilities.strength * 1.5 + abilities.intelligence * 0.25)
+  );
+}
+function getMagicAttackDamage(abilities: CharacterAbilities) {
+  return Math.max(1, Math.round(abilities.intelligence * 1.5));
+}
 function getDefenseReduction(defense: number) {
   return Math.floor(defense * 0.5);
 }
@@ -2132,6 +2141,150 @@ export default function Home() {
       tone: "violet",
       icon: Brain,
       description: "每級自動 +1",
+    },
+  ];
+  const classAbilities: CharacterAbilities = {
+    health: state.abilities.health + classDefinition.bonuses.health,
+    strength: state.abilities.strength + classDefinition.bonuses.strength,
+    defense: state.abilities.defense + classDefinition.bonuses.defense,
+    intelligence:
+      state.abilities.intelligence + classDefinition.bonuses.intelligence,
+  };
+  const attributeBreakdownAbilities: CharacterAbilities = {
+    health: effectiveAbilities.health,
+    strength: effectiveAbilities.strength,
+    defense: effectiveAbilities.defense,
+    intelligence: effectiveAbilities.intelligence,
+  };
+  const physicalAttackBase = getPhysicalAttackDamage(state.abilities);
+  const physicalAttackWithClass = getPhysicalAttackDamage(classAbilities);
+  const magicAttackBase = getMagicAttackDamage(state.abilities);
+  const magicAttackWithClass = getMagicAttackDamage(classAbilities);
+  const temporaryBattleBuff = battle?.activeBuff ?? null;
+  const attributeBreakdowns = [
+    {
+      key: "physical-attack",
+      label: "物理攻擊",
+      total: getPhysicalAttackDamage(attributeBreakdownAbilities),
+      unit: "",
+      icon: Sword,
+      tone: "orange",
+      base: physicalAttackBase,
+      classBonus: physicalAttackWithClass - physicalAttackBase,
+      equipmentBonus:
+        getPhysicalAttackDamage(attributeBreakdownAbilities) -
+        getPhysicalAttackDamage(classAbilities),
+      specializationBonus: 0,
+      note: "力量／智力換算；專精技能倍率另計",
+    },
+    {
+      key: "magic-attack",
+      label: "魔法攻擊",
+      total: getMagicAttackDamage(attributeBreakdownAbilities),
+      unit: "",
+      icon: Sparkles,
+      tone: "violet",
+      base: magicAttackBase,
+      classBonus: magicAttackWithClass - magicAttackBase,
+      equipmentBonus:
+        getMagicAttackDamage(attributeBreakdownAbilities) -
+        getMagicAttackDamage(classAbilities),
+      specializationBonus: 0,
+      note: "智力換算；法師戰鬥使用此傷害",
+    },
+    {
+      key: "defense",
+      label: "防禦",
+      total: effectiveAbilities.defense,
+      unit: "",
+      icon: ShieldCheck,
+      tone: "blue",
+      base: state.abilities.defense,
+      classBonus: classDefinition.bonuses.defense,
+      equipmentBonus: equipmentBonuses.abilities.defense,
+      specializationBonus: 0,
+      note: `約減免 ${getDefenseReduction(effectiveAbilities.defense)} 點傷害`,
+    },
+    {
+      key: "magic-resistance",
+      label: "魔法抗性",
+      total: 0,
+      unit: "%",
+      icon: ShieldCheck,
+      tone: "blue",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "目前角色沒有全域魔法抗性加成",
+    },
+    {
+      key: "physical-penetration",
+      label: "物理穿透",
+      total: 0,
+      unit: "%",
+      icon: Sword,
+      tone: "orange",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "穿透數值依技能顯示，不是角色全域屬性",
+    },
+    {
+      key: "magic-penetration",
+      label: "魔法穿透",
+      total: 0,
+      unit: "%",
+      icon: Sparkles,
+      tone: "violet",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "穿透數值依技能顯示，不是角色全域屬性",
+    },
+    {
+      key: "crit-rate",
+      label: "暴擊率",
+      total: effectiveCombatStats.critRate,
+      unit: "%",
+      icon: Target,
+      tone: "mint",
+      base: combatStatsBase(state.combatStats).critRate,
+      classBonus: classDefinition.combat.critRate ?? 0,
+      equipmentBonus: equipmentBonuses.combat.critRate ?? 0,
+      specializationBonus: specializationPassiveBonuses.critRate,
+      note: isMage ? "法師固定不可暴擊" : "未含技能觸發的瞬時效果",
+    },
+    {
+      key: "crit-damage",
+      label: "暴擊傷害",
+      total: effectiveCombatStats.critDamage,
+      unit: "%",
+      icon: Flame,
+      tone: "orange",
+      base: combatStatsBase(state.combatStats).critDamage,
+      classBonus: classDefinition.combat.critDamage ?? 0,
+      equipmentBonus: equipmentBonuses.combat.critDamage ?? 0,
+      specializationBonus:
+        specializationPassiveBonuses.critDamage + archerSkillCritDamageBonus,
+      note: isMage ? "法師不會觸發暴擊" : "暴擊時套用的傷害倍率",
+    },
+    {
+      key: "dodge-rate",
+      label: "閃避率",
+      total: effectiveCombatStats.dodgeRate,
+      unit: "%",
+      icon: Shuffle,
+      tone: "mint",
+      base: combatStatsBase(state.combatStats).dodgeRate,
+      classBonus: classDefinition.combat.dodgeRate ?? 0,
+      equipmentBonus: equipmentBonuses.combat.dodgeRate ?? 0,
+      specializationBonus: specializationPassiveBonuses.dodgeRate,
+      note: isArcher
+        ? `遊俠天賦目前額外 +${archerTalentBonuses.dodgePercent}%`
+        : "未含技能觸發的瞬時效果",
     },
   ];
   const experienceBonusPercent = getExperienceBonusPercent(
@@ -4609,6 +4762,80 @@ export default function Home() {
                       </div>
                     )
                   )}
+                </div>
+                <div className="attribute-breakdown-panel">
+                  <div className="attribute-breakdown-heading">
+                    <div>
+                      <span className="mini-kicker">COMBAT PROFILE</span>
+                      <strong>角色屬性面板</strong>
+                      <small>
+                        顯示目前實際值，以及基礎、職業、裝備與專精被動的來源拆解。
+                      </small>
+                    </div>
+                    <span className="attribute-breakdown-badge">
+                      {classDefinition.name} · Lv.{player.level}
+                    </span>
+                  </div>
+                  <div className="attribute-breakdown-table" role="table" aria-label="角色屬性來源拆解">
+                    <div className="attribute-breakdown-row attribute-breakdown-header" role="row">
+                      <span role="columnheader">屬性</span>
+                      <span role="columnheader">目前</span>
+                      <span role="columnheader">基礎</span>
+                      <span role="columnheader">職業</span>
+                      <span role="columnheader">裝備</span>
+                      <span role="columnheader">專精</span>
+                    </div>
+                    {attributeBreakdowns.map(attribute => {
+                      const Icon = attribute.icon;
+                      const formatValue = (value: number) =>
+                        `${value > 0 ? "+" : ""}${value}${attribute.unit}`;
+                      return (
+                        <div className="attribute-breakdown-row" role="row" key={attribute.key}>
+                          <div className="attribute-breakdown-name" role="cell">
+                            <span className={`attribute-breakdown-icon attribute-${attribute.tone}`}>
+                              <Icon size={14} />
+                            </span>
+                            <span>
+                              <strong>{attribute.label}</strong>
+                              <small>{attribute.note}</small>
+                            </span>
+                          </div>
+                          <strong className="attribute-breakdown-total" role="cell">
+                            {attribute.total}{attribute.unit}
+                          </strong>
+                          <span role="cell">{formatValue(attribute.base)}</span>
+                          <span role="cell">{formatValue(attribute.classBonus)}</span>
+                          <span role="cell">{formatValue(attribute.equipmentBonus)}</span>
+                          <span role="cell">{formatValue(attribute.specializationBonus)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="temporary-buff-summary">
+                    <div>
+                      <span className="mini-kicker">TEMPORARY BUFF</span>
+                      <strong>臨時 Buff</strong>
+                    </div>
+                    {temporaryBattleBuff ? (
+                      <div className="temporary-buff-values">
+                        <span>剩餘 {temporaryBattleBuff.turnsRemaining} 回合</span>
+                        {temporaryBattleBuff.damageBonusPercent ? (
+                          <b>傷害 +{temporaryBattleBuff.damageBonusPercent}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.damageReductionPercent ? (
+                          <b>受傷 {temporaryBattleBuff.damageReductionPercent > 0 ? "−" : "+"}{Math.abs(temporaryBattleBuff.damageReductionPercent)}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.healPercentMaxHealth ? (
+                          <b>回復 +{temporaryBattleBuff.healPercentMaxHealth}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.dodgeRateBonusPercent ? (
+                          <b>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</b>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="temporary-buff-empty">目前沒有生效中的戰鬥 Buff</span>
+                    )}
+                  </div>
                 </div>
                 <div className="combat-stats-row">
                   <div className="combat-stats-label">

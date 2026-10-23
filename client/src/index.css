@@ -893,6 +893,164 @@ h1 {
   border-color: rgba(101, 118, 156, 0.14);
   background: rgba(101, 118, 156, 0.08);
 }
+.attribute-breakdown-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 15px;
+  border: 1px solid rgba(133, 150, 190, 0.16);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(18, 28, 51, 0.72), rgba(8, 14, 29, 0.52));
+}
+.attribute-breakdown-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.attribute-breakdown-heading > div,
+.temporary-buff-summary > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.attribute-breakdown-heading strong,
+.temporary-buff-summary strong {
+  color: #efe5ca;
+  font-size: 14px;
+}
+.attribute-breakdown-heading small {
+  color: #7f8ca8;
+  font-size: 9px;
+}
+.attribute-breakdown-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(224, 176, 110, 0.22);
+  border-radius: 7px;
+  color: #e7bc71;
+  background: rgba(224, 176, 110, 0.08);
+  font-size: 9px;
+  font-weight: 750;
+}
+.attribute-breakdown-table {
+  overflow-x: auto;
+  border: 1px solid rgba(133, 150, 190, 0.12);
+  border-radius: 9px;
+}
+.attribute-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(185px, 1.55fr) repeat(5, minmax(58px, 0.55fr));
+  align-items: center;
+  min-width: 640px;
+  border-top: 1px solid rgba(133, 150, 190, 0.1);
+}
+.attribute-breakdown-row:first-child {
+  border-top: 0;
+}
+.attribute-breakdown-row > span,
+.attribute-breakdown-row > strong {
+  padding: 9px 8px;
+  color: #9aa7c4;
+  font-size: 10px;
+  text-align: right;
+}
+.attribute-breakdown-header {
+  background: rgba(101, 118, 156, 0.08);
+}
+.attribute-breakdown-header > span {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  color: #697694;
+  font-size: 8px;
+  font-weight: 750;
+}
+.attribute-breakdown-header > span:first-child {
+  text-align: left;
+}
+.attribute-breakdown-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+}
+.attribute-breakdown-name > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.attribute-breakdown-name strong,
+.attribute-breakdown-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attribute-breakdown-name strong {
+  color: #dce4fb;
+  font-size: 10px;
+}
+.attribute-breakdown-name small {
+  color: #697694;
+  font-size: 7px;
+}
+.attribute-breakdown-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+.attribute-orange {
+  color: #ffbd80;
+  background: rgba(242, 139, 76, 0.14);
+}
+.attribute-violet {
+  color: #c7baff;
+  background: rgba(157, 146, 255, 0.14);
+}
+.attribute-blue {
+  color: #9ed2ff;
+  background: rgba(94, 173, 255, 0.14);
+}
+.attribute-mint {
+  color: #9fe4d3;
+  background: rgba(85, 205, 191, 0.14);
+}
+.attribute-breakdown-total {
+  color: #f4d58f !important;
+  font-size: 12px !important;
+}
+.temporary-buff-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(133, 150, 190, 0.12);
+}
+.temporary-buff-summary .mini-kicker {
+  color: #d39bff;
+}
+.temporary-buff-values {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  color: #9aa7c4;
+  font-size: 9px;
+}
+.temporary-buff-values b {
+  padding: 5px 7px;
+  border: 1px solid rgba(211, 155, 255, 0.2);
+  border-radius: 6px;
+  color: #d9b7ff;
+  background: rgba(157, 111, 255, 0.1);
+}
+.temporary-buff-empty {
+  color: #697694;
+  font-size: 9px;
+}
 .combat-stats-row {
   display: flex;
   align-items: center;
@@ -4122,6 +4280,17 @@ h2 {
   }
   .ability-grid {
     grid-template-columns: 1fr;
+  }
+  .attribute-breakdown-heading,
+  .temporary-buff-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .attribute-breakdown-badge {
+    align-self: flex-start;
+  }
+  .temporary-buff-values {
+    justify-content: flex-start;
   }
   .combat-stats-row {
     align-items: stretch;
