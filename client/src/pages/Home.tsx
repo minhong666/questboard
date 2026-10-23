@@ -350,6 +350,21 @@ type PageKey =
   | "timers"
   | "achievements";
 
+const LOOT_CATEGORY_KEYS = [...EQUIPMENT_SLOTS, "寶物"] as const;
+type LootCategory = (typeof LOOT_CATEGORY_KEYS)[number];
+
+const lootCategoryMeta: Record<
+  LootCategory,
+  { description: string; icon: LucideIcon }
+> = {
+  頭盔: { description: "頭部防具", icon: ShieldCheck },
+  胸甲: { description: "身體防具", icon: ShieldCheck },
+  武器: { description: "主要攻擊裝備", icon: Sword },
+  護腿: { description: "腿部防具", icon: Shuffle },
+  護身符: { description: "飾品與特殊加成", icon: Star },
+  寶物: { description: "可出售的冒險寶物", icon: Gift },
+};
+
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
@@ -1734,6 +1749,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
+  const [selectedLootCategory, setSelectedLootCategory] =
+    useState<LootCategory>("頭盔");
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
   const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
   const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>([]);
@@ -1890,6 +1907,13 @@ export default function Home() {
     ? state.defeatedMonsterIds
     : [];
   const inventory = Array.isArray(state.inventory) ? state.inventory : [];
+  const getLootCategoryItems = (category: LootCategory) =>
+    inventory.filter(item =>
+      category === "寶物"
+        ? item.kind === "treasure"
+        : item.kind === "equipment" && item.slot === category
+    );
+  const selectedLootItems = getLootCategoryItems(selectedLootCategory);
   const equippedItemIds = normalizeEquippedItemIds(
     inventory,
     state.equippedItemIds,
@@ -5948,17 +5972,61 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              <div className="loot-category-section">
+                <div className="loot-category-heading">
+                  <div>
+                    <span className="mini-kicker">LOOT CATEGORIES</span>
+                    <h3>戰利品分類格</h3>
+                    <p>點選格子後，只在下方顯示該部位的裝備或寶物屬性。</p>
+                  </div>
+                  <span className="loot-category-selection">
+                    目前查看：{selectedLootCategory}
+                  </span>
+                </div>
+                <div className="loot-category-grid" role="tablist" aria-label="戰利品分類">
+                  {LOOT_CATEGORY_KEYS.map(category => {
+                    const Icon = lootCategoryMeta[category].icon;
+                    const itemCount = getLootCategoryItems(category).length;
+                    const selected = selectedLootCategory === category;
+                    return (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        className={`loot-category-slot ${selected ? "is-selected" : ""}`}
+                        key={category}
+                        onClick={() => setSelectedLootCategory(category)}
+                      >
+                        <span className="loot-category-icon"><Icon size={19} /></span>
+                        <span className="loot-category-copy">
+                          <strong>{category}</strong>
+                          <small>{lootCategoryMeta[category].description}</small>
+                        </span>
+                        <b>{itemCount}</b>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="loot-grid">
-                {inventory.length === 0 ? (
+                {selectedLootItems.length === 0 ? (
                   <div className="loot-empty panel-card">
                     <div className="loot-empty-icon">
                       <Gift size={22} />
                     </div>
-                    <strong>戰利品庫尚未開張</strong>
-                    <span>完成第一場怪物戰鬥，尋找屬於你的第一件戰利品。</span>
+                    <strong>
+                      {inventory.length === 0
+                        ? "戰利品庫尚未開張"
+                        : `${selectedLootCategory}目前沒有物品`}
+                    </strong>
+                    <span>
+                      {inventory.length === 0
+                        ? "完成第一場怪物戰鬥，尋找屬於你的第一件戰利品。"
+                        : "探索其他分類格，或完成怪物戰鬥取得新的戰利品。"}
+                    </span>
                   </div>
                 ) : (
-                  inventory
+                  selectedLootItems
                     .slice()
                     .reverse()
                     .map(item => (
