@@ -7345,7 +7345,10 @@ export default function Home() {
           )}
 
           {activePage === "timers" && (
-            <section className="timer-page" id="timers">
+            <section
+              className={`timer-page ${state.runningTimer ? "is-timer-running" : ""}`}
+              id="timers"
+            >
               <div className="section-heading timer-page-heading">
                 <div>
                   <div className="section-kicker">
