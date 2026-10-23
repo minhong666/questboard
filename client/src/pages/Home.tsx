@@ -445,12 +445,19 @@ const lootCategoryMeta: Record<
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
+const SHARED_ACHIEVEMENTS_STORAGE_KEY = "questboard-shared-achievements-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
 const ACTIVE_PROFILE_KEY = "questboard-active-profile-v1";
 const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
 const HEALTH_RECOVERY_INTERVAL_MS =
   HEALTH_RECOVERY_INTERVAL_MINUTES * 60 * 1000;
 const HEALTH_RECOVERY_PERCENT = 0.08;
+
+function normalizeAchievementIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((id): id is string => typeof id === "string"))]
+    : [];
+}
 
 const iconMap: Record<string, LucideIcon> = {
   sparkles: Sparkles,
@@ -474,6 +481,8 @@ const iconMap: Record<string, LucideIcon> = {
   skull: Skull,
   zap: Zap,
   award: Award,
+  trophy: Trophy,
+  coins: Coins,
 };
 
 const categoryTone: Record<Category, string> = {
@@ -1504,6 +1513,25 @@ function loadActiveProfileId() {
   return window.localStorage.getItem(ACTIVE_PROFILE_KEY);
 }
 
+function loadSharedAchievementClaimedIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = JSON.parse(
+      window.localStorage.getItem(SHARED_ACHIEVEMENTS_STORAGE_KEY) ?? "null"
+    ) as { claimedIds?: unknown } | null;
+    const sharedIds = normalizeAchievementIds(saved?.claimedIds);
+    const legacyIds = [
+      ...normalizeAchievementIds(loadState().achievementClaimedIds),
+      ...loadProfiles().flatMap(profile =>
+        normalizeAchievementIds(profile.state.achievementClaimedIds)
+      ),
+    ];
+    return [...new Set([...sharedIds, ...legacyIds])];
+  } catch {
+    return [];
+  }
+}
+
 function makeProfile(name: string, profileState: AppState): SaveProfile {
   return {
     id: `save-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
@@ -1834,6 +1862,8 @@ function LootProbabilityGuide({
 export default function Home() {
   const [state, setState] = useState<AppState>(() => normalizeProfileLoot(loadState()));
   const [profiles, setProfiles] = useState<SaveProfile[]>(() => loadProfiles());
+  const [sharedAchievementClaimedIds, setSharedAchievementClaimedIds] =
+    useState<string[]>(() => loadSharedAchievementClaimedIds());
   const [activeProfileId, setActiveProfileId] = useState<string | null>(() =>
     loadActiveProfileId()
   );
@@ -2360,10 +2390,10 @@ export default function Home() {
       (total, level) => total + level,
       0
     ),
+    playerLevel: player.level,
+    coins: state.coins,
   };
-  const claimedAchievementIds = Array.isArray(state.achievementClaimedIds)
-    ? state.achievementClaimedIds
-    : [];
+  const claimedAchievementIds = sharedAchievementClaimedIds;
   const achievementStatuses = ACHIEVEMENTS.map(achievement => ({
     achievement,
     progress: getAchievementProgress(achievement, achievementContext),
@@ -2674,6 +2704,13 @@ export default function Home() {
   }, [profiles, activeProfileId]);
 
   useEffect(() => {
+    window.localStorage.setItem(
+      SHARED_ACHIEVEMENTS_STORAGE_KEY,
+      JSON.stringify({ claimedIds: sharedAchievementClaimedIds })
+    );
+  }, [sharedAchievementClaimedIds]);
+
+  useEffect(() => {
     const syncStoredProfiles = (event: StorageEvent) => {
       if (event.key !== PROFILES_STORAGE_KEY) return;
       const latestProfiles = loadProfiles();
@@ -2697,6 +2734,15 @@ export default function Home() {
     window.addEventListener("storage", syncStoredProfiles);
     return () => window.removeEventListener("storage", syncStoredProfiles);
   }, [activeProfileId]);
+
+  useEffect(() => {
+    const syncSharedAchievements = (event: StorageEvent) => {
+      if (event.key !== SHARED_ACHIEVEMENTS_STORAGE_KEY) return;
+      setSharedAchievementClaimedIds(loadSharedAchievementClaimedIds());
+    };
+    window.addEventListener("storage", syncSharedAchievements);
+    return () => window.removeEventListener("storage", syncSharedAchievements);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(BOARD_SIZE_KEY, String(boardSize));
@@ -4572,6 +4618,11 @@ export default function Home() {
     );
     if (!status || !status.progress.completed || status.claimed) return;
     const { achievement } = status;
+    setSharedAchievementClaimedIds(previous =>
+      previous.includes(achievement.id)
+        ? previous
+        : [...previous, achievement.id]
+    );
     setState(previous => ({
       ...previous,
       coins: previous.coins + achievement.rewardCoins,
@@ -4582,12 +4633,12 @@ export default function Home() {
       ),
       skillUpgradePoints:
         previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
-      achievementClaimedIds: [
+      achievementClaimedIds: normalizeAchievementIds([
         ...(Array.isArray(previous.achievementClaimedIds)
           ? previous.achievementClaimedIds
           : []),
         achievement.id,
-      ],
+      ]),
     }));
     showToast(
       `成就「${achievement.title}」已領取：+${achievement.rewardCoins} 金幣${
@@ -6300,7 +6351,7 @@ export default function Home() {
                 <div>
                   <div className="section-kicker"><Trophy size={15} /> ACHIEVEMENT HALL</div>
                   <h2>成就里程碑</h2>
-                  <p>完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵。</p>
+                  <p>完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵；里程碑由所有存檔共用。</p>
                 </div>
                 <div className="achievement-trophy-count">
                   <strong>{achievementStatuses.filter(item => item.claimed).length}</strong>
