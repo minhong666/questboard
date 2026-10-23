@@ -4918,16 +4918,8 @@ export default function Home() {
             onClick={() => navigateTo("abilities")}
           >
             <ShieldCheck size={18} />
-            <span>角色能力</span>
+            <span>角色</span>
             {activePage === "abilities" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "skills" ? "active" : ""}`}
-            onClick={() => navigateTo("skills")}
-          >
-            <Zap size={18} />
-            <span>角色技能</span>
-            {activePage === "skills" && <span className="active-dot" />}
           </button>
           <button
             className={`sidebar-link ${activePage === "monsters" ? "active" : ""}`}
@@ -5061,8 +5053,8 @@ export default function Home() {
               {
                 {
                   dashboard: "任務總覽",
-                  abilities: "角色能力",
-                  skills: "角色技能",
+                  abilities: "角色能力與技能",
+                  skills: "角色能力與技能",
                   monsters: "怪物與魔王",
                   soulTrial: "靈魂的試煉",
                   loot: "裝備工坊",
@@ -5582,9 +5574,9 @@ export default function Home() {
                     <button
                       type="button"
                       className="skill-page-link"
-                      onClick={() => navigateTo("skills")}
+                      onClick={() => document.getElementById("skills")?.scrollIntoView({ behavior: "smooth" })}
                     >
-                      查看全部技能 <ChevronRight size={13} />
+                      跳到完整技能樹 <ChevronRight size={13} />
                     </button>
                   </div>
                   {hasClassSkills ? (
@@ -5636,13 +5628,13 @@ export default function Home() {
             </section>
           )}
 
-          {activePage === "skills" && (
-            <section className="skills-page">
+          {activePage === "abilities" && (
+            <section className="skills-page" id="skills">
               <div className="section-heading">
                 <div>
                   <div className="section-kicker"><Zap size={15} /> CLASS SKILL ARCHIVE</div>
                   <h2>角色技能</h2>
-                  <p>點擊角色能力頁的技能欄位即可查看完整技能樹；達到基礎能力門檻後解鎖。</p>
+                  <p>角色能力與技能集中於同一頁；達到基礎能力門檻後解鎖特殊技能。</p>
                 </div>
                 <div className="skill-page-class-badge">
                   {getTaskIcon(classDefinition.icon, 18)} {classDefinition.name}
