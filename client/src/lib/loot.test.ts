@@ -338,6 +338,19 @@ describe("QuestBoard loot", () => {
     expect(getEquipmentSetBonuses([oldItem]).activeSets).toEqual([]);
   });
 
+  it("scales set bonuses with the current rarity multipliers", () => {
+    const mythicPieces = [
+      { ...equipment("mythic-helmet", "頭盔"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-chest", "胸甲"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-legs", "護腿"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-charm", "護身符"), setId: "astral-sage-神話" },
+    ];
+    expect(getEquipmentSetBonuses(mythicPieces).combat).toMatchObject({
+      castSpeedPercent: 35,
+      magicPenetrationPercent: 35,
+    });
+  });
+
   it("applies treasure affix value to the actual sale price", () => {
     const item = rollLoot(
       { level: 1 },

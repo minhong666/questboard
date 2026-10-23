@@ -141,10 +141,10 @@ const equipmentSetThemes: Array<{
 const setRarityMultiplier: Record<LootRarity, number> = {
   普通: 1,
   精良: 1.25,
-  稀有: 1.6,
-  史詩: 2.1,
-  傳說: 3,
-  神話: 4.5,
+  稀有: 1.5,
+  史詩: 1.75,
+  傳說: 2.5,
+  神話: 3.5,
 };
 
 const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", { label: string; unit: string }> = {
