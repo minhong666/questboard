@@ -128,6 +128,7 @@ import {
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
 import {
+  DAILY_MONSTER_CATALOG,
   getMonsterMechanicLabels,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
@@ -363,6 +364,7 @@ type PageKey =
   | "soulTrial"
   | "loot"
   | "codex"
+  | "monsterCodex"
   | "fusion"
   | "rewards"
   | "timers"
@@ -1826,6 +1828,8 @@ export default function Home() {
     useState<LootCategory>("頭盔");
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
   const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
+  const [monsterCodexSearch, setMonsterCodexSearch] = useState("");
+  const [monsterCodexRegion, setMonsterCodexRegion] = useState("all");
   const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>([]);
   const [saveNameDraft, setSaveNameDraft] = useState("");
   const [setupName, setSetupName] = useState("");
@@ -2026,6 +2030,72 @@ export default function Home() {
   const codexCompletionPercent = RPG_EQUIPMENT_TEMPLATES.length
     ? Math.round((codexDiscoveredCount / RPG_EQUIPMENT_TEMPLATES.length) * 100)
     : 0;
+  const monsterCodexEntries = [
+    ...DAILY_MONSTER_CATALOG.map((monster, index) => ({
+      id: `catalog-${index}`,
+      name: monster.name,
+      description: monster.description,
+      region: monster.region,
+      icon: Skull,
+      isBoss: false,
+      mechanicLabels: getMonsterMechanicLabels(monster),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith("daily-") && id.includes(`-${index}-`)
+      ),
+    })),
+    ...bosses.map(boss => ({
+      id: boss.id,
+      name: boss.name,
+      description: boss.description,
+      region: "區域魔王",
+      icon: boss.icon,
+      isBoss: true,
+      mechanicLabels: getMonsterMechanicLabels(boss),
+      discovered: defeatedMonsterIds.some(
+        id => id === boss.id || id.startsWith(`${boss.id}-`)
+      ),
+    })),
+    ...soulTrialMonsters.map((monster, index) => ({
+      id: `soul-catalog-${index}`,
+      name: monster.name,
+      description: monster.description,
+      region: "靈魂試煉",
+      icon: monster.icon,
+      isBoss: false,
+      mechanicLabels: getMonsterMechanicLabels(monster),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith("soul-trial-") && id.includes(`-${index}-`)
+      ),
+    })),
+    ...activeSoulTrialBosses.map(boss => ({
+      id: `soul-boss-catalog-${boss.level}`,
+      name: boss.name,
+      description: boss.description,
+      region: "靈魂試煉",
+      icon: boss.icon,
+      isBoss: true,
+      mechanicLabels: getMonsterMechanicLabels(boss),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith(`soul-trial-boss-`) && id.endsWith(`-${boss.level}`)
+      ),
+    })),
+  ];
+  const monsterCodexRegions = Array.from(
+    new Set(monsterCodexEntries.map(monster => monster.region))
+  );
+  const filteredMonsterCodexEntries = monsterCodexEntries.filter(monster => {
+    const query = monsterCodexSearch.trim().toLowerCase();
+    return (
+      (monsterCodexRegion === "all" || monster.region === monsterCodexRegion) &&
+      (!query ||
+        `${monster.name} ${monster.description} ${monster.region}`
+          .toLowerCase()
+          .includes(query))
+    );
+  });
+  const monsterCodexDiscoveredCount = monsterCodexEntries.filter(
+    monster => monster.discovered
+  ).length;
   const selectedFusionItems = selectedFusionItemIds
     .map(id => inventory.find((item): item is EquipmentItem =>
       item.id === id && item.kind === "equipment"
@@ -4535,6 +4605,14 @@ export default function Home() {
             {activePage === "codex" && <span className="active-dot" />}
           </button>
           <button
+            className={`sidebar-link ${activePage === "monsterCodex" ? "active" : ""}`}
+            onClick={() => navigateTo("monsterCodex")}
+          >
+            <Skull size={18} />
+            <span>怪物圖鑑</span>
+            {activePage === "monsterCodex" && <span className="active-dot" />}
+          </button>
+          <button
             className={`sidebar-link ${activePage === "fusion" ? "active" : ""}`}
             onClick={() => navigateTo("fusion")}
           >
@@ -4640,6 +4718,7 @@ export default function Home() {
                   soulTrial: "靈魂的試煉",
                   loot: "戰利品庫",
                   codex: "裝備圖鑑",
+                  monsterCodex: "怪物圖鑑",
                   fusion: "裝備合成",
                   rewards: "獎勵寶庫",
                   timers: "事務計時",
@@ -6453,6 +6532,125 @@ export default function Home() {
                       <div className="codex-card-bottom">
                         <span>裝備等級 {discovered ? `Lv.${item.equipmentLevel}` : "?"}</span>
                         <strong>{discovered ? "已發現" : "尚未發現"}</strong>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {activePage === "monsterCodex" && (
+            <section className="monster-codex-section" id="monster-codex">
+              <div className="section-heading codex-heading">
+                <div>
+                  <div className="section-kicker">
+                    <Skull size={15} /> MONSTER CODEX
+                  </div>
+                  <h2>怪物圖鑑</h2>
+                  <p>收錄冒險區域的普通魔物與區域魔王；擊敗過的敵人會解鎖完整資料。</p>
+                </div>
+                <div className="codex-total-badge monster-codex-total-badge">
+                  <strong>{monsterCodexEntries.length}</strong>
+                  <span>種魔物</span>
+                </div>
+              </div>
+              <div className="codex-progress-panel panel-card">
+                <div className="codex-progress-copy">
+                  <span className="mini-kicker">HUNTING PROGRESS</span>
+                  <strong>
+                    {monsterCodexDiscoveredCount} / {monsterCodexEntries.length} 已擊敗
+                  </strong>
+                  <small>擊敗過的魔物會在所有角色存檔中共用圖鑑進度。</small>
+                </div>
+                <div className="codex-progress-visual">
+                  <strong>
+                    {monsterCodexEntries.length
+                      ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100)
+                      : 0}%
+                  </strong>
+                  <div className="codex-progress-track" aria-label="怪物圖鑑完成度">
+                    <span
+                      style={{
+                        width: `${monsterCodexEntries.length ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="codex-toolbar panel-card monster-codex-toolbar">
+                <div className="codex-toolbar-title">
+                  <span className="mini-kicker">FILTER BESTIARY</span>
+                  <strong>搜尋怪物資料</strong>
+                  <small>可依名稱、描述或區域搜尋。</small>
+                </div>
+                <div className="codex-filters">
+                  <label>
+                    <span>搜尋</span>
+                    <input
+                      value={monsterCodexSearch}
+                      onChange={event => setMonsterCodexSearch(event.target.value)}
+                      placeholder="輸入怪物名稱"
+                    />
+                  </label>
+                  <label>
+                    <span>區域</span>
+                    <select
+                      value={monsterCodexRegion}
+                      onChange={event => setMonsterCodexRegion(event.target.value)}
+                    >
+                      <option value="all">全部區域</option>
+                      {monsterCodexRegions.map(region => (
+                        <option value={region} key={region}>{region}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="codex-clear-button"
+                    disabled={!monsterCodexSearch && monsterCodexRegion === "all"}
+                    onClick={() => {
+                      setMonsterCodexSearch("");
+                      setMonsterCodexRegion("all");
+                    }}
+                  >
+                    清除篩選
+                  </button>
+                </div>
+              </div>
+              <div className="codex-result-summary">
+                <span>目前顯示 {filteredMonsterCodexEntries.length} / {monsterCodexEntries.length} 種魔物</span>
+                <span>{filteredMonsterCodexEntries.filter(monster => monster.discovered).length} 種已擊敗 · {filteredMonsterCodexEntries.filter(monster => !monster.discovered).length} 種未擊敗</span>
+              </div>
+              <div className="monster-codex-grid">
+                {filteredMonsterCodexEntries.map(monster => {
+                  const Icon = monster.icon;
+                  return (
+                    <article
+                      className={`monster-codex-card panel-card ${monster.isBoss ? "is-boss" : ""} ${monster.discovered ? "is-discovered" : "is-locked"}`}
+                      key={monster.id}
+                    >
+                      <div className="monster-codex-card-top">
+                        <div className="monster-codex-icon">
+                          {monster.discovered ? <Icon size={22} /> : <LockKeyhole size={18} />}
+                        </div>
+                        <div>
+                          <span className="monster-codex-region">{monster.region}</span>
+                          <small>{monster.isBoss ? "區域魔王" : "普通魔物"}</small>
+                        </div>
+                      </div>
+                      <div className="monster-codex-copy">
+                        <h3>{monster.discovered ? monster.name : "尚未辨識的魔物"}</h3>
+                        <p>{monster.discovered ? monster.description : "前往怪物區域挑戰並擊敗牠，解鎖詳細資料。"}</p>
+                        {monster.discovered && monster.mechanicLabels.length > 0 && (
+                          <div className="monster-codex-mechanics">
+                            {monster.mechanicLabels.map(label => <span key={label}>{label}</span>)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="monster-codex-card-bottom">
+                        <span>{monster.discovered ? "資料已解鎖" : "資料鎖定"}</span>
+                        <strong>{monster.discovered ? "已擊敗" : "未擊敗"}</strong>
                       </div>
                     </article>
                   );

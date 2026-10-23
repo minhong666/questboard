@@ -2284,6 +2284,19 @@ h1 {
   font-size: 9px;
   font-weight: 750;
 }
+.codex-filters input {
+  width: 118px;
+  padding: 2px 0;
+  color: #d8dcf6;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 750;
+}
+.codex-filters input::placeholder {
+  color: #68738e;
+}
 .codex-filters option {
   color: #1a2140;
   background: #f1f0ff;
@@ -2466,6 +2479,130 @@ h1 {
 }
 .codex-card.is-locked .codex-card-bottom strong {
   color: #78839d;
+}
+.monster-codex-total-badge {
+  border-color: rgba(230, 130, 137, 0.25);
+  background: linear-gradient(145deg, rgba(174, 65, 84, 0.16), rgba(31, 35, 63, 0.72));
+}
+.monster-codex-total-badge strong {
+  color: #ffc5c5;
+}
+.monster-codex-toolbar {
+  border-color: rgba(230, 130, 137, 0.16);
+}
+.monster-codex-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+}
+.monster-codex-card {
+  display: flex;
+  min-width: 0;
+  min-height: 190px;
+  flex-direction: column;
+  padding: 14px;
+  border-color: rgba(133, 150, 190, 0.16);
+  background: linear-gradient(145deg, rgba(27, 36, 59, 0.84), rgba(14, 22, 39, 0.95));
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.monster-codex-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(230, 130, 137, 0.38);
+}
+.monster-codex-card.is-locked {
+  border-style: dashed;
+  background: linear-gradient(145deg, rgba(23, 30, 49, 0.7), rgba(12, 19, 34, 0.92));
+}
+.monster-codex-card.is-boss {
+  border-color: rgba(224, 176, 110, 0.28);
+}
+.monster-codex-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.monster-codex-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: #ff9da5;
+  border: 1px solid rgba(230, 130, 137, 0.2);
+  border-radius: 12px;
+  background: rgba(174, 65, 84, 0.13);
+}
+.monster-codex-card.is-locked .monster-codex-icon {
+  color: #68738e;
+  border-color: rgba(133, 150, 190, 0.13);
+  background: rgba(133, 150, 190, 0.08);
+}
+.monster-codex-card-top > div:last-child {
+  display: grid;
+  gap: 5px;
+  padding-top: 2px;
+}
+.monster-codex-region {
+  color: #c9c3e9;
+  font-size: 9px;
+  font-weight: 800;
+}
+.monster-codex-card-top small {
+  color: #7986a3;
+  font-size: 8px;
+}
+.monster-codex-copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 6px;
+  margin-top: 13px;
+}
+.monster-codex-copy h3 {
+  margin: 0;
+  color: #e5e9fc;
+  font-size: 13px;
+}
+.monster-codex-card.is-locked .monster-codex-copy h3 {
+  color: #9aa4bb;
+  font-style: italic;
+}
+.monster-codex-copy p {
+  min-height: 34px;
+  margin: 0;
+  color: #7d8aa4;
+  font-size: 8px;
+  line-height: 1.45;
+}
+.monster-codex-mechanics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-self: start;
+}
+.monster-codex-mechanics span {
+  padding: 4px 6px;
+  color: #f0b7b7;
+  border: 1px solid rgba(230, 130, 137, 0.2);
+  border-radius: 5px;
+  background: rgba(174, 65, 84, 0.1);
+  font-size: 7px;
+}
+.monster-codex-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 10px;
+  color: #687693;
+  border-top: 1px solid rgba(133, 150, 190, 0.12);
+  font-size: 8px;
+}
+.monster-codex-card-bottom strong {
+  color: #a7dfca;
+}
+.monster-codex-card.is-locked .monster-codex-card-bottom strong {
+  color: #7d88a2;
 }
 .loot-card {
   min-height: 166px;
@@ -4520,6 +4657,9 @@ h2 {
   .codex-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .monster-codex-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .codex-progress-panel {
     grid-template-columns: 1fr;
   }
@@ -4565,6 +4705,7 @@ h2 {
   }
   .codex-filters label,
   .codex-filters label select,
+  .codex-filters label input,
   .codex-clear-button {
     flex: 1 1 auto;
   }
@@ -4577,6 +4718,9 @@ h2 {
     gap: 4px;
   }
   .codex-grid {
+    grid-template-columns: 1fr;
+  }
+  .monster-codex-grid {
     grid-template-columns: 1fr;
   }
   .loot-drop-summary-grid {
