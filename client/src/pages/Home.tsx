@@ -29,6 +29,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Search,
   Skull,
   ScrollText,
   Settings2,
@@ -280,9 +281,18 @@ type Reward = {
   custom?: boolean;
 };
 
+type RewardRedemption = {
+  id: string;
+  rewardId: string;
+  title: string;
+  cost: number;
+  redeemedAt: number;
+};
+
 type AppState = {
   tasks: Task[];
   rewards: Reward[];
+  rewardRedemptions: RewardRedemption[];
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
   totalXp: number;
@@ -1013,9 +1023,46 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
   };
 }
 
+function normalizeRewardRedemptions(value: unknown): RewardRedemption[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is Record<string, unknown> => {
+      if (!entry || typeof entry !== "object") return false;
+      return (
+        typeof entry.id === "string" &&
+        typeof entry.rewardId === "string" &&
+        typeof entry.title === "string" &&
+        typeof entry.cost === "number" &&
+        Number.isFinite(entry.cost) &&
+        entry.cost >= 0 &&
+        typeof entry.redeemedAt === "number" &&
+        Number.isFinite(entry.redeemedAt) &&
+        entry.redeemedAt > 0
+      );
+    })
+    .map(entry => ({
+      id: entry.id as string,
+      rewardId: entry.rewardId as string,
+      title: entry.title as string,
+      cost: Math.floor(entry.cost as number),
+      redeemedAt: Math.floor(entry.redeemedAt as number),
+    }));
+}
+
+function formatRewardRedemptionDate(timestamp: number) {
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 const initialState: AppState = {
   tasks: defaultTasks,
   rewards: defaultRewards,
+  rewardRedemptions: [],
   timerActivities: [],
   runningTimer: null,
   totalXp: 3480,
@@ -1276,6 +1323,7 @@ function loadState(): AppState {
       runningTimer: timerState.runningTimer,
       tasks,
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
+      rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
     };
   } catch {
     return initialState;
@@ -1315,6 +1363,9 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     runningTimer: timerState.runningTimer,
     archerDodgeFailStacks: normalizeArcherDodgeFailStacks(
       profileState.archerDodgeFailStacks
+    ),
+    rewardRedemptions: normalizeRewardRedemptions(
+      profileState.rewardRedemptions
     ),
     inventory,
     equippedItemIds,
@@ -1726,6 +1777,7 @@ export default function Home() {
     cost: "200",
     icon: "gift",
   });
+  const [rewardHistoryQuery, setRewardHistoryQuery] = useState("");
   const [refreshDraft, setRefreshDraft] = useState("04:00");
   const [profileDraft, setProfileDraft] = useState("");
   const [timerNameDraft, setTimerNameDraft] = useState("");
@@ -1792,6 +1844,13 @@ export default function Home() {
   });
 
   const player = useMemo(() => getPlayerStats(state.totalXp), [state.totalXp]);
+  const filteredRewardRedemptions = useMemo(() => {
+    const query = rewardHistoryQuery.trim().toLowerCase();
+    return state.rewardRedemptions
+      .filter(entry => !query || entry.title.toLowerCase().includes(query))
+      .slice()
+      .sort((a, b) => b.redeemedAt - a.redeemedAt);
+  }, [rewardHistoryQuery, state.rewardRedemptions]);
   const soulMemory = useMemo(
     () => getSoulMemory(profiles, state),
     [profiles, state]
@@ -3936,9 +3995,20 @@ export default function Home() {
       showToast(`還差 ${reward.cost - state.coins} 金幣才能兌換`);
       return;
     }
+    const redeemedAt = Date.now();
     setState(previous => ({
       ...previous,
       coins: previous.coins - reward.cost,
+      rewardRedemptions: [
+        ...previous.rewardRedemptions,
+        {
+          id: `redemption-${redeemedAt}-${Math.random().toString(36).slice(2, 8)}`,
+          rewardId: reward.id,
+          title: reward.title,
+          cost: reward.cost,
+          redeemedAt,
+        },
+      ],
     }));
     showToast(`已兌換「${reward.title}」，好好享受這份獎勵`);
   };
@@ -6541,6 +6611,55 @@ export default function Home() {
                   );
                 })}
               </div>
+              <section className="reward-history panel-card" aria-labelledby="reward-history-title">
+                <div className="reward-history-heading">
+                  <div>
+                    <div className="section-kicker">
+                      <ScrollText size={14} /> REDEMPTION LOG
+                    </div>
+                    <h3 id="reward-history-title">兌換歷史</h3>
+                    <p>查看目前角色過去兌換過的獎勵與花費金幣。</p>
+                  </div>
+                  <strong>{state.rewardRedemptions.length} 筆紀錄</strong>
+                </div>
+                <label className="reward-history-search">
+                  <Search size={15} />
+                  <span className="sr-only">搜尋兌換歷史</span>
+                  <input
+                    type="search"
+                    value={rewardHistoryQuery}
+                    onChange={event => setRewardHistoryQuery(event.target.value)}
+                    placeholder="搜尋獎勵名稱"
+                  />
+                </label>
+                {filteredRewardRedemptions.length === 0 ? (
+                  <div className="reward-history-empty">
+                    <ScrollText size={20} />
+                    <span>
+                      {state.rewardRedemptions.length === 0
+                        ? "目前還沒有兌換紀錄"
+                        : "找不到符合的兌換紀錄"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="reward-history-list">
+                    {filteredRewardRedemptions.map(entry => (
+                      <div className="reward-history-row" key={entry.id}>
+                        <div className="reward-history-icon">
+                          <Gift size={16} />
+                        </div>
+                        <div className="reward-history-copy">
+                          <strong>{entry.title}</strong>
+                          <small>{formatRewardRedemptionDate(entry.redeemedAt)}</small>
+                        </div>
+                        <span className="reward-history-cost">
+                          <Coins size={14} /> -{entry.cost}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </section>
           )}
 
@@ -6990,6 +7109,53 @@ export default function Home() {
                         : " · 持續中"}
                   </span>
                 ))}
+              </div>
+            )}
+            {battle.outcome === "fighting" && (
+              <div className="battle-player-effects" aria-label="角色目前戰鬥效果">
+                <span className="battle-effects-label">你的目前效果</span>
+                {temporaryBattleBuff && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>
+                      {battleSpecialSkills.find(
+                        skill => skill.id === temporaryBattleBuff.skillId
+                      )?.name ?? "戰鬥增益"}
+                    </strong>
+                    <small>{temporaryBattleBuff.turnsRemaining} 回合</small>
+                    {temporaryBattleBuff.damageBonusPercent > 0 && (
+                      <small>傷害 +{temporaryBattleBuff.damageBonusPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.damageReductionPercent > 0 && (
+                      <small>減傷 +{temporaryBattleBuff.damageReductionPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.dodgeRateBonusPercent > 0 && (
+                      <small>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.healPercentMaxHealth > 0 && (
+                      <small>每回合恢復 {temporaryBattleBuff.healPercentMaxHealth}% 生命</small>
+                    )}
+                  </span>
+                )}
+                {(battle.actionLockTurns ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-debuff">
+                    <strong>終焉狙殺反噬</strong>
+                    <small>{battle.actionLockTurns} 回合</small>
+                    <small>停滯，無法使用技能</small>
+                  </span>
+                )}
+                {isArcher && state.archerDodgeFailStacks > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>游擊本能</strong>
+                    <small>{state.archerDodgeFailStacks} 層</small>
+                    <small>攻擊 +{archerTalentBonuses.attackPercent}%</small>
+                    <small>閃避 +{archerTalentBonuses.dodgePercent}%</small>
+                  </span>
+                )}
+                {!temporaryBattleBuff &&
+                  (battle.actionLockTurns ?? 0) === 0 &&
+                  (!isArcher || state.archerDodgeFailStacks === 0) && (
+                    <span className="battle-effects-empty">目前沒有增益或負面效果</span>
+                  )}
               </div>
             )}
             <div className="battle-log">
