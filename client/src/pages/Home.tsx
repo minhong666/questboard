@@ -210,24 +210,27 @@ type BattleStatus = {
   turnsRemaining: number;
   damagePerTurn: number;
 };
-
 function applyBattleStatusEffects(
   current: BattleStatus[],
-  effects: (SkillStatusEffect | undefined)[]
+  effects: (SkillStatusEffect | undefined)[],
+  sourceDamage = 0
 ) {
   const next = [...current];
   for (const effect of effects) {
     if (!effect || Math.random() > effect.chance) continue;
+    const damagePerTurn = effect.damagePercentOfSkill
+      ? Math.max(1, Math.round(sourceDamage * effect.damagePercentOfSkill / 100))
+      : effect.damagePerTurn;
     const existing = next.find(status => status.kind === effect.kind);
     if (existing) {
       existing.turnsRemaining = Math.max(existing.turnsRemaining, effect.durationTurns);
-      existing.damagePerTurn = Math.max(existing.damagePerTurn, effect.damagePerTurn);
+      existing.damagePerTurn = Math.max(existing.damagePerTurn, damagePerTurn);
     } else {
       next.push({
         kind: effect.kind,
         element: effect.element,
         turnsRemaining: effect.durationTurns,
-        damagePerTurn: effect.damagePerTurn,
+        damagePerTurn,
       });
     }
   }
@@ -2970,7 +2973,8 @@ export default function Home() {
       battle.monsterStatuses,
       damageDealt > 0 && damageType === "魔法"
         ? [selectedSkill?.statusEffect, staffStatusEffect]
-        : []
+        : [],
+      damageDealt
     );
     const statusTick = tickBattleStatuses(nextMonsterStatuses);
     const statusDamage = Math.min(statusTick.damage, Math.max(0, battle.monsterHealth - damageDealt));
@@ -6610,7 +6614,11 @@ export default function Home() {
                 {battle.monsterStatuses.map(status => (
                   <span className={`battle-status battle-status-${status.kind}`} key={status.kind}>
                     {status.element}·{status.kind} · {status.turnsRemaining} 回合
-                    {status.damagePerTurn > 0 ? ` · 每回合 ${status.damagePerTurn} 傷害` : " · 跳過反擊"}
+                    {status.damagePerTurn > 0
+                      ? ` · 每回合 ${status.damagePerTurn} 傷害`
+                      : status.kind === "冰凍"
+                        ? " · 跳過反擊"
+                        : " · 持續中"}
                   </span>
                 ))}
               </div>
@@ -6664,7 +6672,11 @@ export default function Home() {
                                   {skill.statusEffect.durationTurns}回合
                                   {skill.statusEffect.damagePerTurn > 0
                                     ? ` · 每回合 ${skill.statusEffect.damagePerTurn} 傷害`
-                                    : " · 跳過反擊"}
+                                    : skill.statusEffect.damagePercentOfSkill
+                                      ? ` · 每回合該技能 ${skill.statusEffect.damagePercentOfSkill}% 傷害`
+                                      : skill.statusEffect.kind === "冰凍"
+                                        ? " · 跳過反擊"
+                                        : " · 持續中"}
                                 </small>
                               )}
                             </span>

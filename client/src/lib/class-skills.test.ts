@@ -143,7 +143,7 @@ describe("class-specific special skills", () => {
       expect(skills.length).toBeGreaterThan(0);
       expect(skills.every(skill => skill.cooldownTurns >= 3 && skill.cooldownTurns <= 5)).toBe(true);
     }
-    expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4, 5, 3]);
+    expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4, 5, 5]);
   });
 
   it("keeps applicable defense penetration between 25% and 60%", () => {

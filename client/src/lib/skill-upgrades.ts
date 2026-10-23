@@ -36,12 +36,13 @@ export function applySkillUpgrade(
   const damageSkill = skill.effectType === "damage";
   const buffSkill = skill.effectType === "buff";
   const passiveSkill = skill.effectType === "passive";
+  const descriptionIncludesDefensePierce = skill.description.includes("防禦穿透");
   return {
     ...skill,
     damageMultiplier: damageSkill
       ? skill.damageMultiplier * (1 + level * 0.05)
       : skill.damageMultiplier,
-    defensePiercePercent: damageSkill
+    defensePiercePercent: damageSkill && descriptionIncludesDefensePierce
       ? clampDefensePiercePercent(skill.defensePiercePercent + level * 2)
       : skill.defensePiercePercent,
     damageBonusPercent: buffSkill

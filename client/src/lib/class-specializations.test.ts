@@ -122,6 +122,58 @@ describe("class specializations", () => {
     expect(shadowSkills[2].cooldownTurns).toBe(8);
   });
 
+  it("uses the requested elementalist and frostguard skill effects", () => {
+    const elementalistSkills = getAllSpecializationSkills(getSpecializations("mage")[0]);
+    expect(elementalistSkills[0]).toMatchObject({
+      damageMultiplier: 2,
+      defensePiercePercent: 25,
+      cooldownTurns: 3,
+    });
+    expect(elementalistSkills[1]).toMatchObject({
+      damageMultiplier: 3.1,
+      defensePiercePercent: 45,
+      cooldownTurns: 5,
+    });
+    expect(elementalistSkills[2]).toMatchObject({
+      damageMultiplier: 4.2,
+      defensePiercePercent: 60,
+      cooldownTurns: 8,
+    });
+    expect(elementalistSkills[2].statusEffect).toMatchObject({
+      kind: "災厄",
+      durationTurns: 3,
+      damagePercentOfSkill: 5,
+    });
+
+    const frostguardSkills = getAllSpecializationSkills(getSpecializations("mage")[1]);
+    expect(frostguardSkills[0]).toMatchObject({
+      damageReductionPercent: 50,
+      damageBonusPercent: -20,
+      durationTurns: 2,
+      cooldownTurns: 5,
+    });
+    expect(frostguardSkills[1]).toMatchObject({
+      damageMultiplier: 2.1,
+      defensePiercePercent: 20,
+      damageReductionPercent: 30,
+      durationTurns: 2,
+      cooldownTurns: 5,
+    });
+    expect(frostguardSkills[1].statusEffect).toMatchObject({
+      kind: "冰凍",
+      durationTurns: 2,
+    });
+    expect(frostguardSkills[2]).toMatchObject({
+      damageMultiplier: 3.3,
+      defensePiercePercent: 50,
+      cooldownTurns: 5,
+    });
+    expect(frostguardSkills[2].statusEffect).toMatchObject({
+      kind: "冰凍",
+      durationTurns: 2,
+    });
+  });
+
   it("unlocks specialization skills at levels 50, 75, and 100", () => {
     const specialization = getSpecializations("mage")[0];
     expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);
