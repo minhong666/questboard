@@ -4124,6 +4124,118 @@ h2 {
 .battle-loot-result.has-loot small {
   color: #b9945b;
 }
+.weekly-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 8, 19, 0.8);
+  backdrop-filter: blur(10px);
+  animation: fade-in 0.2s ease-out;
+}
+.weekly-report-card {
+  width: min(100%, 560px);
+  padding: 24px;
+  border: 1px solid rgba(224, 176, 110, 0.35);
+  border-radius: 17px;
+  background: linear-gradient(145deg, #1b2540, #121a2d);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.52);
+}
+.weekly-report-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.weekly-report-header > div:nth-child(2) {
+  flex: 1;
+}
+.weekly-report-header h2 {
+  margin-top: 7px;
+  color: #f0eaff;
+  font-size: 22px;
+}
+.weekly-report-header p {
+  margin-top: 7px;
+  color: #8491ae;
+  font-size: 10px;
+}
+.weekly-report-symbol {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #f0c578;
+  border-radius: 12px;
+  background: rgba(224, 176, 110, 0.13);
+}
+.weekly-report-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+}
+.weekly-report-grid > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 13px 7px;
+  border: 1px solid rgba(133, 150, 190, 0.15);
+  border-radius: 10px;
+  background: rgba(8, 14, 29, 0.3);
+  text-align: center;
+}
+.weekly-report-grid svg {
+  color: #b9a9ff;
+}
+.weekly-report-grid span {
+  color: #8b98b5;
+  font-size: 9px;
+}
+.weekly-report-grid strong {
+  color: #f1edff;
+  font-size: 22px;
+  line-height: 1;
+}
+.weekly-report-grid small {
+  color: #687693;
+  font-size: 8px;
+}
+.weekly-report-abilities {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(133, 150, 190, 0.14);
+  border-radius: 10px;
+  background: rgba(8, 14, 29, 0.24);
+}
+.weekly-report-abilities > span {
+  color: #8b98b5;
+  font-size: 9px;
+  font-weight: 800;
+}
+.weekly-report-abilities > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+.weekly-report-abilities b {
+  padding: 5px 8px;
+  color: #bfe8da;
+  border: 1px solid rgba(105, 224, 170, 0.25);
+  border-radius: 999px;
+  background: rgba(56, 168, 116, 0.1);
+  font-size: 9px;
+}
+.weekly-report-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 18px;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -4769,6 +4881,18 @@ h2 {
   }
   .modal-card {
     padding: 19px;
+  }
+  .weekly-report-backdrop {
+    padding: 10px;
+  }
+  .weekly-report-card {
+    padding: 19px;
+  }
+  .weekly-report-header h2 {
+    font-size: 19px;
+  }
+  .weekly-report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .battle-card {
     padding: 19px;

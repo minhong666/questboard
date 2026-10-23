@@ -132,6 +132,13 @@ import {
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
+import {
+  addWeeklyStats,
+  createWeeklyStats,
+  isWeeklyReportTime,
+  normalizeWeeklyStats,
+  type WeeklyStats,
+} from "../lib/weekly-stats";
 
 type Category = "工作" | "學習" | "健康" | "生活" | "心情";
 type TaskDifficulty = "輕量" | "標準" | "挑戰";
@@ -293,6 +300,7 @@ type AppState = {
   tasks: Task[];
   rewards: Reward[];
   rewardRedemptions: RewardRedemption[];
+  weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
   totalXp: number;
@@ -998,6 +1006,14 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
   const nextLevel = getPlayerLevelStats(nextTotalXp).level;
   const levelUps = Math.max(0, nextLevel - state.abilityLevel);
   const growth = getLevelGrowth(state.jobClass, levelUps);
+  const weeklyStats = addWeeklyStats(
+    state.weeklyStats,
+    {
+      levelsGained: levelUps,
+      abilitiesGained: growth.abilities,
+    },
+    new Date()
+  );
   return {
     ...state,
     totalXp: nextTotalXp,
@@ -1020,6 +1036,7 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
       critDamage: state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
     },
     currentHealth: state.currentHealth + growth.abilities.health,
+    weeklyStats,
   };
 }
 
@@ -1063,6 +1080,7 @@ const initialState: AppState = {
   tasks: defaultTasks,
   rewards: defaultRewards,
   rewardRedemptions: [],
+  weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
   totalXp: 3480,
@@ -1324,6 +1342,7 @@ function loadState(): AppState {
       tasks,
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
       rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
+      weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
     return initialState;
@@ -1367,6 +1386,7 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     rewardRedemptions: normalizeRewardRedemptions(
       profileState.rewardRedemptions
     ),
+    weeklyStats: normalizeWeeklyStats(profileState.weeklyStats, new Date()),
     inventory,
     equippedItemIds,
     skillUpgradePoints: Math.max(
@@ -1778,6 +1798,7 @@ export default function Home() {
     icon: "gift",
   });
   const [rewardHistoryQuery, setRewardHistoryQuery] = useState("");
+  const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   const [refreshDraft, setRefreshDraft] = useState("04:00");
   const [profileDraft, setProfileDraft] = useState("");
   const [timerNameDraft, setTimerNameDraft] = useState("");
@@ -1822,6 +1843,7 @@ export default function Home() {
     })),
     totalXp: 0,
     coins: 0,
+    weeklyStats: createWeeklyStats(new Date()),
     streak: 0,
     abilities: { ...defaultAbilities },
     abilityPoints: 0,
@@ -2808,6 +2830,22 @@ export default function Home() {
   }, [boardSize, repeatPeriodSignature]);
 
   useEffect(() => {
+    const now = new Date(currentTime);
+    setState(previous => {
+      const weeklyStats = normalizeWeeklyStats(previous.weeklyStats, now);
+      return weeklyStats.weekKey === previous.weeklyStats.weekKey
+        ? previous
+        : { ...previous, weeklyStats };
+    });
+    if (
+      isWeeklyReportTime(now) &&
+      state.weeklyStats.reportShownWeekKey !== state.weeklyStats.weekKey
+    ) {
+      setWeeklyReportOpen(true);
+    }
+  }, [currentTime, state.weeklyStats.weekKey, state.weeklyStats.reportShownWeekKey]);
+
+  useEffect(() => {
     const availableIds = new Set(
       allAvailableMonsters.map(monster => monster.id)
     );
@@ -2855,6 +2893,7 @@ export default function Home() {
       ),
       totalXp: 0,
       coins: 0,
+      weeklyStats: createWeeklyStats(new Date()),
       streak: 0,
       abilities: defaultAbilities,
       abilityPoints: 0,
@@ -2887,6 +2926,11 @@ export default function Home() {
         [key]: previous.abilities[key] + (key === "health" ? 10 : 1),
       },
       currentHealth: previous.currentHealth + (key === "health" ? 10 : 0),
+      weeklyStats: addWeeklyStats(
+        previous.weeklyStats,
+        { abilitiesGained: { [key]: key === "health" ? 10 : 1 } },
+        new Date()
+      ),
     }));
     showToast(`${label} +${key === "health" ? 10 : 1}，能力點數已使用`);
   };
@@ -2977,6 +3021,11 @@ export default function Home() {
       return {
         ...previous,
         coins: previous.coins + sale.coinsEarned,
+        weeklyStats: addWeeklyStats(
+          previous.weeklyStats,
+          { coinsEarned: sale.coinsEarned },
+          new Date()
+        ),
         inventory: sale.inventory,
       };
     });
@@ -3333,6 +3382,7 @@ export default function Home() {
         const previousInventory = Array.isArray(previous.inventory)
           ? previous.inventory
           : [];
+        const levelGrowth = getLevelGrowth(previous.jobClass, levelUps);
         return {
           ...previous,
           currentHealth:
@@ -3340,6 +3390,15 @@ export default function Home() {
             getLevelGrowth(previous.jobClass, levelUps).abilities.health,
           totalXp: nextTotalXp,
           coins: previous.coins + monster.reward,
+          weeklyStats: addWeeklyStats(
+            previous.weeklyStats,
+            {
+              coinsEarned: monster.reward,
+              levelsGained: levelUps,
+              abilitiesGained: levelGrowth.abilities,
+            },
+            new Date()
+          ),
           defeatedMonsterIds: [...previousDefeatedMonsterIds, monster.id],
           inventory: lootDrop
             ? [...previousInventory, lootDrop]
@@ -3350,17 +3409,16 @@ export default function Home() {
           abilities: {
             health:
               previous.abilities.health +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+              levelGrowth.abilities.health,
             strength:
               previous.abilities.strength +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.strength,
+              levelGrowth.abilities.strength,
             defense:
               previous.abilities.defense +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.defense,
+              levelGrowth.abilities.defense,
             intelligence:
               previous.abilities.intelligence +
-              getLevelGrowth(previous.jobClass, levelUps).abilities
-                .intelligence,
+              levelGrowth.abilities.intelligence,
           },
           combatStats: {
             ...previous.combatStats,
@@ -3882,6 +3940,7 @@ export default function Home() {
         .every(item => item.completed);
       const allTasksBonus =
         nextCompleted && allTasksCompleted && !previous.allTasksBonusClaimed;
+      const levelGrowth = getLevelGrowth(previous.jobClass, levelUps);
       return {
         ...previous,
         tasks: nextTasks,
@@ -3899,19 +3958,31 @@ export default function Home() {
         skillUpgradePoints: previous.skillUpgradePoints + levelUps,
         abilityLevel: Math.max(previous.abilityLevel, nextLevel),
         allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
+        weeklyStats: nextCompleted
+          ? addWeeklyStats(
+              previous.weeklyStats,
+              {
+                tasksCompleted: 1,
+                coinsEarned: task.coins + (allTasksBonus ? 50 : 0),
+                levelsGained: levelUps,
+                abilitiesGained: levelGrowth.abilities,
+              },
+              new Date()
+            )
+          : previous.weeklyStats,
         abilities: {
           health:
             previous.abilities.health +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+            levelGrowth.abilities.health,
           strength:
             previous.abilities.strength +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.strength,
+            levelGrowth.abilities.strength,
           defense:
             previous.abilities.defense +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.defense,
+            levelGrowth.abilities.defense,
           intelligence:
             previous.abilities.intelligence +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.intelligence,
+            levelGrowth.abilities.intelligence,
         },
         combatStats: {
           ...previous.combatStats,
@@ -3927,7 +3998,7 @@ export default function Home() {
         },
         currentHealth:
           previous.currentHealth +
-          getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+          levelGrowth.abilities.health,
       };
     });
     if (nextCompleted) {
@@ -4280,6 +4351,11 @@ export default function Home() {
     setState(previous => ({
       ...previous,
       coins: previous.coins + achievement.rewardCoins,
+      weeklyStats: addWeeklyStats(
+        previous.weeklyStats,
+        { coinsEarned: achievement.rewardCoins },
+        new Date()
+      ),
       skillUpgradePoints:
         previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
       achievementClaimedIds: [
@@ -7295,6 +7371,109 @@ export default function Home() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {weeklyReportOpen && (
+        <div
+          className="weekly-report-backdrop"
+          onClick={event => {
+            if (event.target !== event.currentTarget) return;
+            setState(previous => ({
+              ...previous,
+              weeklyStats: {
+                ...previous.weeklyStats,
+                reportShownWeekKey: previous.weeklyStats.weekKey,
+              },
+            }));
+            setWeeklyReportOpen(false);
+          }}
+        >
+          <div className="weekly-report-card" role="dialog" aria-modal="true">
+            <div className="weekly-report-header">
+              <div className="weekly-report-symbol">
+                <CalendarDays size={22} />
+              </div>
+              <div>
+                <span className="mini-kicker">WEEKLY ADVENTURE REPORT</span>
+                <h2>本週冒險統計</h2>
+                <p>每週一 00:00 至週日 23:59 的累積成果</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => {
+                  setState(previous => ({
+                    ...previous,
+                    weeklyStats: {
+                      ...previous.weeklyStats,
+                      reportShownWeekKey: previous.weeklyStats.weekKey,
+                    },
+                  }));
+                  setWeeklyReportOpen(false);
+                }}
+                aria-label="關閉每週統計"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="weekly-report-grid">
+              <div>
+                <CheckCircle2 size={17} />
+                <span>完成任務</span>
+                <strong>{state.weeklyStats.tasksCompleted}</strong>
+                <small>個任務</small>
+              </div>
+              <div>
+                <Trophy size={17} />
+                <span>升級</span>
+                <strong>{state.weeklyStats.levelsGained}</strong>
+                <small>個等級</small>
+              </div>
+              <div>
+                <Coins size={17} />
+                <span>獲得金幣</span>
+                <strong>{state.weeklyStats.coinsEarned}</strong>
+                <small>枚金幣</small>
+              </div>
+              <div>
+                <Sparkles size={17} />
+                <span>能力增加</span>
+                <strong>
+                  {Object.values(state.weeklyStats.abilitiesGained).reduce(
+                    (total, value) => total + value,
+                    0
+                  )}
+                </strong>
+                <small>點屬性</small>
+              </div>
+            </div>
+            <div className="weekly-report-abilities">
+              <span>能力增加明細</span>
+              <div>
+                <b>生命 +{state.weeklyStats.abilitiesGained.health}</b>
+                <b>力量 +{state.weeklyStats.abilitiesGained.strength}</b>
+                <b>防禦 +{state.weeklyStats.abilitiesGained.defense}</b>
+                <b>智力 +{state.weeklyStats.abilitiesGained.intelligence}</b>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="primary-button weekly-report-submit"
+              onClick={() => {
+                setState(previous => ({
+                  ...previous,
+                  weeklyStats: {
+                    ...previous.weeklyStats,
+                    reportShownWeekKey: previous.weeklyStats.weekKey,
+                  },
+                }));
+                setWeeklyReportOpen(false);
+              }}
+            >
+              收下本週成果 <Check size={16} />
+            </button>
           </div>
         </div>
       )}
