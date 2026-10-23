@@ -31,8 +31,10 @@ export type SpecialCombatSkill = {
   critDamageBonusPercent: number;
   critRateBonusPercent?: number;
   dodgeRateBonusPercent?: number;
-  executeBelowHealthPercent?: number;
+  hitCountMin?: number;
+  hitCountMax?: number;
   healPercentMaxHealth?: number;
+  executeBelowHealthPercent?: number;
   unlockLevel?: number;
   statusEffect?: SkillStatusEffect;
 };
@@ -55,7 +57,7 @@ const ROGUE_SKILL_STEP = 10;
 const ROGUE_SKILL_LIMIT = 3;
 const WARRIOR_SKILL_LIMIT = 4;
 const warriorSkillNames = ["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"];
-const archerSkillNames = ["鷹眼"];
+const archerSkillNames = ["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"];
 const mageSkillNames = ["火球術", "冰霜矛", "雷霆風暴", "隕星術"];
 const rogueSkillNames = ["背刺", "影刃連擊", "死亡標記"];
 
@@ -80,7 +82,13 @@ export function getNextSkillUnlockThreshold(
   }
   if (jobClass === "warrior" && safeAttributeValue(strength) >= 100) return null;
   if (jobClass === "archer") {
-    return safeAttributeValue(intelligence) < 5 ? 5 : null;
+    const unlockedCount = Math.min(
+      archerSkillNames.length,
+      Math.floor(safeAttributeValue(critRate) / 5)
+    );
+    return unlockedCount < archerSkillNames.length
+      ? (unlockedCount + 1) * 5
+      : null;
   }
   if (jobClass !== "warrior" && jobClass !== "mage") return null;
   const currentValue = safeAttributeValue(
@@ -101,7 +109,7 @@ export function getUnlockedSpecialSkills(
 
   const isRogue = jobClass === "rogue";
   const isArcher = jobClass === "archer";
-  const attributeName = isRogue
+  const attributeName = isRogue || isArcher
     ? "暴擊率"
     : jobClass === "warrior"
       ? "力量"
@@ -117,11 +125,11 @@ export function getUnlockedSpecialSkills(
         ? mageSkillNames
         : rogueSkillNames;
   const currentValue = safeAttributeValue(
-    isRogue ? critRate : jobClass === "warrior" ? strength : intelligence
+    isRogue || isArcher ? critRate : jobClass === "warrior" ? strength : intelligence
   );
   const skillStep = isRogue ? ROGUE_SKILL_STEP : isArcher ? 5 : SKILL_STEP;
   const skillCount = isArcher
-    ? Math.min(1, Math.floor(currentValue / skillStep))
+    ? Math.min(archerSkillNames.length, Math.floor(currentValue / skillStep))
     : jobClass === "warrior"
     ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
     : isRogue
@@ -135,9 +143,16 @@ export function getUnlockedSpecialSkills(
     const isKnightHeart = jobClass === "warrior" && index === 0;
     const isWarriorSlash = jobClass === "warrior" && index === 1;
     const isArcherFocus = isArcher && index === 0;
+    const isArcherPiercingShot = isArcher && index === 1;
+    const isArcherRapidVolley = isArcher && index === 2;
+    const isArcherDawnShot = isArcher && index === 3;
     const cooldownTurns = isKnightHeart
       ? 5
-      : isWarriorSlash
+      : isArcherPiercingShot || isArcherRapidVolley
+        ? 4
+        : isArcherDawnShot
+          ? 5
+          : isWarriorSlash
         ? 4
         : jobClass === "warrior" && index === 3
           ? 5
@@ -163,6 +178,12 @@ export function getUnlockedSpecialSkills(
       damageType,
       damageMultiplier: isKnightHeart || isArcherFocus
         ? 0
+        : isArcherPiercingShot
+          ? 1.6
+          : isArcherRapidVolley
+            ? 1.65
+            : isArcherDawnShot
+              ? 3
         : isRogue
         ? 2 + index * 0.3
         : isWarriorSlash
@@ -170,6 +191,10 @@ export function getUnlockedSpecialSkills(
           : 1.5 + requiredValue / 100,
       defensePiercePercent: isKnightHeart || isArcherFocus
         ? 0
+        : isArcher
+          ? isArcherPiercingShot
+            ? 30
+            : 0
         : clampDefensePiercePercent(
             isRogue ? 35 + index * 15 : 20 + index * 10
           ),
@@ -178,6 +203,12 @@ export function getUnlockedSpecialSkills(
         ? "自身造成傷害 +20%，受到傷害 −20%，持續 2 回合；冷卻 5 回合。"
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
+        : isArcherPiercingShot
+          ? "物理技能，造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
+        : isArcherRapidVolley
+          ? "物理技能，每次造成 1.65 倍傷害，隨機攻擊 1～3 次；冷卻 4 回合。"
+        : isArcherDawnShot
+          ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
           ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
           : `${damageType}技能，造成 ${isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
@@ -187,18 +218,20 @@ export function getUnlockedSpecialSkills(
       damageReductionPercent: isKnightHeart ? 20 : 0,
       flatDamageBonus: 0,
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
+      hitCountMin: isArcherRapidVolley ? 1 : undefined,
+      hitCountMax: isArcherRapidVolley ? 3 : undefined,
       statusEffect,
     };
   });
 }
 
 export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 5 : 100;
+  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,
-    jobClass === "mage" || jobClass === "archer" ? maxValue : 0,
-    jobClass === "rogue" ? maxValue : 0
+    jobClass === "mage" ? maxValue : 0,
+    jobClass === "rogue" || jobClass === "archer" ? maxValue : 0
   );
 }
 

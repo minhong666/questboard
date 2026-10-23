@@ -2939,6 +2939,10 @@ export default function Home() {
       battle.monsterHealth <
         monster.health * (selectedSkill.executeBelowHealthPercent / 100)
     );
+    const skillHitCount = selectedSkill?.hitCountMin && selectedSkill.hitCountMax
+      ? selectedSkill.hitCountMin +
+        Math.floor(Math.random() * (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1))
+      : 1;
     const rawDamageDealt = instantExecute
       ? battle.monsterHealth
       : actionLocked
@@ -2952,7 +2956,7 @@ export default function Home() {
             buffedPlayerDamage,
             monster.defense,
             selectedSkill
-          )
+          ) * skillHitCount
         : Math.max(
             1,
             buffedPlayerDamage - getDefenseReduction(monster.defense)
