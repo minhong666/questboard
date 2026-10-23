@@ -7,6 +7,7 @@ import {
   LOOT_RARITIES,
   LOOT_RARITY_CLASS,
   getEquipmentAffixBonuses,
+  getEquipmentSetBonuses,
   getEquipmentRequiredJobClass,
   getTreasureSellValue,
   nextLootRarity,
@@ -267,6 +268,44 @@ describe("QuestBoard loot", () => {
       critDamage: 0,
       dodgeRate: 0,
     });
+  });
+
+  it("activates cumulative two-piece and four-piece set bonuses", () => {
+    const pieces = [
+      { ...equipment("dawn-helmet", "頭盔"), setId: "dawn-warden" },
+      { ...equipment("dawn-chest", "胸甲"), setId: "dawn-warden" },
+      { ...equipment("dawn-legs", "護腿"), setId: "dawn-warden" },
+      { ...equipment("dawn-charm", "護身符"), setId: "dawn-warden" },
+    ];
+
+    expect(getEquipmentSetBonuses(pieces.slice(0, 2))).toMatchObject({
+      abilities: { health: 60, defense: 8 },
+      combat: { critDamage: 0 },
+      activeSets: [{ name: "曙光聖衛", equippedCount: 2, activeBonuses: [{ pieces: 2 }] }],
+    });
+    expect(getEquipmentSetBonuses(pieces)).toMatchObject({
+      abilities: { health: 180, defense: 24 },
+      combat: { critDamage: 10 },
+      activeSets: [{ equippedCount: 4, activeBonuses: [{ pieces: 2 }, { pieces: 4 }] }],
+    });
+  });
+
+  it("keeps old equipment without a set id usable", () => {
+    const oldItem = parseLootItem({
+      id: "old-setless-gear",
+      kind: "equipment",
+      name: "舊版胸甲",
+      slot: "胸甲",
+      rarity: "普通",
+      description: "舊存檔裝備",
+      bonus: "防禦 +2",
+      icon: "shield",
+    });
+
+    expect(oldItem?.kind).toBe("equipment");
+    if (oldItem?.kind !== "equipment") throw new Error("Expected old equipment");
+    expect(oldItem.setId).toBeUndefined();
+    expect(getEquipmentSetBonuses([oldItem]).activeSets).toEqual([]);
   });
 
   it("applies treasure affix value to the actual sale price", () => {

@@ -50,6 +50,7 @@ import {
   EQUIPMENT_SLOTS,
   getEquipmentRequiredJobClassName,
   getEquipmentAffixBonuses,
+  getEquipmentSetBonuses,
   getLootProbabilitySummary,
   LOOT_RARITY_CLASS,
   LOOT_RARITIES,
@@ -1004,7 +1005,17 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   combat.critRate = (combat.critRate ?? 0) + affixBonuses.critRate;
   combat.critDamage = (combat.critDamage ?? 0) + affixBonuses.critDamage;
   combat.dodgeRate = (combat.dodgeRate ?? 0) + affixBonuses.dodgeRate;
-  return { abilities, combat };
+  const setBonuses = getEquipmentSetBonuses(items);
+  abilities.health += setBonuses.abilities.health;
+  abilities.strength += setBonuses.abilities.strength;
+  abilities.defense += setBonuses.abilities.defense;
+  abilities.intelligence += setBonuses.abilities.intelligence;
+  combat.critRate = (combat.critRate ?? 0) + setBonuses.combat.critRate;
+  combat.critDamage = (combat.critDamage ?? 0) + setBonuses.combat.critDamage;
+  combat.dodgeRate = (combat.dodgeRate ?? 0) + setBonuses.combat.dodgeRate;
+  combat.castSpeedPercent =
+    (combat.castSpeedPercent ?? 0) + setBonuses.combat.castSpeedPercent;
+  return { abilities, combat, activeSets: setBonuses.activeSets };
 }
 
 function getEffectiveHealthCap(
@@ -5373,6 +5384,37 @@ export default function Home() {
                     {equipmentBonuses.combat.castSpeedPercent ? (
                       <b>施法速度 +{equipmentBonuses.combat.castSpeedPercent}%</b>
                     ) : null}
+                  </div>
+                  <div className="equipment-set-summary">
+                    <div className="equipment-set-summary-heading">
+                      <div>
+                        <span className="mini-kicker">EQUIPMENT SETS</span>
+                        <strong>套裝效果</strong>
+                      </div>
+                      <small>同系列裝備達到 2／4 件時啟用</small>
+                    </div>
+                    {equipmentBonuses.activeSets.length > 0 ? (
+                      <div className="equipment-set-list">
+                        {equipmentBonuses.activeSets.map(set => (
+                          <div className="equipment-set-card" key={set.id}>
+                            <div className="equipment-set-card-top">
+                              <strong>{set.name}</strong>
+                              <span>{set.equippedCount}/4 件</span>
+                            </div>
+                            <small>{set.description}</small>
+                            <div className="equipment-set-effects">
+                              {set.activeBonuses.map(bonus => (
+                                <span key={`${set.id}-${bonus.pieces}`}>
+                                  <b>{bonus.pieces} 件</b> {bonus.label} · {bonus.description}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="equipment-set-empty">目前尚未湊齊任何套裝；裝備名稱前綴相同的部件屬於同一系列。</p>
+                    )}
                   </div>
                 </div>
                 <div className="ability-grid">

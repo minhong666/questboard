@@ -61,6 +61,7 @@ export type EquipmentItem = {
   id: string;
   kind: "equipment";
   name: string;
+  setId?: string;
   slot: EquipmentSlot;
   weaponType?: WeaponType;
   element?: WeaponElement;
@@ -71,6 +72,136 @@ export type EquipmentItem = {
   affixes?: EquipmentAffix[];
   equipmentLevel?: number;
 };
+
+export type EquipmentSetBonus = {
+  pieces: 2 | 4;
+  label: string;
+  description: string;
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>;
+};
+
+export type EquipmentSetDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  bonuses: EquipmentSetBonus[];
+};
+
+export const EQUIPMENT_SET_DEFINITIONS: EquipmentSetDefinition[] = [
+  {
+    id: "dawn-warden",
+    name: "曙光聖衛",
+    description: "以堅定防線守住每一個黎明。",
+    bonuses: [
+      {
+        pieces: 2,
+        label: "曙光誓約",
+        description: "生命 +60 · 防禦 +8",
+        bonuses: { health: 60, defense: 8 },
+      },
+      {
+        pieces: 4,
+        label: "聖衛壁壘",
+        description: "生命 +120 · 防禦 +16 · 暴擊傷害 +10%",
+        bonuses: { health: 120, defense: 16, critDamage: 10 },
+      },
+    ],
+  },
+  {
+    id: "astral-sage",
+    name: "星界賢者",
+    description: "讓群星的知識流入每一次施法。",
+    bonuses: [
+      {
+        pieces: 2,
+        label: "星軌共鳴",
+        description: "智力 +12 · 施法速度 +4%",
+        bonuses: { intelligence: 12, castSpeedPercent: 4 },
+      },
+      {
+        pieces: 4,
+        label: "萬象洞悉",
+        description: "智力 +24 · 施法速度 +8% · 暴擊傷害 +12%",
+        bonuses: { intelligence: 24, castSpeedPercent: 8, critDamage: 12 },
+      },
+    ],
+  },
+  {
+    id: "frost-stalker",
+    name: "霜影獵行",
+    description: "在寒霧與月影之間追獵目標。",
+    bonuses: [
+      {
+        pieces: 2,
+        label: "寒影步",
+        description: "力量 +10 · 閃避率 +3%",
+        bonuses: { strength: 10, dodgeRate: 3 },
+      },
+      {
+        pieces: 4,
+        label: "無聲獵殺",
+        description: "力量 +20 · 閃避率 +6% · 暴擊率 +5%",
+        bonuses: { strength: 20, dodgeRate: 6, critRate: 5 },
+      },
+    ],
+  },
+  {
+    id: "abyss-conqueror",
+    name: "深淵征服",
+    description: "將深淵的毀滅力量化為征服意志。",
+    bonuses: [
+      {
+        pieces: 2,
+        label: "深淵印記",
+        description: "生命 +100 · 力量 +14",
+        bonuses: { health: 100, strength: 14 },
+      },
+      {
+        pieces: 4,
+        label: "終焉征服",
+        description: "生命 +200 · 力量 +28 · 暴擊傷害 +20%",
+        bonuses: { health: 200, strength: 28, critDamage: 20 },
+      },
+    ],
+  },
+];
+
+export type ActiveEquipmentSet = EquipmentSetDefinition & {
+  equippedCount: number;
+  activeBonuses: EquipmentSetBonus[];
+};
+
+export function getEquipmentSetBonuses(items: EquipmentItem[]): {
+  abilities: Required<Pick<EquipmentAffixBonuses, "health" | "strength" | "defense" | "intelligence">>;
+  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number };
+  activeSets: ActiveEquipmentSet[];
+} {
+  const abilities = { health: 0, strength: 0, defense: 0, intelligence: 0 };
+  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0 };
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    if (item.setId) counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1);
+  }
+
+  const activeSets = EQUIPMENT_SET_DEFINITIONS.flatMap(set => {
+    const equippedCount = counts.get(set.id) ?? 0;
+    if (equippedCount < 2) return [];
+    const activeBonuses = set.bonuses.filter(bonus => equippedCount >= bonus.pieces);
+    for (const bonus of activeBonuses) {
+      abilities.health += bonus.bonuses.health ?? 0;
+      abilities.strength += bonus.bonuses.strength ?? 0;
+      abilities.defense += bonus.bonuses.defense ?? 0;
+      abilities.intelligence += bonus.bonuses.intelligence ?? 0;
+      combat.critRate += bonus.bonuses.critRate ?? 0;
+      combat.critDamage += bonus.bonuses.critDamage ?? 0;
+      combat.dodgeRate += bonus.bonuses.dodgeRate ?? 0;
+      combat.castSpeedPercent += bonus.bonuses.castSpeedPercent ?? 0;
+    }
+    return [{ ...set, equippedCount, activeBonuses }];
+  });
+
+  return { abilities, combat, activeSets };
+}
 
 export function getEquipmentRequiredJobClass(
   item: Pick<EquipmentItem, "slot" | "weaponType" | "name">
@@ -730,6 +861,7 @@ export function parseLootItem(value: unknown): LootItem | null {
     return {
       ...common,
       kind: "equipment",
+      setId: typeof item.setId === "string" ? item.setId : undefined,
       slot,
       weaponType:
         item.weaponType === "劍" ||
