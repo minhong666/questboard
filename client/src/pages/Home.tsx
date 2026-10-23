@@ -128,10 +128,18 @@ import {
   getAbilityValuesForRequirementCheck,
 } from "../lib/soul-trial";
 import {
+  DAILY_MONSTER_CATALOG,
   getMonsterMechanicLabels,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
+import {
+  addWeeklyStats,
+  createWeeklyStats,
+  isWeeklyReportTime,
+  normalizeWeeklyStats,
+  type WeeklyStats,
+} from "../lib/weekly-stats";
 
 type Category = "工作" | "學習" | "健康" | "生活" | "心情";
 type TaskDifficulty = "輕量" | "標準" | "挑戰";
@@ -210,6 +218,18 @@ type BattleStatus = {
   element: SkillStatusEffect["element"];
   turnsRemaining: number;
   damagePerTurn: number;
+};
+type BattleFx = {
+  id: number;
+  action: "attack" | "skill" | "idle";
+  monsterDamage: number;
+  playerDamage: number;
+  healing: number;
+  critical: boolean;
+  monsterDodged: boolean;
+  playerDodged: boolean;
+  monsterDefeated: boolean;
+  playerDefeated: boolean;
 };
 function applyBattleStatusEffects(
   current: BattleStatus[],
@@ -293,6 +313,7 @@ type AppState = {
   tasks: Task[];
   rewards: Reward[];
   rewardRedemptions: RewardRedemption[];
+  weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
   totalXp: number;
@@ -355,10 +376,56 @@ type PageKey =
   | "soulTrial"
   | "loot"
   | "codex"
-  | "fusion"
+  | "monsterCodex"
   | "rewards"
   | "timers"
   | "achievements";
+
+const specializationVisuals: Record<
+  SpecializationId,
+  { icon: string; subtitle: string; colorClass: string }
+> = {
+  "warrior-guardian": {
+    icon: "shield-check",
+    subtitle: "鋼鐵壁壘 · 守護隊友",
+    colorClass: "guardian",
+  },
+  "warrior-berserker": {
+    icon: "flame",
+    subtitle: "狂怒戰意 · 以傷換傷",
+    colorClass: "berserker",
+  },
+  "archer-ranger": {
+    icon: "leaf",
+    subtitle: "荒野獵手 · 靈活追擊",
+    colorClass: "ranger",
+  },
+  "archer-sniper": {
+    icon: "target",
+    subtitle: "致命瞄準 · 一擊破局",
+    colorClass: "sniper",
+  },
+  "mage-elementalist": {
+    icon: "sparkles",
+    subtitle: "元素共鳴 · 掌控災厄",
+    colorClass: "elementalist",
+  },
+  "mage-frostguard": {
+    icon: "moon",
+    subtitle: "寒霜結界 · 凍結戰場",
+    colorClass: "frostguard",
+  },
+  "rogue-assassin": {
+    icon: "sword",
+    subtitle: "暗影獵殺 · 穿透要害",
+    colorClass: "assassin",
+  },
+  "rogue-shadowdancer": {
+    icon: "zap",
+    subtitle: "幻影舞步 · 閃避連擊",
+    colorClass: "shadowdancer",
+  },
+};
 
 const LOOT_CATEGORY_KEYS = [...EQUIPMENT_SLOTS, "寶物"] as const;
 type LootCategory = (typeof LOOT_CATEGORY_KEYS)[number];
@@ -838,7 +905,7 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   for (const item of items) {
     const bonus = item.bonus;
     const value = (label: string) =>
-      Number(bonus.match(new RegExp(`${label} \\+(\\d+)`))?.[1] ?? 0);
+      Number(bonus.match(new RegExp(`${label} \\+(\\d+(?:\\.\\d+)?)`))?.[1] ?? 0);
     if (bonus.includes("全能力")) {
       const all = value("全能力");
       abilities.health += all;
@@ -998,6 +1065,14 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
   const nextLevel = getPlayerLevelStats(nextTotalXp).level;
   const levelUps = Math.max(0, nextLevel - state.abilityLevel);
   const growth = getLevelGrowth(state.jobClass, levelUps);
+  const weeklyStats = addWeeklyStats(
+    state.weeklyStats,
+    {
+      levelsGained: levelUps,
+      abilitiesGained: growth.abilities,
+    },
+    new Date()
+  );
   return {
     ...state,
     totalXp: nextTotalXp,
@@ -1020,6 +1095,7 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
       critDamage: state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
     },
     currentHealth: state.currentHealth + growth.abilities.health,
+    weeklyStats,
   };
 }
 
@@ -1063,6 +1139,7 @@ const initialState: AppState = {
   tasks: defaultTasks,
   rewards: defaultRewards,
   rewardRedemptions: [],
+  weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
   totalXp: 3480,
@@ -1324,6 +1401,7 @@ function loadState(): AppState {
       tasks,
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
       rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
+      weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
     return initialState;
@@ -1367,6 +1445,7 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     rewardRedemptions: normalizeRewardRedemptions(
       profileState.rewardRedemptions
     ),
+    weeklyStats: normalizeWeeklyStats(profileState.weeklyStats, new Date()),
     inventory,
     equippedItemIds,
     skillUpgradePoints: Math.max(
@@ -1778,6 +1857,7 @@ export default function Home() {
     icon: "gift",
   });
   const [rewardHistoryQuery, setRewardHistoryQuery] = useState("");
+  const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   const [refreshDraft, setRefreshDraft] = useState("04:00");
   const [profileDraft, setProfileDraft] = useState("");
   const [timerNameDraft, setTimerNameDraft] = useState("");
@@ -1800,11 +1880,17 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [battle, setBattle] = useState<BattleState | null>(null);
+  const [battleFx, setBattleFx] = useState<BattleFx | null>(null);
+  const battleFxIdRef = useRef(0);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [selectedLootCategory, setSelectedLootCategory] =
     useState<LootCategory>("頭盔");
+  const [selectedEquipmentForComparison, setSelectedEquipmentForComparison] =
+    useState<EquipmentItem | null>(null);
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
   const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
+  const [monsterCodexSearch, setMonsterCodexSearch] = useState("");
+  const [monsterCodexRegion, setMonsterCodexRegion] = useState("all");
   const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>([]);
   const [saveNameDraft, setSaveNameDraft] = useState("");
   const [setupName, setSetupName] = useState("");
@@ -1822,6 +1908,7 @@ export default function Home() {
     })),
     totalXp: 0,
     coins: 0,
+    weeklyStats: createWeeklyStats(new Date()),
     streak: 0,
     abilities: { ...defaultAbilities },
     abilityPoints: 0,
@@ -1981,6 +2068,56 @@ export default function Home() {
   const equippedItems = equippedItemIds
     .map(id => inventory.find(item => item.id === id))
     .filter((item): item is EquipmentItem => item?.kind === "equipment");
+  const equipmentComparison = selectedEquipmentForComparison
+    ? (() => {
+        const currentItem = equippedItems.find(
+          item => item.slot === selectedEquipmentForComparison.slot
+        );
+        const replacementItems = [
+          ...equippedItems.filter(item => item.slot !== selectedEquipmentForComparison.slot),
+          selectedEquipmentForComparison,
+        ];
+        const currentBonuses = getEquipmentBonuses(equippedItems);
+        const replacementBonuses = getEquipmentBonuses(replacementItems);
+        const abilitiesWith = (bonuses: ReturnType<typeof getEquipmentBonuses>) => ({
+          health: state.abilities.health + bonuses.abilities.health,
+          strength: state.abilities.strength + bonuses.abilities.strength,
+          defense: state.abilities.defense + bonuses.abilities.defense,
+          intelligence: state.abilities.intelligence + bonuses.abilities.intelligence,
+        });
+        const currentAbilities = abilitiesWith(currentBonuses);
+        const replacementAbilities = abilitiesWith(replacementBonuses);
+        const currentCombat = {
+          critRate: (state.combatStats.critRate ?? 0) + (currentBonuses.combat.critRate ?? 0),
+          critDamage: (state.combatStats.critDamage ?? 0) + (currentBonuses.combat.critDamage ?? 0),
+          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (currentBonuses.combat.dodgeRate ?? 0),
+        };
+        const replacementCombat = {
+          critRate: (state.combatStats.critRate ?? 0) + (replacementBonuses.combat.critRate ?? 0),
+          critDamage: (state.combatStats.critDamage ?? 0) + (replacementBonuses.combat.critDamage ?? 0),
+          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (replacementBonuses.combat.dodgeRate ?? 0),
+        };
+        const currentMagicPenetration = Number(
+          currentItem?.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
+        );
+        const replacementMagicPenetration = Number(
+          selectedEquipmentForComparison.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
+        );
+        return {
+          currentItem,
+          stats: [
+            { label: "物理攻擊", unit: "", current: getPhysicalAttackDamage(currentAbilities), replacement: getPhysicalAttackDamage(replacementAbilities) },
+            { label: "魔法攻擊", unit: "", current: getMagicAttackDamage(currentAbilities), replacement: getMagicAttackDamage(replacementAbilities) },
+            { label: "生命", unit: "", current: currentAbilities.health, replacement: replacementAbilities.health },
+            { label: "防禦", unit: "", current: currentAbilities.defense, replacement: replacementAbilities.defense },
+            { label: "暴擊率", unit: "%", current: currentCombat.critRate, replacement: replacementCombat.critRate },
+            { label: "暴擊傷害", unit: "%", current: currentCombat.critDamage, replacement: replacementCombat.critDamage },
+            { label: "閃避率", unit: "%", current: currentCombat.dodgeRate, replacement: replacementCombat.dodgeRate },
+            { label: "魔法穿透", unit: "%", current: currentMagicPenetration, replacement: replacementMagicPenetration },
+          ],
+        };
+      })()
+    : null;
   const codexItems = RPG_EQUIPMENT_TEMPLATES.filter(item =>
     (codexRarity === "all" || item.rarity === codexRarity) &&
     (codexSlot === "all" || item.slot === codexSlot)
@@ -2004,6 +2141,72 @@ export default function Home() {
   const codexCompletionPercent = RPG_EQUIPMENT_TEMPLATES.length
     ? Math.round((codexDiscoveredCount / RPG_EQUIPMENT_TEMPLATES.length) * 100)
     : 0;
+  const monsterCodexEntries = [
+    ...DAILY_MONSTER_CATALOG.map((monster, index) => ({
+      id: `catalog-${index}`,
+      name: monster.name,
+      description: monster.description,
+      region: monster.region,
+      icon: Skull,
+      isBoss: false,
+      mechanicLabels: getMonsterMechanicLabels(monster),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith("daily-") && id.includes(`-${index}-`)
+      ),
+    })),
+    ...bosses.map(boss => ({
+      id: boss.id,
+      name: boss.name,
+      description: boss.description,
+      region: "區域魔王",
+      icon: boss.icon,
+      isBoss: true,
+      mechanicLabels: getMonsterMechanicLabels(boss),
+      discovered: defeatedMonsterIds.some(
+        id => id === boss.id || id.startsWith(`${boss.id}-`)
+      ),
+    })),
+    ...soulTrialMonsters.map((monster, index) => ({
+      id: `soul-catalog-${index}`,
+      name: monster.name,
+      description: monster.description,
+      region: "靈魂試煉",
+      icon: monster.icon,
+      isBoss: false,
+      mechanicLabels: getMonsterMechanicLabels(monster),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith("soul-trial-") && id.includes(`-${index}-`)
+      ),
+    })),
+    ...activeSoulTrialBosses.map(boss => ({
+      id: `soul-boss-catalog-${boss.level}`,
+      name: boss.name,
+      description: boss.description,
+      region: "靈魂試煉",
+      icon: boss.icon,
+      isBoss: true,
+      mechanicLabels: getMonsterMechanicLabels(boss),
+      discovered: defeatedMonsterIds.some(
+        id => id.startsWith(`soul-trial-boss-`) && id.endsWith(`-${boss.level}`)
+      ),
+    })),
+  ];
+  const monsterCodexRegions = Array.from(
+    new Set(monsterCodexEntries.map(monster => monster.region))
+  );
+  const filteredMonsterCodexEntries = monsterCodexEntries.filter(monster => {
+    const query = monsterCodexSearch.trim().toLowerCase();
+    return (
+      (monsterCodexRegion === "all" || monster.region === monsterCodexRegion) &&
+      (!query ||
+        `${monster.name} ${monster.description} ${monster.region}`
+          .toLowerCase()
+          .includes(query))
+    );
+  });
+  const monsterCodexDiscoveredCount = monsterCodexEntries.filter(
+    monster => monster.discovered
+  ).length;
   const selectedFusionItems = selectedFusionItemIds
     .map(id => inventory.find((item): item is EquipmentItem =>
       item.id === id && item.kind === "equipment"
@@ -2052,6 +2255,7 @@ export default function Home() {
     state.jobClass,
     state.specialization
   );
+  const currentSpecializationVisual = specializationVisuals[currentSpecialization.id];
   const specializationUnlocked = player.level >= 50;
   const unlockedSpecializationSkillsForStats = specializationUnlocked
     ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
@@ -2398,6 +2602,7 @@ export default function Home() {
       allAvailableMonsters.find(monster => monster.id === battle.monsterId) ??
       null)
     : null;
+  const BattleMonsterIcon = activeBattleMonster?.icon ?? Skull;
   const skillPreviewMonster =
     activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
   const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
@@ -2808,6 +3013,22 @@ export default function Home() {
   }, [boardSize, repeatPeriodSignature]);
 
   useEffect(() => {
+    const now = new Date(currentTime);
+    setState(previous => {
+      const weeklyStats = normalizeWeeklyStats(previous.weeklyStats, now);
+      return weeklyStats.weekKey === previous.weeklyStats.weekKey
+        ? previous
+        : { ...previous, weeklyStats };
+    });
+    if (
+      isWeeklyReportTime(now) &&
+      state.weeklyStats.reportShownWeekKey !== state.weeklyStats.weekKey
+    ) {
+      setWeeklyReportOpen(true);
+    }
+  }, [currentTime, state.weeklyStats.weekKey, state.weeklyStats.reportShownWeekKey]);
+
+  useEffect(() => {
     const availableIds = new Set(
       allAvailableMonsters.map(monster => monster.id)
     );
@@ -2855,6 +3076,7 @@ export default function Home() {
       ),
       totalXp: 0,
       coins: 0,
+      weeklyStats: createWeeklyStats(new Date()),
       streak: 0,
       abilities: defaultAbilities,
       abilityPoints: 0,
@@ -2887,6 +3109,11 @@ export default function Home() {
         [key]: previous.abilities[key] + (key === "health" ? 10 : 1),
       },
       currentHealth: previous.currentHealth + (key === "health" ? 10 : 0),
+      weeklyStats: addWeeklyStats(
+        previous.weeklyStats,
+        { abilitiesGained: { [key]: key === "health" ? 10 : 1 } },
+        new Date()
+      ),
     }));
     showToast(`${label} +${key === "health" ? 10 : 1}，能力點數已使用`);
   };
@@ -2977,6 +3204,11 @@ export default function Home() {
       return {
         ...previous,
         coins: previous.coins + sale.coinsEarned,
+        weeklyStats: addWeeklyStats(
+          previous.weeklyStats,
+          { coinsEarned: sale.coinsEarned },
+          new Date()
+        ),
         inventory: sale.inventory,
       };
     });
@@ -3063,6 +3295,10 @@ export default function Home() {
     showToast(`合成成功：${fusion.result.rarity} ${fusion.result.name}`);
   };
 
+  const showBattleFx = (effect: Omit<BattleFx, "id">) => {
+    battleFxIdRef.current += 1;
+    setBattleFx({ ...effect, id: battleFxIdRef.current });
+  };
   const startBattle = (monster: Monster) => {
     const isSoulTrialMonster = monster.id.startsWith("soul-trial-");
     const cooldownUntil = isSoulTrialMonster
@@ -3107,6 +3343,7 @@ export default function Home() {
       lootDrop: null,
       outcome: "fighting",
     });
+    setBattleFx(null);
   };
 
   const runBattleTurn = (skillId?: string) => {
@@ -3323,6 +3560,17 @@ export default function Home() {
         lootDrop,
         outcome: "victory" as const,
       };
+      showBattleFx({
+        action: selectedSkill ? "skill" : "attack",
+        monsterDamage: damageDealt + statusDamage,
+        playerDamage: reactiveDamageOnDeath,
+        healing: lifestealHealing + activeBuffHealing,
+        critical: criticalHit,
+        monsterDodged: false,
+        playerDodged: false,
+        monsterDefeated: true,
+        playerDefeated: false,
+      });
       setBattle(nextBattle);
       setState(previous => {
         const previousDefeatedMonsterIds = Array.isArray(
@@ -3333,6 +3581,7 @@ export default function Home() {
         const previousInventory = Array.isArray(previous.inventory)
           ? previous.inventory
           : [];
+        const levelGrowth = getLevelGrowth(previous.jobClass, levelUps);
         return {
           ...previous,
           currentHealth:
@@ -3340,6 +3589,16 @@ export default function Home() {
             getLevelGrowth(previous.jobClass, levelUps).abilities.health,
           totalXp: nextTotalXp,
           coins: previous.coins + monster.reward,
+          weeklyStats: addWeeklyStats(
+            previous.weeklyStats,
+            {
+              monstersDefeated: 1,
+              coinsEarned: monster.reward,
+              levelsGained: levelUps,
+              abilitiesGained: levelGrowth.abilities,
+            },
+            new Date()
+          ),
           defeatedMonsterIds: [...previousDefeatedMonsterIds, monster.id],
           inventory: lootDrop
             ? [...previousInventory, lootDrop]
@@ -3350,17 +3609,16 @@ export default function Home() {
           abilities: {
             health:
               previous.abilities.health +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+              levelGrowth.abilities.health,
             strength:
               previous.abilities.strength +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.strength,
+              levelGrowth.abilities.strength,
             defense:
               previous.abilities.defense +
-              getLevelGrowth(previous.jobClass, levelUps).abilities.defense,
+              levelGrowth.abilities.defense,
             intelligence:
               previous.abilities.intelligence +
-              getLevelGrowth(previous.jobClass, levelUps).abilities
-                .intelligence,
+              levelGrowth.abilities.intelligence,
           },
           combatStats: {
             ...previous.combatStats,
@@ -3433,6 +3691,17 @@ export default function Home() {
     ];
     const nextDamageTaken = battle.damageTaken + damageTaken;
     if (playerHealth <= 0) {
+      showBattleFx({
+        action: selectedSkill ? "skill" : "attack",
+        monsterDamage: damageDealt + statusDamage,
+        playerDamage: damageTaken,
+        healing: lifestealHealing + activeBuffHealing,
+        critical: criticalHit || monsterCritical,
+        monsterDodged: monsterDodges,
+        playerDodged: playerDodges,
+        monsterDefeated: false,
+        playerDefeated: true,
+      });
       const isSoulTrialBattle = monster.id.startsWith("soul-trial-");
       if (isSoulTrialBattle) {
         setBattle({
@@ -3511,6 +3780,17 @@ export default function Home() {
       );
       return;
     }
+    showBattleFx({
+      action: selectedSkill ? "skill" : "attack",
+      monsterDamage: damageDealt + statusDamage,
+      playerDamage: damageTaken,
+      healing: lifestealHealing + activeBuffHealing,
+      critical: criticalHit || monsterCritical,
+      monsterDodged: monsterDodges,
+      playerDodged: playerDodges,
+      monsterDefeated: false,
+      playerDefeated: false,
+    });
     setBattle({
       ...battle,
       playerHealth,
@@ -3882,6 +4162,7 @@ export default function Home() {
         .every(item => item.completed);
       const allTasksBonus =
         nextCompleted && allTasksCompleted && !previous.allTasksBonusClaimed;
+      const levelGrowth = getLevelGrowth(previous.jobClass, levelUps);
       return {
         ...previous,
         tasks: nextTasks,
@@ -3899,19 +4180,31 @@ export default function Home() {
         skillUpgradePoints: previous.skillUpgradePoints + levelUps,
         abilityLevel: Math.max(previous.abilityLevel, nextLevel),
         allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
+        weeklyStats: nextCompleted
+          ? addWeeklyStats(
+              previous.weeklyStats,
+              {
+                tasksCompleted: 1,
+                coinsEarned: task.coins + (allTasksBonus ? 50 : 0),
+                levelsGained: levelUps,
+                abilitiesGained: levelGrowth.abilities,
+              },
+              new Date()
+            )
+          : previous.weeklyStats,
         abilities: {
           health:
             previous.abilities.health +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+            levelGrowth.abilities.health,
           strength:
             previous.abilities.strength +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.strength,
+            levelGrowth.abilities.strength,
           defense:
             previous.abilities.defense +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.defense,
+            levelGrowth.abilities.defense,
           intelligence:
             previous.abilities.intelligence +
-            getLevelGrowth(previous.jobClass, levelUps).abilities.intelligence,
+            levelGrowth.abilities.intelligence,
         },
         combatStats: {
           ...previous.combatStats,
@@ -3927,7 +4220,7 @@ export default function Home() {
         },
         currentHealth:
           previous.currentHealth +
-          getLevelGrowth(previous.jobClass, levelUps).abilities.health,
+          levelGrowth.abilities.health,
       };
     });
     if (nextCompleted) {
@@ -4280,6 +4573,11 @@ export default function Home() {
     setState(previous => ({
       ...previous,
       coins: previous.coins + achievement.rewardCoins,
+      weeklyStats: addWeeklyStats(
+        previous.weeklyStats,
+        { coinsEarned: achievement.rewardCoins },
+        new Date()
+      ),
       skillUpgradePoints:
         previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
       achievementClaimedIds: [
@@ -4446,7 +4744,7 @@ export default function Home() {
             onClick={() => navigateTo("loot")}
           >
             <Gift size={18} />
-            <span>戰利品庫</span>
+            <span>裝備工坊</span>
             {activePage === "loot" && <span className="active-dot" />}
           </button>
           <button
@@ -4458,12 +4756,12 @@ export default function Home() {
             {activePage === "codex" && <span className="active-dot" />}
           </button>
           <button
-            className={`sidebar-link ${activePage === "fusion" ? "active" : ""}`}
-            onClick={() => navigateTo("fusion")}
+            className={`sidebar-link ${activePage === "monsterCodex" ? "active" : ""}`}
+            onClick={() => navigateTo("monsterCodex")}
           >
-            <Sparkles size={18} />
-            <span>裝備合成</span>
-            {activePage === "fusion" && <span className="active-dot" />}
+            <Skull size={18} />
+            <span>怪物圖鑑</span>
+            {activePage === "monsterCodex" && <span className="active-dot" />}
           </button>
           <button
             className={`sidebar-link ${activePage === "rewards" ? "active" : ""}`}
@@ -4561,9 +4859,9 @@ export default function Home() {
                   skills: "角色技能",
                   monsters: "怪物與魔王",
                   soulTrial: "靈魂的試煉",
-                  loot: "戰利品庫",
+                  loot: "裝備工坊",
                   codex: "裝備圖鑑",
-                  fusion: "裝備合成",
+                  monsterCodex: "怪物圖鑑",
                   rewards: "獎勵寶庫",
                   timers: "事務計時",
                   achievements: "成就里程碑",
@@ -5162,18 +5460,39 @@ export default function Home() {
                       : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
                   </small>
                 </div>
+                <div className={`specialization-identity specialization-identity-${currentSpecializationVisual.colorClass}`}>
+                  <div className="specialization-identity-art">
+                    {getTaskIcon(currentSpecializationVisual.icon, 30)}
+                  </div>
+                  <div>
+                    <span className="mini-kicker">CURRENT ASPECT</span>
+                    <strong>{currentSpecialization.name}</strong>
+                    <small>{currentSpecializationVisual.subtitle}</small>
+                  </div>
+                  <div className="specialization-identity-skills">
+                    <span>專精技能</span>
+                    <b>{unlockedSpecializationSkillsForStats.length} / 3</b>
+                  </div>
+                </div>
                 <div className="specialization-branch-grid">
                   {getSpecializations(state.jobClass).map(specialization => (
+                    (() => {
+                      const visual = specializationVisuals[specialization.id];
+                      return (
                     <button
                       type="button"
                       key={specialization.id}
-                      className={`specialization-branch-option ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      className={`specialization-branch-option specialization-option-${visual.colorClass} ${state.specialization === specialization.id ? "is-selected" : ""}`}
                       disabled={!specializationUnlocked}
                       onClick={() => selectSpecialization(specialization.id)}
                     >
+                      <span className="specialization-option-icon">{getTaskIcon(visual.icon, 21)}</span>
                       <strong>{specialization.name}</strong>
+                      <small>{visual.subtitle}</small>
                       <span>{specialization.description}</span>
                     </button>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -6037,14 +6356,18 @@ export default function Home() {
                   <div className="section-kicker">
                     <Gift size={15} /> LOOT VAULT
                   </div>
-                  <h2>戰利品庫</h2>
-                  <p>擊敗怪物有機會帶回裝備與道具；區域魔王必定留下戰利品。</p>
+                  <h2>裝備工坊</h2>
+                  <p>集中管理戰利品、裝備欄位與裝備合成；擊敗怪物有機會帶回新的裝備與道具。</p>
                 </div>
                 <div className="loot-count">
                   <strong>{inventory.length}</strong>
                   <span>件收藏</span>
                 </div>
               </div>
+              <nav className="equipment-workshop-tabs" aria-label="裝備工坊分區">
+                <a className="is-active" href="#loot">戰利品庫</a>
+                <a href="#fusion">裝備合成</a>
+              </nav>
               <div className="equipment-benchmark-strip panel-card">
                 <div className="equipment-benchmark-title">
                   <span className="mini-kicker">EQUIPMENT LEVEL BENCHMARK</span>
@@ -6152,6 +6475,30 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              {equipmentComparison && selectedEquipmentForComparison ? (
+                <div className="equipment-comparison panel-card" aria-live="polite">
+                  <div className="equipment-comparison-heading">
+                    <div>
+                      <span className="mini-kicker">EQUIPMENT COMPARISON</span>
+                      <h3>裝備比較</h3>
+                      <p>比較替換同一部位後的角色實際屬性變化。</p>
+                    </div>
+                    <button type="button" className="equipment-comparison-close" aria-label="關閉裝備比較" onClick={() => setSelectedEquipmentForComparison(null)}><X size={16} /></button>
+                  </div>
+                  <div className="equipment-comparison-items">
+                    <div className="equipment-comparison-item is-new"><span>新裝備</span><strong>{selectedEquipmentForComparison.name}</strong><small>{selectedEquipmentForComparison.bonus}</small></div>
+                    <div className="equipment-comparison-arrow">→</div>
+                    <div className="equipment-comparison-item is-current"><span>目前裝備</span><strong>{equipmentComparison.currentItem?.name ?? "尚未裝備"}</strong><small>{equipmentComparison.currentItem?.bonus ?? "此部位目前沒有裝備"}</small></div>
+                  </div>
+                  <div className="equipment-comparison-stats">
+                    {equipmentComparison.stats.map(stat => {
+                      const delta = stat.replacement - stat.current;
+                      return <div className="equipment-comparison-stat" key={stat.label}><span>{stat.label}</span><strong>{stat.replacement}{stat.unit}</strong><small className={delta > 0 ? "is-positive" : delta < 0 ? "is-negative" : ""}>{delta > 0 ? "+" : ""}{delta}{stat.unit}</small></div>;
+                    })}
+                  </div>
+                  <small className="equipment-comparison-note">魔法穿透目前由技能提供，裝備若未標示全域穿透則顯示 0；替換不會改變既有存檔格式。</small>
+                </div>
+              ) : null}
               <div className="loot-grid">
                 {selectedLootItems.length === 0 ? (
                   <div className="loot-empty panel-card">
@@ -6252,6 +6599,9 @@ export default function Home() {
                                   : "裝備"
                               : `出售 +${item.sellValue} 金幣`}
                           </button>
+                          {item.kind === "equipment" && !equippedItemIds.includes(item.id) && canEquipEquipment(item, state.jobClass) ? (
+                            <button type="button" className="loot-compare-button" onClick={() => setSelectedEquipmentForComparison(item)}>比較替換</button>
+                          ) : null}
                         </div>
                       </div>
                     ))
@@ -6384,8 +6734,127 @@ export default function Home() {
             </section>
           )}
 
-          {activePage === "fusion" && (
-            <section className="fusion-page">
+          {activePage === "monsterCodex" && (
+            <section className="monster-codex-section" id="monster-codex">
+              <div className="section-heading codex-heading">
+                <div>
+                  <div className="section-kicker">
+                    <Skull size={15} /> MONSTER CODEX
+                  </div>
+                  <h2>怪物圖鑑</h2>
+                  <p>收錄冒險區域的普通魔物與區域魔王；擊敗過的敵人會解鎖完整資料。</p>
+                </div>
+                <div className="codex-total-badge monster-codex-total-badge">
+                  <strong>{monsterCodexEntries.length}</strong>
+                  <span>種魔物</span>
+                </div>
+              </div>
+              <div className="codex-progress-panel panel-card">
+                <div className="codex-progress-copy">
+                  <span className="mini-kicker">HUNTING PROGRESS</span>
+                  <strong>
+                    {monsterCodexDiscoveredCount} / {monsterCodexEntries.length} 已擊敗
+                  </strong>
+                  <small>擊敗過的魔物會在所有角色存檔中共用圖鑑進度。</small>
+                </div>
+                <div className="codex-progress-visual">
+                  <strong>
+                    {monsterCodexEntries.length
+                      ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100)
+                      : 0}%
+                  </strong>
+                  <div className="codex-progress-track" aria-label="怪物圖鑑完成度">
+                    <span
+                      style={{
+                        width: `${monsterCodexEntries.length ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="codex-toolbar panel-card monster-codex-toolbar">
+                <div className="codex-toolbar-title">
+                  <span className="mini-kicker">FILTER BESTIARY</span>
+                  <strong>搜尋怪物資料</strong>
+                  <small>可依名稱、描述或區域搜尋。</small>
+                </div>
+                <div className="codex-filters">
+                  <label>
+                    <span>搜尋</span>
+                    <input
+                      value={monsterCodexSearch}
+                      onChange={event => setMonsterCodexSearch(event.target.value)}
+                      placeholder="輸入怪物名稱"
+                    />
+                  </label>
+                  <label>
+                    <span>區域</span>
+                    <select
+                      value={monsterCodexRegion}
+                      onChange={event => setMonsterCodexRegion(event.target.value)}
+                    >
+                      <option value="all">全部區域</option>
+                      {monsterCodexRegions.map(region => (
+                        <option value={region} key={region}>{region}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="codex-clear-button"
+                    disabled={!monsterCodexSearch && monsterCodexRegion === "all"}
+                    onClick={() => {
+                      setMonsterCodexSearch("");
+                      setMonsterCodexRegion("all");
+                    }}
+                  >
+                    清除篩選
+                  </button>
+                </div>
+              </div>
+              <div className="codex-result-summary">
+                <span>目前顯示 {filteredMonsterCodexEntries.length} / {monsterCodexEntries.length} 種魔物</span>
+                <span>{filteredMonsterCodexEntries.filter(monster => monster.discovered).length} 種已擊敗 · {filteredMonsterCodexEntries.filter(monster => !monster.discovered).length} 種未擊敗</span>
+              </div>
+              <div className="monster-codex-grid">
+                {filteredMonsterCodexEntries.map(monster => {
+                  const Icon = monster.icon;
+                  return (
+                    <article
+                      className={`monster-codex-card panel-card ${monster.isBoss ? "is-boss" : ""} ${monster.discovered ? "is-discovered" : "is-locked"}`}
+                      key={monster.id}
+                    >
+                      <div className="monster-codex-card-top">
+                        <div className="monster-codex-icon">
+                          {monster.discovered ? <Icon size={22} /> : <LockKeyhole size={18} />}
+                        </div>
+                        <div>
+                          <span className="monster-codex-region">{monster.region}</span>
+                          <small>{monster.isBoss ? "區域魔王" : "普通魔物"}</small>
+                        </div>
+                      </div>
+                      <div className="monster-codex-copy">
+                        <h3>{monster.discovered ? monster.name : "尚未辨識的魔物"}</h3>
+                        <p>{monster.discovered ? monster.description : "前往怪物區域挑戰並擊敗牠，解鎖詳細資料。"}</p>
+                        {monster.discovered && monster.mechanicLabels.length > 0 && (
+                          <div className="monster-codex-mechanics">
+                            {monster.mechanicLabels.map(label => <span key={label}>{label}</span>)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="monster-codex-card-bottom">
+                        <span>{monster.discovered ? "資料已解鎖" : "資料鎖定"}</span>
+                        <strong>{monster.discovered ? "已擊敗" : "未擊敗"}</strong>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {activePage === "loot" && (
+            <section className="fusion-page" id="fusion">
               <div className="section-heading fusion-page-heading">
                 <div>
                   <div className="section-kicker">
@@ -7061,10 +7530,26 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <div className="battle-arena">
-              <div className="battle-unit player-unit">
+            <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
+              <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
+                <div className={`battle-visual battle-visual-player battle-hero-${state.jobClass} battle-specialization-${currentSpecializationVisual.colorClass} ${battleFx?.action === "attack" || battleFx?.action === "skill" ? "is-attacking" : ""}`}>
+                  <div className="battle-hero-aura" />
+                  <div className="battle-character-art">
+                    {getTaskIcon(classDefinition.icon, 48)}
+                  </div>
+                  <span className="battle-specialization-badge">{currentSpecialization.name}</span>
+                  {battleFx?.playerDamage ? (
+                    <span className="battle-float battle-float-damage">−{battleFx.playerDamage}</span>
+                  ) : null}
+                  {battleFx?.healing ? (
+                    <span className="battle-float battle-float-heal">+{battleFx.healing}</span>
+                  ) : null}
+                  {battleFx?.playerDodged ? (
+                    <span className="battle-float battle-float-dodge">閃避</span>
+                  ) : null}
+                </div>
                 <span className="battle-unit-label">
-                  MIRA · LV. {player.level}
+                  {state.userName || "冒險者"} · LV. {player.level}
                 </span>
                 <strong>{battle.playerHealth}</strong>
                 <div className="battle-hp-track">
@@ -7076,8 +7561,22 @@ export default function Home() {
                 </div>
                 <small>/ {effectiveAbilities.health} 生命</small>
               </div>
-              <div className="battle-vs">VS</div>
-              <div className="battle-unit enemy-unit">
+              <div className="battle-vs"><span>VS</span><i /></div>
+              <div className={`battle-unit enemy-unit ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
+                <div className={`battle-visual battle-visual-enemy monster-tone-${activeBattleMonster.tone} ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
+                  <div className="battle-monster-aura" />
+                  <div className="battle-monster-art">
+                    <BattleMonsterIcon size={50} strokeWidth={1.8} />
+                  </div>
+                  {battleFx?.monsterDamage ? (
+                    <span className={`battle-float battle-float-damage ${battleFx.critical ? "is-critical" : ""}`}>
+                      −{battleFx.monsterDamage}{battleFx.critical ? "!" : ""}
+                    </span>
+                  ) : null}
+                  {battleFx?.monsterDodged ? (
+                    <span className="battle-float battle-float-dodge">閃避</span>
+                  ) : null}
+                </div>
                 <span className="battle-unit-label">
                   {activeBattleMonster.name} · LV. {activeBattleMonster.level}
                 </span>
@@ -7215,7 +7714,7 @@ export default function Home() {
                                 </small>
                               )}
                             </span>
-                            <small>{cooldown > 0 ? `冷卻 ${cooldown} 回合` : skill.effectType === "buff" ? "持續 2 回合" : `破防 ${skill.defensePiercePercent}%`}</small>
+                            <small>{cooldown > 0 ? `冷卻 ${cooldown} 回合` : skill.effectType === "buff" ? `持續 ${skill.durationTurns} 回合` : `破防 ${skill.defensePiercePercent}%`}</small>
                           </button>
                         );
                       })}
@@ -7295,6 +7794,115 @@ export default function Home() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {weeklyReportOpen && (
+        <div
+          className="weekly-report-backdrop"
+          onClick={event => {
+            if (event.target !== event.currentTarget) return;
+            setState(previous => ({
+              ...previous,
+              weeklyStats: {
+                ...previous.weeklyStats,
+                reportShownWeekKey: previous.weeklyStats.weekKey,
+              },
+            }));
+            setWeeklyReportOpen(false);
+          }}
+        >
+          <div className="weekly-report-card" role="dialog" aria-modal="true">
+            <div className="weekly-report-header">
+              <div className="weekly-report-symbol">
+                <CalendarDays size={22} />
+              </div>
+              <div>
+                <span className="mini-kicker">WEEKLY ADVENTURE REPORT</span>
+                <h2>本週冒險統計</h2>
+                <p>每週一 00:00 至週日 23:59 的累積成果</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => {
+                  setState(previous => ({
+                    ...previous,
+                    weeklyStats: {
+                      ...previous.weeklyStats,
+                      reportShownWeekKey: previous.weeklyStats.weekKey,
+                    },
+                  }));
+                  setWeeklyReportOpen(false);
+                }}
+                aria-label="關閉每週統計"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="weekly-report-grid">
+              <div>
+                <CheckCircle2 size={17} />
+                <span>完成任務</span>
+                <strong>{state.weeklyStats.tasksCompleted}</strong>
+                <small>個任務</small>
+              </div>
+              <div>
+                <Skull size={17} />
+                <span>打倒魔物</span>
+                <strong>{state.weeklyStats.monstersDefeated}</strong>
+                <small>隻魔物</small>
+              </div>
+              <div>
+                <Trophy size={17} />
+                <span>升級</span>
+                <strong>{state.weeklyStats.levelsGained}</strong>
+                <small>個等級</small>
+              </div>
+              <div>
+                <Coins size={17} />
+                <span>獲得金幣</span>
+                <strong>{state.weeklyStats.coinsEarned}</strong>
+                <small>枚金幣</small>
+              </div>
+              <div>
+                <Sparkles size={17} />
+                <span>能力增加</span>
+                <strong>
+                  {Object.values(state.weeklyStats.abilitiesGained).reduce(
+                    (total, value) => total + value,
+                    0
+                  )}
+                </strong>
+                <small>點屬性</small>
+              </div>
+            </div>
+            <div className="weekly-report-abilities">
+              <span>能力增加明細</span>
+              <div>
+                <b>生命 +{state.weeklyStats.abilitiesGained.health}</b>
+                <b>力量 +{state.weeklyStats.abilitiesGained.strength}</b>
+                <b>防禦 +{state.weeklyStats.abilitiesGained.defense}</b>
+                <b>智力 +{state.weeklyStats.abilitiesGained.intelligence}</b>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="primary-button weekly-report-submit"
+              onClick={() => {
+                setState(previous => ({
+                  ...previous,
+                  weeklyStats: {
+                    ...previous.weeklyStats,
+                    reportShownWeekKey: previous.weeklyStats.weekKey,
+                  },
+                }));
+                setWeeklyReportOpen(false);
+              }}
+            >
+              收下本週成果 <Check size={16} />
+            </button>
           </div>
         </div>
       )}
