@@ -3992,6 +3992,53 @@ h2 {
 .battle-status-冰凍 { color: #9be7ff; border-color: rgba(106, 211, 255, 0.45); }
 .battle-status-燃燒 { color: #ffb078; border-color: rgba(255, 139, 82, 0.45); }
 .battle-status-感電 { color: #ffe98a; border-color: rgba(255, 221, 92, 0.45); }
+.battle-player-effects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+}
+.battle-effects-label {
+  width: 100%;
+  color: #8491ae;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.battle-effect {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid rgba(105, 224, 170, 0.38);
+  border-radius: 8px;
+  color: #c9f5df;
+  background: rgba(56, 168, 116, 0.14);
+  font-size: 9px;
+}
+.battle-effect strong {
+  color: #e4fff1;
+  font-size: 10px;
+}
+.battle-effect small {
+  color: #9fe1c0;
+  font-size: 9px;
+}
+.battle-effect-debuff {
+  border-color: rgba(228, 139, 157, 0.45);
+  color: #ffd5de;
+  background: rgba(180, 76, 105, 0.16);
+}
+.battle-effect-debuff strong,
+.battle-effect-debuff small {
+  color: #ffc1ce;
+}
+.battle-effects-empty {
+  color: #687693;
+  font-size: 9px;
+}
 .battle-log {
   display: grid;
   gap: 7px;

@@ -7111,6 +7111,53 @@ export default function Home() {
                 ))}
               </div>
             )}
+            {battle.outcome === "fighting" && (
+              <div className="battle-player-effects" aria-label="角色目前戰鬥效果">
+                <span className="battle-effects-label">你的目前效果</span>
+                {temporaryBattleBuff && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>
+                      {battleSpecialSkills.find(
+                        skill => skill.id === temporaryBattleBuff.skillId
+                      )?.name ?? "戰鬥增益"}
+                    </strong>
+                    <small>{temporaryBattleBuff.turnsRemaining} 回合</small>
+                    {temporaryBattleBuff.damageBonusPercent > 0 && (
+                      <small>傷害 +{temporaryBattleBuff.damageBonusPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.damageReductionPercent > 0 && (
+                      <small>減傷 +{temporaryBattleBuff.damageReductionPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.dodgeRateBonusPercent > 0 && (
+                      <small>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</small>
+                    )}
+                    {temporaryBattleBuff.healPercentMaxHealth > 0 && (
+                      <small>每回合恢復 {temporaryBattleBuff.healPercentMaxHealth}% 生命</small>
+                    )}
+                  </span>
+                )}
+                {(battle.actionLockTurns ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-debuff">
+                    <strong>終焉狙殺反噬</strong>
+                    <small>{battle.actionLockTurns} 回合</small>
+                    <small>停滯，無法使用技能</small>
+                  </span>
+                )}
+                {isArcher && state.archerDodgeFailStacks > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>游擊本能</strong>
+                    <small>{state.archerDodgeFailStacks} 層</small>
+                    <small>攻擊 +{archerTalentBonuses.attackPercent}%</small>
+                    <small>閃避 +{archerTalentBonuses.dodgePercent}%</small>
+                  </span>
+                )}
+                {!temporaryBattleBuff &&
+                  (battle.actionLockTurns ?? 0) === 0 &&
+                  (!isArcher || state.archerDodgeFailStacks === 0) && (
+                    <span className="battle-effects-empty">目前沒有增益或負面效果</span>
+                  )}
+              </div>
+            )}
             <div className="battle-log">
               {battle.logs.slice(-5).map((log, index) => (
                 <div className="battle-log-row" key={`${log}-${index}`}>
