@@ -30,8 +30,10 @@ export type SpecialCombatSkill = {
   critDamageBonusPercent: number;
   critRateBonusPercent?: number;
   dodgeRateBonusPercent?: number;
-  executeBelowHealthPercent?: number;
+  hitCountMin?: number;
+  hitCountMax?: number;
   healPercentMaxHealth?: number;
+  executeBelowHealthPercent?: number;
   unlockLevel?: number;
   statusEffect?: SkillStatusEffect;
 };
@@ -140,7 +142,16 @@ export function getUnlockedSpecialSkills(
     const isKnightHeart = jobClass === "warrior" && index === 0;
     const isWarriorSlash = jobClass === "warrior" && index === 1;
     const isArcherFocus = isArcher && index === 0;
-    const cooldownTurns = isKnightHeart ? 5 : 3 + (index % 3);
+    const isArcherPiercingShot = isArcher && index === 1;
+    const isArcherRapidVolley = isArcher && index === 2;
+    const isArcherDawnShot = isArcher && index === 3;
+    const cooldownTurns = isKnightHeart
+      ? 5
+      : isArcherPiercingShot || isArcherRapidVolley
+        ? 4
+        : isArcherDawnShot
+          ? 5
+          : 3 + (index % 3);
     const statusEffect = jobClass === "mage"
       ? index === 0
         ? { kind: "燃燒" as const, element: "火焰" as const, chance: 1, durationTurns: 3, damagePerTurn: 8 + index * 2 }
@@ -162,6 +173,12 @@ export function getUnlockedSpecialSkills(
       damageType,
       damageMultiplier: isKnightHeart || isArcherFocus
         ? 0
+        : isArcherPiercingShot
+          ? 1.6
+          : isArcherRapidVolley
+            ? 1.65
+            : isArcherDawnShot
+              ? 3
         : isRogue
         ? 2 + index * 0.3
         : isWarriorSlash
@@ -169,6 +186,10 @@ export function getUnlockedSpecialSkills(
           : 1.5 + requiredValue / 100,
       defensePiercePercent: isKnightHeart || isArcherFocus
         ? 0
+        : isArcher
+          ? isArcherPiercingShot
+            ? 30
+            : 0
         : clampDefensePiercePercent(
             isRogue ? 35 + index * 15 : 20 + index * 10
           ),
@@ -177,6 +198,12 @@ export function getUnlockedSpecialSkills(
         ? "自身造成傷害 +20%，受到傷害 −20%，持續 2 回合；冷卻 5 回合。"
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
+        : isArcherPiercingShot
+          ? "物理技能，造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
+        : isArcherRapidVolley
+          ? "物理技能，每次造成 1.65 倍傷害，隨機攻擊 1～3 次；冷卻 4 回合。"
+        : isArcherDawnShot
+          ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
           ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
           : `${damageType}技能，造成 ${isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
@@ -186,6 +213,8 @@ export function getUnlockedSpecialSkills(
       damageReductionPercent: isKnightHeart ? 20 : 0,
       flatDamageBonus: 0,
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
+      hitCountMin: isArcherRapidVolley ? 1 : undefined,
+      hitCountMax: isArcherRapidVolley ? 3 : undefined,
       statusEffect,
     };
   });

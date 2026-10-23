@@ -62,6 +62,26 @@ describe("class-specific special skills", () => {
     expect(skills.map(skill => skill.name)).toEqual(["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"]);
     expect(skills.slice(1).every(skill => skill.effectType === "damage")).toBe(true);
     expect(skills.slice(1).every(skill => skill.damageMultiplier > 0)).toBe(true);
+    expect(skills[1]).toMatchObject({
+      damageMultiplier: 1.6,
+      defensePiercePercent: 30,
+      cooldownTurns: 4,
+      damageType: "物理",
+    });
+    expect(skills[2]).toMatchObject({
+      damageMultiplier: 1.65,
+      defensePiercePercent: 0,
+      cooldownTurns: 4,
+      hitCountMin: 1,
+      hitCountMax: 3,
+      damageType: "物理",
+    });
+    expect(skills[3]).toMatchObject({
+      damageMultiplier: 3,
+      defensePiercePercent: 0,
+      cooldownTurns: 5,
+      damageType: "物理",
+    });
     expect(getNextSkillUnlockThreshold("archer", 500, 500, 5)).toBe(10);
     expect(getNextSkillUnlockThreshold("archer", 500, 500, 20)).toBeNull();
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
@@ -129,14 +149,14 @@ describe("class-specific special skills", () => {
   it("keeps applicable defense penetration between 25% and 60%", () => {
     for (const jobClass of ["warrior", "archer", "mage", "rogue"] as const) {
       for (const skill of getAllSpecialSkills(jobClass)) {
-        if (skill.effectType === "damage") {
+        if (skill.effectType === "damage" && skill.defensePiercePercent > 0) {
           expect(skill.defensePiercePercent).toBeGreaterThanOrEqual(
             MIN_DEFENSE_PIERCE_PERCENT
           );
           expect(skill.defensePiercePercent).toBeLessThanOrEqual(
             MAX_DEFENSE_PIERCE_PERCENT
           );
-        } else {
+        } else if (skill.effectType !== "damage") {
           expect(skill.defensePiercePercent).toBe(0);
         }
       }
