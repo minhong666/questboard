@@ -40,9 +40,11 @@ describe("achievements", () => {
   });
 
   it("adds 50 medium-to-hard milestone achievements", () => {
-    expect(ACHIEVEMENTS).toHaveLength(59);
-    expect(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size).toBe(59);
-    expect(ACHIEVEMENTS.filter(achievement => achievement.id.startsWith("milestone-"))).toHaveLength(50);
+    expect(ACHIEVEMENTS).toHaveLength(60);
+    expect(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size).toBe(60);
+    expect(
+      ACHIEVEMENTS.filter(achievement => achievement.id.startsWith("milestone-"))
+    ).toHaveLength(50);
   });
 
   it("uses level, coin and complete focus-minute milestones", () => {
@@ -57,5 +59,14 @@ describe("achievements", () => {
     expect(
       getAchievementProgress(focusMilestone, { ...context, timerSeconds: 3600 }).label
     ).toBe("60 / 60 分鐘");
+  });
+
+  it("unlocks the ending achievement only after defeating the final boss", () => {
+    const ending = ACHIEVEMENTS.find(item => item.id === "ending")!;
+    expect(getAchievementProgress(ending, { ...context, defeatedFinalBoss: false }).completed).toBe(false);
+    expect(getAchievementProgress(ending, { ...context, defeatedFinalBoss: true })).toMatchObject({
+      completed: true,
+      label: "1 / 1",
+    });
   });
 });

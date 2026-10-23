@@ -2392,6 +2392,9 @@ export default function Home() {
     ),
     playerLevel: player.level,
     coins: state.coins,
+    defeatedFinalBoss: state.defeatedMonsterIds.some(
+      id => id === "boss-final" || id.startsWith("boss-final-")
+    ),
   };
   const claimedAchievementIds = sharedAchievementClaimedIds;
   const achievementStatuses = ACHIEVEMENTS.map(achievement => ({

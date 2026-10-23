@@ -9,6 +9,7 @@ export type AchievementContext = {
   skillUpgradeLevels: number;
   playerLevel?: number;
   coins?: number;
+  defeatedFinalBoss?: boolean;
 };
 
 export type AchievementDefinition = {
@@ -289,6 +290,18 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     icon: "gift",
     getValue: context => context.inventoryItems,
     formatProgress: integerProgress,
+  },
+  {
+    id: "ending",
+    title: "結局",
+    description: "擊敗最終魔王，完成冒險的最後試煉。",
+    category: "戰鬥",
+    goal: 1,
+    rewardCoins: 1000,
+    rewardSkillPoints: 5,
+    icon: "trophy",
+    getValue: context => (context.defeatedFinalBoss ? 1 : 0),
+    formatProgress: (value, goal) => `${Math.min(value, goal)} / ${goal}`,
   },
   ...EXTRA_ACHIEVEMENTS,
 ];
