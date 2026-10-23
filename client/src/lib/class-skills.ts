@@ -134,7 +134,13 @@ export function getUnlockedSpecialSkills(
     const isKnightHeart = jobClass === "warrior" && index === 0;
     const isWarriorSlash = jobClass === "warrior" && index === 1;
     const isArcherFocus = isArcher && index === 0;
-    const cooldownTurns = isKnightHeart ? 5 : 3 + (index % 3);
+    const cooldownTurns = isKnightHeart
+      ? 5
+      : isWarriorSlash
+        ? 4
+        : jobClass === "warrior" && index === 3
+          ? 5
+          : 3 + (index % 3);
     const statusEffect = jobClass === "mage"
       ? index === 0
         ? { kind: "燃燒" as const, element: "火焰" as const, chance: 1, durationTurns: 3, damagePerTurn: 8 + index * 2 }

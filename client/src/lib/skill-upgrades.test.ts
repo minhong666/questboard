@@ -26,8 +26,18 @@ describe("skill upgrades", () => {
     const upgraded = applySkillUpgrade(skill, 2);
     expect(upgraded.requiredValue).toBe(skill.requiredValue);
     expect(upgraded.damageMultiplier).toBeCloseTo(skill.damageMultiplier * 1.1);
-    expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent + 4);
+    expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent);
     expect(upgraded.description).toContain("技能升級 Lv.2");
+  });
+
+  it("only increases defense penetration when the effect description declares it", () => {
+    const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
+    const declaredPierceSkill = {
+      ...skill,
+      description: `${skill.description} 防禦穿透 ${skill.defensePiercePercent}%。`,
+    };
+    const upgraded = applySkillUpgrade(declaredPierceSkill, 2);
+    expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent + 4);
   });
 
   it("adds one percent to each buff effect per upgrade level", () => {
