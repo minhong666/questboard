@@ -120,6 +120,7 @@ import {
   getUnlockedSpecializationSkills,
   getSpecialization,
   getSpecializations,
+  isSpecializationSelected,
   normalizeSpecialization,
   type SpecializationId,
 } from "../lib/class-specializations";
@@ -2257,6 +2258,7 @@ export default function Home() {
   );
   const currentSpecializationVisual = specializationVisuals[currentSpecialization.id];
   const specializationUnlocked = player.level >= 50;
+  const specializationSelected = specializationUnlocked;
   const unlockedSpecializationSkillsForStats = specializationUnlocked
     ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
     : [];
@@ -5466,8 +5468,14 @@ export default function Home() {
                   </div>
                   <div>
                     <span className="mini-kicker">CURRENT ASPECT</span>
-                    <strong>{currentSpecialization.name}</strong>
-                    <small>{currentSpecializationVisual.subtitle}</small>
+                    <strong>
+                      {specializationSelected ? currentSpecialization.name : "尚未選擇專精"}
+                    </strong>
+                    <small>
+                      {specializationSelected
+                        ? currentSpecializationVisual.subtitle
+                        : "Lv.50 後可選擇專精分支"}
+                    </small>
                   </div>
                   <div className="specialization-identity-skills">
                     <span>專精技能</span>
@@ -5482,7 +5490,7 @@ export default function Home() {
                     <button
                       type="button"
                       key={specialization.id}
-                      className={`specialization-branch-option specialization-option-${visual.colorClass} ${state.specialization === specialization.id ? "is-selected" : ""}`}
+                      className={`specialization-branch-option specialization-option-${visual.colorClass} ${isSpecializationSelected(player.level, specialization.id, state.specialization) ? "is-selected" : ""}`}
                       disabled={!specializationUnlocked}
                       onClick={() => selectSpecialization(specialization.id)}
                     >
@@ -7537,7 +7545,9 @@ export default function Home() {
                   <div className="battle-character-art">
                     {getTaskIcon(classDefinition.icon, 48)}
                   </div>
-                  <span className="battle-specialization-badge">{currentSpecialization.name}</span>
+                  <span className="battle-specialization-badge">
+                    {specializationSelected ? currentSpecialization.name : "尚未轉職"}
+                  </span>
                   {battleFx?.playerDamage ? (
                     <span className="battle-float battle-float-damage">−{battleFx.playerDamage}</span>
                   ) : null}
