@@ -25,6 +25,12 @@ describe("activity timer helpers", () => {
     expect(125 % 60).toBe(5);
   });
 
+  it("awards exactly one XP for each completed timer minute", () => {
+    expect(getCompletedTimerMinutes(60)).toBe(1);
+    expect(getCompletedTimerMinutes(120)).toBe(2);
+    expect(getCompletedTimerMinutes(179)).toBe(2);
+  });
+
   it("keeps fixed XP separate from the independent 5% ability-point roll", () => {
     expect(getCompletedTimerMinutes(180)).toBe(3);
     const values = [0.049, 0.05, 0.9, 0.01];
