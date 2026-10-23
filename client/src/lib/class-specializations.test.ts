@@ -7,6 +7,7 @@ import {
   getNextSpecializationSkillLevel,
   getUnlockedSpecializationSkills,
   getSpecializations,
+  isSpecializationSelected,
   normalizeSpecialization,
 } from "./class-specializations";
 
@@ -23,6 +24,18 @@ describe("class specializations", () => {
     expect(normalizeSpecialization("warrior-berserker", "mage")).toBe(
       getDefaultSpecialization("mage")
     );
+  });
+
+  it("does not treat a default branch as selected before level 50", () => {
+    expect(
+      isSpecializationSelected(49, "warrior-guardian", "warrior-guardian")
+    ).toBe(false);
+    expect(
+      isSpecializationSelected(50, "warrior-guardian", "warrior-guardian")
+    ).toBe(true);
+    expect(
+      isSpecializationSelected(49, "warrior-berserker", "warrior-guardian")
+    ).toBe(false);
   });
 
   it("changes skill names and branch combat effects", () => {

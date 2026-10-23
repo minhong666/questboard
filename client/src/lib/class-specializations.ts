@@ -98,6 +98,14 @@ export function normalizeSpecialization(value: unknown, jobClass: JobClass) {
     : getDefaultSpecialization(jobClass);
 }
 
+export function isSpecializationSelected(
+  playerLevel: number,
+  specializationId: SpecializationId,
+  selectedSpecializationId: SpecializationId
+) {
+  return playerLevel >= 50 && specializationId === selectedSpecializationId;
+}
+
 export function getSpecialization(
   jobClass: JobClass,
   specializationId: SpecializationId
