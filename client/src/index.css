@@ -893,6 +893,164 @@ h1 {
   border-color: rgba(101, 118, 156, 0.14);
   background: rgba(101, 118, 156, 0.08);
 }
+.attribute-breakdown-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 15px;
+  border: 1px solid rgba(133, 150, 190, 0.16);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(18, 28, 51, 0.72), rgba(8, 14, 29, 0.52));
+}
+.attribute-breakdown-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.attribute-breakdown-heading > div,
+.temporary-buff-summary > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.attribute-breakdown-heading strong,
+.temporary-buff-summary strong {
+  color: #efe5ca;
+  font-size: 14px;
+}
+.attribute-breakdown-heading small {
+  color: #7f8ca8;
+  font-size: 9px;
+}
+.attribute-breakdown-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(224, 176, 110, 0.22);
+  border-radius: 7px;
+  color: #e7bc71;
+  background: rgba(224, 176, 110, 0.08);
+  font-size: 9px;
+  font-weight: 750;
+}
+.attribute-breakdown-table {
+  overflow-x: auto;
+  border: 1px solid rgba(133, 150, 190, 0.12);
+  border-radius: 9px;
+}
+.attribute-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(185px, 1.55fr) repeat(5, minmax(58px, 0.55fr));
+  align-items: center;
+  min-width: 640px;
+  border-top: 1px solid rgba(133, 150, 190, 0.1);
+}
+.attribute-breakdown-row:first-child {
+  border-top: 0;
+}
+.attribute-breakdown-row > span,
+.attribute-breakdown-row > strong {
+  padding: 9px 8px;
+  color: #9aa7c4;
+  font-size: 10px;
+  text-align: right;
+}
+.attribute-breakdown-header {
+  background: rgba(101, 118, 156, 0.08);
+}
+.attribute-breakdown-header > span {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  color: #697694;
+  font-size: 8px;
+  font-weight: 750;
+}
+.attribute-breakdown-header > span:first-child {
+  text-align: left;
+}
+.attribute-breakdown-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+}
+.attribute-breakdown-name > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.attribute-breakdown-name strong,
+.attribute-breakdown-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attribute-breakdown-name strong {
+  color: #dce4fb;
+  font-size: 10px;
+}
+.attribute-breakdown-name small {
+  color: #697694;
+  font-size: 7px;
+}
+.attribute-breakdown-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+.attribute-orange {
+  color: #ffbd80;
+  background: rgba(242, 139, 76, 0.14);
+}
+.attribute-violet {
+  color: #c7baff;
+  background: rgba(157, 146, 255, 0.14);
+}
+.attribute-blue {
+  color: #9ed2ff;
+  background: rgba(94, 173, 255, 0.14);
+}
+.attribute-mint {
+  color: #9fe4d3;
+  background: rgba(85, 205, 191, 0.14);
+}
+.attribute-breakdown-total {
+  color: #f4d58f !important;
+  font-size: 12px !important;
+}
+.temporary-buff-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(133, 150, 190, 0.12);
+}
+.temporary-buff-summary .mini-kicker {
+  color: #d39bff;
+}
+.temporary-buff-values {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  color: #9aa7c4;
+  font-size: 9px;
+}
+.temporary-buff-values b {
+  padding: 5px 7px;
+  border: 1px solid rgba(211, 155, 255, 0.2);
+  border-radius: 6px;
+  color: #d9b7ff;
+  background: rgba(157, 111, 255, 0.1);
+}
+.temporary-buff-empty {
+  color: #697694;
+  font-size: 9px;
+}
 .combat-stats-row {
   display: flex;
   align-items: center;
@@ -1877,6 +2035,112 @@ h1 {
 .loot-count strong {
   color: #d8d1ff;
   font-size: 20px;
+}
+.loot-category-section {
+  display: grid;
+  gap: 13px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(133, 150, 190, 0.16);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(18, 28, 51, 0.72), rgba(8, 14, 29, 0.54));
+}
+.loot-category-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.loot-category-heading h3 {
+  margin-top: 4px;
+  color: #f0e8ff;
+  font-size: 14px;
+}
+.loot-category-heading p {
+  margin-top: 5px;
+  color: #8994af;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.loot-category-selection {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: #d9bd82;
+  border: 1px solid rgba(224, 176, 110, 0.22);
+  border-radius: 7px;
+  background: rgba(224, 176, 110, 0.08);
+  font-size: 9px;
+  font-weight: 750;
+}
+.loot-category-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 9px;
+}
+.loot-category-slot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 9px;
+  text-align: left;
+  border: 1px solid rgba(133, 150, 190, 0.15);
+  border-radius: 9px;
+  background: rgba(8, 14, 29, 0.32);
+  transition: 0.18s ease;
+}
+.loot-category-slot:hover,
+.loot-category-slot.is-selected {
+  border-color: rgba(224, 176, 110, 0.45);
+  background: rgba(224, 176, 110, 0.1);
+  transform: translateY(-1px);
+}
+.loot-category-slot.is-selected {
+  box-shadow: inset 0 0 0 1px rgba(224, 176, 110, 0.12);
+}
+.loot-category-icon {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  color: #d9bd82;
+  border-radius: 8px;
+  background: rgba(224, 176, 110, 0.12);
+}
+.loot-category-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.loot-category-copy strong,
+.loot-category-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loot-category-copy strong {
+  color: #e2e5f8;
+  font-size: 10px;
+}
+.loot-category-copy small {
+  color: #7785a3;
+  font-size: 7px;
+}
+.loot-category-slot > b {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  color: #aab6ce;
+  border-radius: 6px;
+  background: rgba(133, 150, 190, 0.12);
+  font-size: 9px;
+}
+.loot-category-slot.is-selected > b {
+  color: #f2d39b;
+  background: rgba(224, 176, 110, 0.18);
 }
 .loot-grid {
   display: grid;
@@ -3965,6 +4229,9 @@ h2 {
   .loot-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .loot-category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .codex-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4123,6 +4390,17 @@ h2 {
   .ability-grid {
     grid-template-columns: 1fr;
   }
+  .attribute-breakdown-heading,
+  .temporary-buff-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .attribute-breakdown-badge {
+    align-self: flex-start;
+  }
+  .temporary-buff-values {
+    justify-content: flex-start;
+  }
   .combat-stats-row {
     align-items: stretch;
     flex-wrap: wrap;
@@ -4262,6 +4540,13 @@ h2 {
   }
   .loot-grid {
     grid-template-columns: 1fr;
+  }
+  .loot-category-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .loot-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .loot-fusion-row {
     grid-template-columns: 1fr;
@@ -5586,3 +5871,6 @@ h2 {
 .specialization-branch-panel{display:grid;gap:13px;padding:16px;border-color:rgba(139,124,255,.25);background:linear-gradient(110deg,rgba(139,124,255,.1),rgba(8,14,29,.36))}.specialization-branch-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:15px}.specialization-branch-heading>div{display:grid;gap:5px}.specialization-branch-heading strong{color:#efe5ca;font-size:16px}.specialization-branch-heading small{color:#8794af;font-size:10px}.specialization-branch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.specialization-branch-option{display:grid;gap:6px;padding:12px;text-align:left;border:1px solid rgba(133,150,190,.18);border-radius:9px;color:#a7b2c8;background:rgba(8,14,29,.35);transition:.18s ease}.specialization-branch-option:hover{border-color:rgba(176,168,255,.5);background:rgba(139,124,255,.1)}.specialization-branch-option strong{color:#dce2fb;font-size:12px}.specialization-branch-option span{font-size:10px;line-height:1.55}.specialization-branch-option.is-selected{border-color:#b0a8ff;background:rgba(139,124,255,.18);box-shadow:0 0 15px rgba(139,124,255,.12)}
 @media (max-width:520px){.specialization-branch-heading{align-items:flex-start;flex-direction:column}.specialization-branch-grid{grid-template-columns:1fr}}
 .specialization-branch-option:disabled{cursor:not-allowed;opacity:.5}.specialization-branch-option:disabled:hover{border-color:rgba(133,150,190,.18);background:rgba(8,14,29,.35)}
+
+/* 技能實際傷害預覽 */
+.skill-damage-preview{display:grid;gap:8px;padding:9px 10px;border:1px solid rgba(114,213,174,.25);border-radius:8px;background:linear-gradient(135deg,rgba(85,205,191,.1),rgba(8,14,29,.3));font-size:10px;line-height:1.45}.skill-damage-preview.is-locked{display:block;color:#8794af;border-color:rgba(133,150,190,.16);background:rgba(8,14,29,.24);font-size:9px}.skill-damage-preview-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.skill-damage-preview-heading strong{color:#9fe4d3;font-size:10px}.skill-damage-preview-heading small{color:#8794af;font-size:8px}.skill-damage-preview-grid{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}.skill-damage-preview-grid span{color:#9da9c0;font-size:9px}.skill-damage-preview-grid b{color:#e8f8ed;font-size:10px;text-align:right}.skill-damage-preview-note{color:#71809d;font-size:8px;line-height:1.45}

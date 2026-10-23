@@ -350,6 +350,21 @@ type PageKey =
   | "timers"
   | "achievements";
 
+const LOOT_CATEGORY_KEYS = [...EQUIPMENT_SLOTS, "寶物"] as const;
+type LootCategory = (typeof LOOT_CATEGORY_KEYS)[number];
+
+const lootCategoryMeta: Record<
+  LootCategory,
+  { description: string; icon: LucideIcon }
+> = {
+  頭盔: { description: "頭部防具", icon: ShieldCheck },
+  胸甲: { description: "身體防具", icon: ShieldCheck },
+  武器: { description: "主要攻擊裝備", icon: Sword },
+  護腿: { description: "腿部防具", icon: Shuffle },
+  護身符: { description: "飾品與特殊加成", icon: Star },
+  寶物: { description: "可出售的冒險寶物", icon: Gift },
+};
+
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
@@ -879,6 +894,15 @@ function getAttackDamage(
         : primaryStat * 1.5 + abilities.intelligence * 0.25
     )
   );
+}
+function getPhysicalAttackDamage(abilities: CharacterAbilities) {
+  return Math.max(
+    1,
+    Math.round(abilities.strength * 1.5 + abilities.intelligence * 0.25)
+  );
+}
+function getMagicAttackDamage(abilities: CharacterAbilities) {
+  return Math.max(1, Math.round(abilities.intelligence * 1.5));
 }
 function getDefenseReduction(defense: number) {
   return Math.floor(defense * 0.5);
@@ -1725,6 +1749,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
+  const [selectedLootCategory, setSelectedLootCategory] =
+    useState<LootCategory>("頭盔");
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
   const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
   const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>([]);
@@ -1881,6 +1907,13 @@ export default function Home() {
     ? state.defeatedMonsterIds
     : [];
   const inventory = Array.isArray(state.inventory) ? state.inventory : [];
+  const getLootCategoryItems = (category: LootCategory) =>
+    inventory.filter(item =>
+      category === "寶物"
+        ? item.kind === "treasure"
+        : item.kind === "equipment" && item.slot === category
+    );
+  const selectedLootItems = getLootCategoryItems(selectedLootCategory);
   const equippedItemIds = normalizeEquippedItemIds(
     inventory,
     state.equippedItemIds,
@@ -2134,6 +2167,150 @@ export default function Home() {
       description: "每級自動 +1",
     },
   ];
+  const classAbilities: CharacterAbilities = {
+    health: state.abilities.health + classDefinition.bonuses.health,
+    strength: state.abilities.strength + classDefinition.bonuses.strength,
+    defense: state.abilities.defense + classDefinition.bonuses.defense,
+    intelligence:
+      state.abilities.intelligence + classDefinition.bonuses.intelligence,
+  };
+  const attributeBreakdownAbilities: CharacterAbilities = {
+    health: effectiveAbilities.health,
+    strength: effectiveAbilities.strength,
+    defense: effectiveAbilities.defense,
+    intelligence: effectiveAbilities.intelligence,
+  };
+  const physicalAttackBase = getPhysicalAttackDamage(state.abilities);
+  const physicalAttackWithClass = getPhysicalAttackDamage(classAbilities);
+  const magicAttackBase = getMagicAttackDamage(state.abilities);
+  const magicAttackWithClass = getMagicAttackDamage(classAbilities);
+  const temporaryBattleBuff = battle?.activeBuff ?? null;
+  const attributeBreakdowns = [
+    {
+      key: "physical-attack",
+      label: "物理攻擊",
+      total: getPhysicalAttackDamage(attributeBreakdownAbilities),
+      unit: "",
+      icon: Sword,
+      tone: "orange",
+      base: physicalAttackBase,
+      classBonus: physicalAttackWithClass - physicalAttackBase,
+      equipmentBonus:
+        getPhysicalAttackDamage(attributeBreakdownAbilities) -
+        getPhysicalAttackDamage(classAbilities),
+      specializationBonus: 0,
+      note: "力量／智力換算；專精技能倍率另計",
+    },
+    {
+      key: "magic-attack",
+      label: "魔法攻擊",
+      total: getMagicAttackDamage(attributeBreakdownAbilities),
+      unit: "",
+      icon: Sparkles,
+      tone: "violet",
+      base: magicAttackBase,
+      classBonus: magicAttackWithClass - magicAttackBase,
+      equipmentBonus:
+        getMagicAttackDamage(attributeBreakdownAbilities) -
+        getMagicAttackDamage(classAbilities),
+      specializationBonus: 0,
+      note: "智力換算；法師戰鬥使用此傷害",
+    },
+    {
+      key: "defense",
+      label: "防禦",
+      total: effectiveAbilities.defense,
+      unit: "",
+      icon: ShieldCheck,
+      tone: "blue",
+      base: state.abilities.defense,
+      classBonus: classDefinition.bonuses.defense,
+      equipmentBonus: equipmentBonuses.abilities.defense,
+      specializationBonus: 0,
+      note: `約減免 ${getDefenseReduction(effectiveAbilities.defense)} 點傷害`,
+    },
+    {
+      key: "magic-resistance",
+      label: "魔法抗性",
+      total: 0,
+      unit: "%",
+      icon: ShieldCheck,
+      tone: "blue",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "目前角色沒有全域魔法抗性加成",
+    },
+    {
+      key: "physical-penetration",
+      label: "物理穿透",
+      total: 0,
+      unit: "%",
+      icon: Sword,
+      tone: "orange",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "穿透數值依技能顯示，不是角色全域屬性",
+    },
+    {
+      key: "magic-penetration",
+      label: "魔法穿透",
+      total: 0,
+      unit: "%",
+      icon: Sparkles,
+      tone: "violet",
+      base: 0,
+      classBonus: 0,
+      equipmentBonus: 0,
+      specializationBonus: 0,
+      note: "穿透數值依技能顯示，不是角色全域屬性",
+    },
+    {
+      key: "crit-rate",
+      label: "暴擊率",
+      total: effectiveCombatStats.critRate,
+      unit: "%",
+      icon: Target,
+      tone: "mint",
+      base: combatStatsBase(state.combatStats).critRate,
+      classBonus: classDefinition.combat.critRate ?? 0,
+      equipmentBonus: equipmentBonuses.combat.critRate ?? 0,
+      specializationBonus: specializationPassiveBonuses.critRate,
+      note: isMage ? "法師固定不可暴擊" : "未含技能觸發的瞬時效果",
+    },
+    {
+      key: "crit-damage",
+      label: "暴擊傷害",
+      total: effectiveCombatStats.critDamage,
+      unit: "%",
+      icon: Flame,
+      tone: "orange",
+      base: combatStatsBase(state.combatStats).critDamage,
+      classBonus: classDefinition.combat.critDamage ?? 0,
+      equipmentBonus: equipmentBonuses.combat.critDamage ?? 0,
+      specializationBonus:
+        specializationPassiveBonuses.critDamage + archerSkillCritDamageBonus,
+      note: isMage ? "法師不會觸發暴擊" : "暴擊時套用的傷害倍率",
+    },
+    {
+      key: "dodge-rate",
+      label: "閃避率",
+      total: effectiveCombatStats.dodgeRate,
+      unit: "%",
+      icon: Shuffle,
+      tone: "mint",
+      base: combatStatsBase(state.combatStats).dodgeRate,
+      classBonus: classDefinition.combat.dodgeRate ?? 0,
+      equipmentBonus: equipmentBonuses.combat.dodgeRate ?? 0,
+      specializationBonus: specializationPassiveBonuses.dodgeRate,
+      note: isArcher
+        ? `遊俠天賦目前額外 +${archerTalentBonuses.dodgePercent}%`
+        : "未含技能觸發的瞬時效果",
+    },
+  ];
   const experienceBonusPercent = getExperienceBonusPercent(
     effectiveAbilities.intelligence
   );
@@ -2162,6 +2339,52 @@ export default function Home() {
       allAvailableMonsters.find(monster => monster.id === battle.monsterId) ??
       null)
     : null;
+  const skillPreviewMonster =
+    activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
+  const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
+    if (skill.effectType !== "damage" || !skillPreviewMonster) return null;
+    const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
+    const basePlayerDamage = isArcher
+      ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
+      : rawPlayerDamage;
+    const buffedPlayerDamage = Math.round(
+      basePlayerDamage * (1 + (battle?.activeBuff?.damageBonusPercent ?? 0) / 100)
+    );
+    const normalDamage = calculateSpecialSkillDamage(
+      buffedPlayerDamage,
+      skillPreviewMonster.defense,
+      skill
+    );
+    const canCrit = !isMage && effectiveCombatStats.critRate > 0;
+    const criticalBaseDamage = canCrit
+      ? Math.round((buffedPlayerDamage * effectiveCombatStats.critDamage) / 100)
+      : buffedPlayerDamage;
+    const criticalDamage = canCrit
+      ? calculateSpecialSkillDamage(
+          criticalBaseDamage,
+          skillPreviewMonster.defense,
+          skill
+        )
+      : normalDamage;
+    const resistancePercent =
+      skill.damageType === "魔法"
+        ? skillPreviewMonster.magicResistancePercent ?? 0
+        : skillPreviewMonster.physicalResistancePercent ?? 0;
+    const afterResistance = (damage: number) =>
+      Math.max(1, Math.round(damage * (1 - resistancePercent / 100)));
+    const minimumDamage = Math.min(normalDamage, criticalDamage);
+    const maximumDamage = Math.max(normalDamage, criticalDamage);
+    return {
+      damageType: skill.damageType,
+      penetration: skill.defensePiercePercent,
+      resistancePercent,
+      minimumDamage,
+      maximumDamage,
+      minimumAfterResistance: afterResistance(minimumDamage),
+      maximumAfterResistance: afterResistance(maximumDamage),
+      monsterName: skillPreviewMonster.name,
+    };
+  };
   const repeatPeriodSignature = useMemo(() => {
     const date = new Date(currentTime);
     return `${getRepeatPeriodKey("daily", date, state.dailyResetMinutes)}|${getRepeatPeriodKey("weekly", date, state.dailyResetMinutes)}`;
@@ -4610,6 +4833,80 @@ export default function Home() {
                     )
                   )}
                 </div>
+                <div className="attribute-breakdown-panel">
+                  <div className="attribute-breakdown-heading">
+                    <div>
+                      <span className="mini-kicker">COMBAT PROFILE</span>
+                      <strong>角色屬性面板</strong>
+                      <small>
+                        顯示目前實際值，以及基礎、職業、裝備與專精被動的來源拆解。
+                      </small>
+                    </div>
+                    <span className="attribute-breakdown-badge">
+                      {classDefinition.name} · Lv.{player.level}
+                    </span>
+                  </div>
+                  <div className="attribute-breakdown-table" role="table" aria-label="角色屬性來源拆解">
+                    <div className="attribute-breakdown-row attribute-breakdown-header" role="row">
+                      <span role="columnheader">屬性</span>
+                      <span role="columnheader">目前</span>
+                      <span role="columnheader">基礎</span>
+                      <span role="columnheader">職業</span>
+                      <span role="columnheader">裝備</span>
+                      <span role="columnheader">專精</span>
+                    </div>
+                    {attributeBreakdowns.map(attribute => {
+                      const Icon = attribute.icon;
+                      const formatValue = (value: number) =>
+                        `${value > 0 ? "+" : ""}${value}${attribute.unit}`;
+                      return (
+                        <div className="attribute-breakdown-row" role="row" key={attribute.key}>
+                          <div className="attribute-breakdown-name" role="cell">
+                            <span className={`attribute-breakdown-icon attribute-${attribute.tone}`}>
+                              <Icon size={14} />
+                            </span>
+                            <span>
+                              <strong>{attribute.label}</strong>
+                              <small>{attribute.note}</small>
+                            </span>
+                          </div>
+                          <strong className="attribute-breakdown-total" role="cell">
+                            {attribute.total}{attribute.unit}
+                          </strong>
+                          <span role="cell">{formatValue(attribute.base)}</span>
+                          <span role="cell">{formatValue(attribute.classBonus)}</span>
+                          <span role="cell">{formatValue(attribute.equipmentBonus)}</span>
+                          <span role="cell">{formatValue(attribute.specializationBonus)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="temporary-buff-summary">
+                    <div>
+                      <span className="mini-kicker">TEMPORARY BUFF</span>
+                      <strong>臨時 Buff</strong>
+                    </div>
+                    {temporaryBattleBuff ? (
+                      <div className="temporary-buff-values">
+                        <span>剩餘 {temporaryBattleBuff.turnsRemaining} 回合</span>
+                        {temporaryBattleBuff.damageBonusPercent ? (
+                          <b>傷害 +{temporaryBattleBuff.damageBonusPercent}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.damageReductionPercent ? (
+                          <b>受傷 {temporaryBattleBuff.damageReductionPercent > 0 ? "−" : "+"}{Math.abs(temporaryBattleBuff.damageReductionPercent)}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.healPercentMaxHealth ? (
+                          <b>回復 +{temporaryBattleBuff.healPercentMaxHealth}%</b>
+                        ) : null}
+                        {temporaryBattleBuff.dodgeRateBonusPercent ? (
+                          <b>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</b>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="temporary-buff-empty">目前沒有生效中的戰鬥 Buff</span>
+                    )}
+                  </div>
+                </div>
                 <div className="combat-stats-row">
                   <div className="combat-stats-label">
                     <span>戰鬥屬性</span>
@@ -4853,6 +5150,9 @@ export default function Home() {
                     unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
                       ? applySkillUpgrade(skill, upgradeLevel + 1)
                       : null;
+                  const damagePreview = unlocked
+                    ? getSkillDamagePreview(skill)
+                    : null;
                   return (
                     <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
                       <div className="skill-archive-card-top">
@@ -4874,6 +5174,31 @@ export default function Home() {
                           <span>{upgradeBonusLabel}（Lv.{upgradeLevel}）</span>
                         </div>
                       )}
+                      {damagePreview ? (
+                        <div className="skill-damage-preview">
+                          <div className="skill-damage-preview-heading">
+                            <strong>實際傷害預覽</strong>
+                            <small>對 {damagePreview.monsterName}</small>
+                          </div>
+                          <div className="skill-damage-preview-grid">
+                            <span>預估傷害</span>
+                            <b>{damagePreview.minimumDamage}～{damagePreview.maximumDamage}</b>
+                            <span>傷害類型</span>
+                            <b>{damagePreview.damageType}</b>
+                            <span>{damagePreview.damageType === "魔法" ? "魔法穿透" : "物理穿透"}</span>
+                            <b>{damagePreview.penetration}%</b>
+                            <span>{damagePreview.damageType === "魔法" ? "魔法抗性" : "物理抗性"}後</span>
+                            <b>約 {damagePreview.minimumAfterResistance}～{damagePreview.maximumAfterResistance}</b>
+                          </div>
+                          <small className="skill-damage-preview-note">
+                            目標{damagePreview.damageType === "魔法" ? "魔法" : "物理"}抗性 {damagePreview.resistancePercent}%；預覽已套用技能穿透與目前裝備／能力值。
+                          </small>
+                        </div>
+                      ) : skill.effectType === "damage" ? (
+                        <div className="skill-damage-preview is-locked">
+                          解鎖後顯示實際傷害、穿透與抗性後數值
+                        </div>
+                      ) : null}
                       {nextUpgradeSkill && (
                         <div className="skill-upgrade-preview">
                           <strong>下一級預覽</strong>
@@ -5721,17 +6046,61 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              <div className="loot-category-section">
+                <div className="loot-category-heading">
+                  <div>
+                    <span className="mini-kicker">LOOT CATEGORIES</span>
+                    <h3>戰利品分類格</h3>
+                    <p>點選格子後，只在下方顯示該部位的裝備或寶物屬性。</p>
+                  </div>
+                  <span className="loot-category-selection">
+                    目前查看：{selectedLootCategory}
+                  </span>
+                </div>
+                <div className="loot-category-grid" role="tablist" aria-label="戰利品分類">
+                  {LOOT_CATEGORY_KEYS.map(category => {
+                    const Icon = lootCategoryMeta[category].icon;
+                    const itemCount = getLootCategoryItems(category).length;
+                    const selected = selectedLootCategory === category;
+                    return (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        className={`loot-category-slot ${selected ? "is-selected" : ""}`}
+                        key={category}
+                        onClick={() => setSelectedLootCategory(category)}
+                      >
+                        <span className="loot-category-icon"><Icon size={19} /></span>
+                        <span className="loot-category-copy">
+                          <strong>{category}</strong>
+                          <small>{lootCategoryMeta[category].description}</small>
+                        </span>
+                        <b>{itemCount}</b>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="loot-grid">
-                {inventory.length === 0 ? (
+                {selectedLootItems.length === 0 ? (
                   <div className="loot-empty panel-card">
                     <div className="loot-empty-icon">
                       <Gift size={22} />
                     </div>
-                    <strong>戰利品庫尚未開張</strong>
-                    <span>完成第一場怪物戰鬥，尋找屬於你的第一件戰利品。</span>
+                    <strong>
+                      {inventory.length === 0
+                        ? "戰利品庫尚未開張"
+                        : `${selectedLootCategory}目前沒有物品`}
+                    </strong>
+                    <span>
+                      {inventory.length === 0
+                        ? "完成第一場怪物戰鬥，尋找屬於你的第一件戰利品。"
+                        : "探索其他分類格，或完成怪物戰鬥取得新的戰利品。"}
+                    </span>
                   </div>
                 ) : (
-                  inventory
+                  selectedLootItems
                     .slice()
                     .reverse()
                     .map(item => (
