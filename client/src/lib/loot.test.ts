@@ -7,6 +7,7 @@ import {
   LOOT_RARITIES,
   LOOT_RARITY_CLASS,
   getEquipmentAffixBonuses,
+  getEquipmentSetBonuses,
   getEquipmentRequiredJobClass,
   getTreasureSellValue,
   nextLootRarity,
@@ -101,7 +102,7 @@ describe("QuestBoard loot", () => {
     const module = await import("./equipment-database");
     const weaponTypes = ["劍", "短刀", "弓", "法杖"] as const;
     for (const rarity of LOOT_RARITIES) {
-      expect(module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)).toHaveLength(45);
+      expect(module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)).toHaveLength(90);
       for (const weaponType of weaponTypes) {
         const weapons = module.RPG_EQUIPMENT_TEMPLATES.filter(
           item =>
@@ -115,7 +116,7 @@ describe("QuestBoard loot", () => {
           (weaponType === "弓" && ["精良", "傳說"].includes(rarity))
             ? 1
             : 0;
-        expect(weapons).toHaveLength(5 + legacyWeaponCount);
+        expect(weapons).toHaveLength(10 + legacyWeaponCount * 2);
         expect(weapons.every(item => item.equipmentLevel === LOOT_RARITIES.indexOf(rarity) + 1)).toBe(true);
         expect(weapons.every(item => item.minLevel === 1 + LOOT_RARITIES.indexOf(rarity) * 10)).toBe(true);
         expect(
@@ -130,6 +131,17 @@ describe("QuestBoard loot", () => {
         ).toBe(true);
       }
     }
+  });
+
+  it("keeps the original database equipment and adds six named set copies", async () => {
+    const module = await import("./equipment-database");
+    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 270);
+    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(270);
+    expect(originals.every(item => item.setId === undefined)).toBe(true);
+    expect(setCopies).toHaveLength(270);
+    expect(setCopies.every(item => Boolean(item.setId) && item.name.includes("·"))).toBe(true);
+    expect(new Set(setCopies.map(item => item.setId)).size).toBe(36);
+    expect(setCopies.every((item, index) => item.bonus === originals[index].bonus)).toBe(true);
   });
 
   it("preserves the existing 65% ordinary drop chance", () => {
@@ -266,6 +278,76 @@ describe("QuestBoard loot", () => {
       critRate: 3,
       critDamage: 0,
       dodgeRate: 0,
+    });
+  });
+
+  it("activates cumulative two-piece and four-piece set bonuses", () => {
+    const pieces = [
+      { ...equipment("dawn-helmet", "頭盔"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-chest", "胸甲"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-legs", "護腿"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-charm", "護身符"), setId: "dawn-warden-普通" },
+    ];
+
+    expect(getEquipmentSetBonuses(pieces.slice(0, 2))).toMatchObject({
+      abilities: { health: 60, defense: 8 },
+      combat: { critDamage: 0 },
+      activeSets: [{ name: "曙光聖衛·普通", equippedCount: 2, activeBonuses: [{ pieces: 2 }] }],
+    });
+    expect(getEquipmentSetBonuses(pieces)).toMatchObject({
+      abilities: { health: 120, defense: 16 },
+      combat: { critDamage: 0, damageReductionPercent: 10 },
+      activeSets: [{ equippedCount: 4, activeBonuses: [{ pieces: 2 }, { pieces: 4 }] }],
+    });
+  });
+
+  it("uses the requested four-piece set values", () => {
+    const fourPieces = (setId: string) => [
+      { ...equipment(`${setId}-helmet`, "頭盔"), setId },
+      { ...equipment(`${setId}-chest`, "胸甲"), setId },
+      { ...equipment(`${setId}-legs`, "護腿"), setId },
+      { ...equipment(`${setId}-charm`, "護身符"), setId },
+    ];
+
+    expect(getEquipmentSetBonuses(fourPieces("moon-stalker-普通")).abilities).toMatchObject({ strength: 20 });
+    expect(getEquipmentSetBonuses(fourPieces("moon-stalker-普通")).combat).toMatchObject({ dodgeRate: 9, critRate: 5 });
+    expect(getEquipmentSetBonuses(fourPieces("astral-sage-普通")).abilities).toMatchObject({ intelligence: 24 });
+    expect(getEquipmentSetBonuses(fourPieces("astral-sage-普通")).combat).toMatchObject({ castSpeedPercent: 10, magicPenetrationPercent: 10 });
+    expect(getEquipmentSetBonuses(fourPieces("storm-sword-普通")).abilities).toMatchObject({ strength: 25 });
+    expect(getEquipmentSetBonuses(fourPieces("storm-sword-普通")).combat).toMatchObject({ critRate: 9, critDamage: 15 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通").slice(0, 2)).abilities).toMatchObject({ health: 20, strength: 3, defense: 3, intelligence: 3 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通")).abilities).toMatchObject({ health: 50, strength: 8, defense: 8, intelligence: 8 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通")).combat).toMatchObject({ critDamage: 8 });
+  });
+
+  it("keeps old equipment without a set id usable", () => {
+    const oldItem = parseLootItem({
+      id: "old-setless-gear",
+      kind: "equipment",
+      name: "舊版胸甲",
+      slot: "胸甲",
+      rarity: "普通",
+      description: "舊存檔裝備",
+      bonus: "防禦 +2",
+      icon: "shield",
+    });
+
+    expect(oldItem?.kind).toBe("equipment");
+    if (oldItem?.kind !== "equipment") throw new Error("Expected old equipment");
+    expect(oldItem.setId).toBeUndefined();
+    expect(getEquipmentSetBonuses([oldItem]).activeSets).toEqual([]);
+  });
+
+  it("scales set bonuses with the current rarity multipliers", () => {
+    const mythicPieces = [
+      { ...equipment("mythic-helmet", "頭盔"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-chest", "胸甲"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-legs", "護腿"), setId: "astral-sage-神話" },
+      { ...equipment("mythic-charm", "護身符"), setId: "astral-sage-神話" },
+    ];
+    expect(getEquipmentSetBonuses(mythicPieces).combat).toMatchObject({
+      castSpeedPercent: 35,
+      magicPenetrationPercent: 35,
     });
   });
 

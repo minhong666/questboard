@@ -1,5 +1,6 @@
 export type EquipmentDatabaseTemplate = {
   name: string;
+  setId?: string;
   slot: "頭盔" | "胸甲" | "武器" | "護腿" | "護身符";
   weaponType?: WeaponType;
   element?: WeaponElement;
@@ -228,7 +229,82 @@ const generatedWeaponTemplates: EquipmentDatabaseTemplate[] = weaponRarityProfil
     )
 );
 
-export const RPG_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
+const sixSetThemes = [
+  { id: "dawn-warden", name: "曙光聖衛" },
+  { id: "moon-stalker", name: "影月獵行" },
+  { id: "astral-sage", name: "星界賢者" },
+  { id: "titan-bastion", name: "鐵壁巨神" },
+  { id: "storm-sword", name: "風暴劍魂" },
+  { id: "azure-dragon", name: "蒼龍天命" },
+] as const;
+
+const setPieceNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
+  頭盔: "盔",
+  胸甲: "胸甲",
+  武器: "武器",
+  護腿: "護腿",
+  護身符: "徽記",
+};
+
+const weaponFamilyIndex: Record<string, number> = {
+  "曙光劍": 0,
+  "獵影短刀": 0,
+  "林風弓": 0,
+  "木靈法杖": 0,
+  "鐵衛劍": 1,
+  "迅牙短刀": 1,
+  "沙羽弓": 1,
+  "藍晶法杖": 1,
+  "月影劍": 2,
+  "毒棘短刀": 2,
+  "月弦弓": 2,
+  "星語法杖": 2,
+  "王道劍": 3,
+  "幻步短刀": 3,
+  "天穹弓": 3,
+  "炎脈法杖": 3,
+  "星界劍": 4,
+  "虛空短刀": 4,
+  "日輪弓": 4,
+  "創世法杖": 4,
+};
+
+const originalRpgEquipmentTemplates = [
   ...LEGACY_EQUIPMENT_TEMPLATES,
   ...generatedWeaponTemplates,
+];
+
+function getSetFamilyIndex(
+  template: EquipmentDatabaseTemplate,
+  templates: EquipmentDatabaseTemplate[]
+) {
+  if (template.slot === "武器") {
+    const weaponKey = Object.keys(weaponFamilyIndex).find(key =>
+      template.name.includes(key)
+    );
+    return weaponKey ? weaponFamilyIndex[weaponKey] : 5;
+  }
+  return templates.filter(
+    item => item.rarity === template.rarity && item.slot === template.slot
+  ).indexOf(template) % sixSetThemes.length;
+}
+
+const sixSetEquipmentTemplates: EquipmentDatabaseTemplate[] =
+  originalRpgEquipmentTemplates.map(template => {
+    const familyIndex = getSetFamilyIndex(template, originalRpgEquipmentTemplates);
+    const theme = sixSetThemes[familyIndex];
+    const pieceName = template.weaponType
+      ? `${template.weaponType}${setPieceNames.武器}`
+      : setPieceNames[template.slot];
+    return {
+      ...template,
+      setId: `${theme.id}-${template.rarity}`,
+      name: `${theme.name}·${template.rarity}${pieceName}`,
+      description: `${theme.name}套裝的${template.rarity}${pieceName}，沿用原始裝備數值。`,
+    };
+  });
+
+export const RPG_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
+  ...originalRpgEquipmentTemplates,
+  ...sixSetEquipmentTemplates,
 ];

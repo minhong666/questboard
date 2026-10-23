@@ -61,6 +61,7 @@ export type EquipmentItem = {
   id: string;
   kind: "equipment";
   name: string;
+  setId?: string;
   slot: EquipmentSlot;
   weaponType?: WeaponType;
   element?: WeaponElement;
@@ -71,6 +72,174 @@ export type EquipmentItem = {
   affixes?: EquipmentAffix[];
   equipmentLevel?: number;
 };
+
+export type EquipmentSetBonus = {
+  pieces: 2 | 4;
+  label: string;
+  description: string;
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>;
+};
+
+export type EquipmentSetDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  bonuses: EquipmentSetBonus[];
+};
+
+const equipmentSetThemes: Array<{
+  id: string;
+  name: string;
+  description: string;
+  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>> };
+  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>> };
+}> = [
+  {
+    id: "dawn-warden",
+    name: "曙光聖衛",
+    description: "以堅定防線守住每一個黎明。",
+    two: { label: "曙光誓約", bonuses: { health: 60, defense: 8 } },
+    four: { label: "聖衛壁壘", bonuses: { health: 60, defense: 8, damageReductionPercent: 10 } },
+  },
+  {
+    id: "moon-stalker",
+    name: "影月獵行",
+    description: "在月影與寂靜中追獵目標。",
+    two: { label: "月影步", bonuses: { strength: 10, dodgeRate: 3 } },
+    four: { label: "無聲獵殺", bonuses: { strength: 10, dodgeRate: 6, critRate: 5 } },
+  },
+  {
+    id: "astral-sage",
+    name: "星界賢者",
+    description: "讓群星的知識流入每一次施法。",
+    two: { label: "星軌共鳴", bonuses: { intelligence: 12, castSpeedPercent: 4 } },
+    four: { label: "萬象洞悉", bonuses: { intelligence: 12, castSpeedPercent: 6, magicPenetrationPercent: 10 } },
+  },
+  {
+    id: "titan-bastion",
+    name: "鐵壁巨神",
+    description: "以巨神之軀承受最猛烈的衝擊。",
+    two: { label: "巨神鎧意", bonuses: { health: 100, defense: 10 } },
+    four: { label: "不動壁壘", bonuses: { health: 220, defense: 24 } },
+  },
+  {
+    id: "storm-sword",
+    name: "風暴劍魂",
+    description: "以雷霆力量撕裂敵人的防線。",
+    two: { label: "雷霆蓄勢", bonuses: { strength: 12, critRate: 3 } },
+    four: { label: "風暴連斬", bonuses: { strength: 13, critRate: 6, critDamage: 15 } },
+  },
+  {
+    id: "azure-dragon",
+    name: "蒼龍天命",
+    description: "承接蒼龍血脈，均衡駕馭各種戰局。",
+    two: { label: "蒼龍血脈", bonuses: { health: 20, strength: 3, defense: 3, intelligence: 3 } },
+    four: { label: "天命覺醒", bonuses: { health: 30, strength: 5, defense: 5, intelligence: 5, critDamage: 8 } },
+  },
+];
+
+const setRarityMultiplier: Record<LootRarity, number> = {
+  普通: 1,
+  精良: 1.25,
+  稀有: 1.5,
+  史詩: 1.75,
+  傳說: 2.5,
+  神話: 3.5,
+};
+
+const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", { label: string; unit: string }> = {
+  health: { label: "生命", unit: "" },
+  strength: { label: "力量", unit: "" },
+  defense: { label: "防禦", unit: "" },
+  intelligence: { label: "智力", unit: "" },
+  critRate: { label: "暴擊率", unit: "%" },
+  critDamage: { label: "暴擊傷害", unit: "%" },
+  dodgeRate: { label: "閃避率", unit: "%" },
+  castSpeedPercent: { label: "施法速度", unit: "%" },
+  damageReductionPercent: { label: "受到傷害", unit: "%" },
+  magicPenetrationPercent: { label: "魔法穿透", unit: "%" },
+};
+
+function scaleSetBonuses(
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>,
+  multiplier: number
+) {
+  return Object.fromEntries(
+    Object.entries(bonuses).map(([stat, value]) => [
+      stat,
+      Math.max(1, Math.round((value ?? 0) * multiplier)),
+    ])
+  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>;
+}
+
+function describeSetBonuses(
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>
+) {
+  return Object.entries(bonuses)
+    .map(([stat, value]) => {
+      const info = setBonusLabels[stat as EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent"];
+      const sign = stat === "damageReductionPercent" ? "−" : "+";
+      return `${info.label} ${sign}${value}${info.unit}`;
+    })
+    .join(" · ");
+}
+
+export const EQUIPMENT_SET_DEFINITIONS: EquipmentSetDefinition[] = LOOT_RARITIES.flatMap(
+  rarity =>
+    equipmentSetThemes.map(theme => {
+      const multiplier = setRarityMultiplier[rarity];
+      const twoBonuses = scaleSetBonuses(theme.two.bonuses, multiplier);
+      const fourBonuses = scaleSetBonuses(theme.four.bonuses, multiplier);
+      return {
+        id: `${theme.id}-${rarity}`,
+        name: `${theme.name}·${rarity}`,
+        description: `${theme.description}本套裝為${rarity}階系列。`,
+        bonuses: [
+          { pieces: 2 as const, label: theme.two.label, description: describeSetBonuses(twoBonuses), bonuses: twoBonuses },
+          { pieces: 4 as const, label: theme.four.label, description: describeSetBonuses(fourBonuses), bonuses: fourBonuses },
+        ],
+      };
+    })
+);
+
+export type ActiveEquipmentSet = EquipmentSetDefinition & {
+  equippedCount: number;
+  activeBonuses: EquipmentSetBonus[];
+};
+
+export function getEquipmentSetBonuses(items: EquipmentItem[]): {
+  abilities: Required<Pick<EquipmentAffixBonuses, "health" | "strength" | "defense" | "intelligence">>;
+  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number; damageReductionPercent: number; magicPenetrationPercent: number };
+  activeSets: ActiveEquipmentSet[];
+} {
+  const abilities = { health: 0, strength: 0, defense: 0, intelligence: 0 };
+  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0, damageReductionPercent: 0, magicPenetrationPercent: 0 };
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    if (item.setId) counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1);
+  }
+
+  const activeSets = EQUIPMENT_SET_DEFINITIONS.flatMap(set => {
+    const equippedCount = counts.get(set.id) ?? 0;
+    if (equippedCount < 2) return [];
+    const activeBonuses = set.bonuses.filter(bonus => equippedCount >= bonus.pieces);
+    for (const bonus of activeBonuses) {
+      abilities.health += bonus.bonuses.health ?? 0;
+      abilities.strength += bonus.bonuses.strength ?? 0;
+      abilities.defense += bonus.bonuses.defense ?? 0;
+      abilities.intelligence += bonus.bonuses.intelligence ?? 0;
+      combat.critRate += bonus.bonuses.critRate ?? 0;
+      combat.critDamage += bonus.bonuses.critDamage ?? 0;
+      combat.dodgeRate += bonus.bonuses.dodgeRate ?? 0;
+      combat.castSpeedPercent += bonus.bonuses.castSpeedPercent ?? 0;
+      combat.damageReductionPercent += bonus.bonuses.damageReductionPercent ?? 0;
+      combat.magicPenetrationPercent += bonus.bonuses.magicPenetrationPercent ?? 0;
+    }
+    return [{ ...set, equippedCount, activeBonuses }];
+  });
+
+  return { abilities, combat, activeSets };
+}
 
 export function getEquipmentRequiredJobClass(
   item: Pick<EquipmentItem, "slot" | "weaponType" | "name">
@@ -730,6 +899,7 @@ export function parseLootItem(value: unknown): LootItem | null {
     return {
       ...common,
       kind: "equipment",
+      setId: typeof item.setId === "string" ? item.setId : undefined,
       slot,
       weaponType:
         item.weaponType === "劍" ||
