@@ -6104,8 +6104,132 @@ h2 {
 
 /* 事務計時與時間統計 */
 .timer-page {
+  position: relative;
+  isolation: isolate;
   margin-top: 44px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 20px;
   scroll-margin-top: 22px;
+  transition:
+    border-color 0.6s ease,
+    background 0.6s ease,
+    box-shadow 0.6s ease;
+}
+.timer-page::before,
+.timer-page::after {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+.timer-page::before {
+  top: -30%;
+  left: -10%;
+  width: 70%;
+  height: 90%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(95, 220, 175, 0.2) 0%,
+    rgba(73, 147, 255, 0.08) 38%,
+    transparent 72%
+  );
+  filter: blur(10px);
+}
+.timer-page::after {
+  right: -8%;
+  bottom: -42%;
+  width: 64%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(139, 124, 255, 0.2) 0%,
+    rgba(67, 181, 207, 0.07) 42%,
+    transparent 72%
+  );
+  filter: blur(16px);
+}
+.timer-page.is-timer-running {
+  border-color: rgba(107, 228, 171, 0.22);
+  background:
+    linear-gradient(rgba(10, 22, 39, 0.74), rgba(9, 18, 34, 0.86)),
+    repeating-linear-gradient(
+      115deg,
+      rgba(123, 219, 190, 0.035) 0,
+      rgba(123, 219, 190, 0.035) 1px,
+      transparent 1px,
+      transparent 42px
+    );
+  box-shadow:
+    0 0 0 1px rgba(107, 228, 171, 0.04),
+    0 18px 60px rgba(37, 157, 128, 0.1),
+    inset 0 0 70px rgba(91, 146, 255, 0.04);
+}
+.timer-page.is-timer-running::before,
+.timer-page.is-timer-running::after {
+  opacity: 1;
+}
+.timer-page.is-timer-running::before {
+  animation: timer-ambient-drift 13s ease-in-out infinite alternate;
+}
+.timer-page.is-timer-running::after {
+  animation: timer-ambient-drift-reverse 17s ease-in-out infinite alternate;
+}
+.timer-page.is-timer-running .timer-page-heading::after {
+  width: 7px;
+  height: 7px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: #7ce1b1;
+  box-shadow: 0 0 0 5px rgba(124, 225, 177, 0.08), 0 0 18px rgba(124, 225, 177, 0.8);
+  content: "";
+  animation: timer-live-pulse 2s ease-in-out infinite;
+}
+.timer-page.is-timer-running .timer-activity-card.is-running {
+  position: relative;
+  overflow: hidden;
+}
+.timer-page.is-timer-running .timer-activity-card.is-running::after {
+  position: absolute;
+  top: 0;
+  left: -35%;
+  width: 28%;
+  height: 100%;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(151, 244, 202, 0.1), transparent);
+  transform: skewX(-18deg);
+  animation: timer-card-scan 4.8s ease-in-out infinite;
+}
+@keyframes timer-ambient-drift {
+  0% { transform: translate3d(-2%, -2%, 0) scale(0.96) rotate(0deg); }
+  100% { transform: translate3d(18%, 13%, 0) scale(1.12) rotate(12deg); }
+}
+@keyframes timer-ambient-drift-reverse {
+  0% { transform: translate3d(3%, 4%, 0) scale(1.02) rotate(0deg); }
+  100% { transform: translate3d(-17%, -12%, 0) scale(1.16) rotate(-14deg); }
+}
+@keyframes timer-live-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes timer-card-scan {
+  0%, 35% { left: -35%; opacity: 0; }
+  50% { opacity: 1; }
+  75%, 100% { left: 120%; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timer-page.is-timer-running::before,
+  .timer-page.is-timer-running::after,
+  .timer-page.is-timer-running .timer-page-heading::after,
+  .timer-page.is-timer-running .timer-activity-card.is-running::after {
+    animation: none;
+  }
 }
 .timer-page-heading {
   align-items: center;
