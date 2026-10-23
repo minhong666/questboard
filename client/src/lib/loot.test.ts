@@ -133,6 +133,13 @@ describe("QuestBoard loot", () => {
     }
   });
 
+  it("assigns every database equipment template to a named set", async () => {
+    const module = await import("./equipment-database");
+    expect(module.RPG_EQUIPMENT_TEMPLATES.every(item => Boolean(item.setId))).toBe(true);
+    expect(module.RPG_EQUIPMENT_TEMPLATES.every(item => item.name.includes("·"))).toBe(true);
+    expect(new Set(module.RPG_EQUIPMENT_TEMPLATES.map(item => item.setId)).size).toBe(30);
+  });
+
   it("preserves the existing 65% ordinary drop chance", () => {
     const drop = rollLoot(
       { level: 1 },
@@ -272,16 +279,16 @@ describe("QuestBoard loot", () => {
 
   it("activates cumulative two-piece and four-piece set bonuses", () => {
     const pieces = [
-      { ...equipment("dawn-helmet", "頭盔"), setId: "dawn-warden" },
-      { ...equipment("dawn-chest", "胸甲"), setId: "dawn-warden" },
-      { ...equipment("dawn-legs", "護腿"), setId: "dawn-warden" },
-      { ...equipment("dawn-charm", "護身符"), setId: "dawn-warden" },
+      { ...equipment("dawn-helmet", "頭盔"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-chest", "胸甲"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-legs", "護腿"), setId: "dawn-warden-普通" },
+      { ...equipment("dawn-charm", "護身符"), setId: "dawn-warden-普通" },
     ];
 
     expect(getEquipmentSetBonuses(pieces.slice(0, 2))).toMatchObject({
       abilities: { health: 60, defense: 8 },
       combat: { critDamage: 0 },
-      activeSets: [{ name: "曙光聖衛", equippedCount: 2, activeBonuses: [{ pieces: 2 }] }],
+      activeSets: [{ name: "曙光聖衛·普通", equippedCount: 2, activeBonuses: [{ pieces: 2 }] }],
     });
     expect(getEquipmentSetBonuses(pieces)).toMatchObject({
       abilities: { health: 180, defense: 24 },

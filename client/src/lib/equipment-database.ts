@@ -229,7 +229,46 @@ const generatedWeaponTemplates: EquipmentDatabaseTemplate[] = weaponRarityProfil
     )
 );
 
+const equipmentSetThemes = [
+  { id: "dawn-warden", name: "曙光聖衛" },
+  { id: "astral-sage", name: "星界賢者" },
+  { id: "frost-stalker", name: "霜影獵行" },
+  { id: "abyss-conqueror", name: "深淵征服" },
+  { id: "verdant-vanguard", name: "翠野先鋒" },
+] as const;
+
+const equipmentSlotNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
+  頭盔: "盔",
+  胸甲: "胸甲",
+  武器: "武器",
+  護腿: "護腿",
+  護身符: "徽記",
+};
+
+function applyEquipmentSetMetadata(
+  templates: EquipmentDatabaseTemplate[]
+): EquipmentDatabaseTemplate[] {
+  const counters = new Map<string, number>();
+  return templates.map(template => {
+    const counterKey = `${template.rarity}-${template.slot}`;
+    const groupIndex = counters.get(counterKey) ?? 0;
+    counters.set(counterKey, groupIndex + 1);
+    const theme = equipmentSetThemes[groupIndex % equipmentSetThemes.length];
+    const pieceName = template.weaponType
+      ? `${template.weaponType}${equipmentSlotNames.武器}`
+      : equipmentSlotNames[template.slot];
+    return {
+      ...template,
+      setId: `${theme.id}-${template.rarity}`,
+      name: `${theme.name}·${template.rarity}${pieceName}`,
+      description: `${theme.name}套裝的${template.rarity}${pieceName}，同系列裝備可啟用套裝效果。`,
+    };
+  });
+}
+
 export const RPG_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
-  ...LEGACY_EQUIPMENT_TEMPLATES,
-  ...generatedWeaponTemplates,
+  ...applyEquipmentSetMetadata([
+    ...LEGACY_EQUIPMENT_TEMPLATES,
+    ...generatedWeaponTemplates,
+  ]),
 ];

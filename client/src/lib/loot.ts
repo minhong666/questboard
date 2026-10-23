@@ -87,84 +87,110 @@ export type EquipmentSetDefinition = {
   bonuses: EquipmentSetBonus[];
 };
 
-export const EQUIPMENT_SET_DEFINITIONS: EquipmentSetDefinition[] = [
+const equipmentSetThemes: Array<{
+  id: string;
+  name: string;
+  description: string;
+  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>> };
+  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>> };
+}> = [
   {
     id: "dawn-warden",
     name: "曙光聖衛",
     description: "以堅定防線守住每一個黎明。",
-    bonuses: [
-      {
-        pieces: 2,
-        label: "曙光誓約",
-        description: "生命 +60 · 防禦 +8",
-        bonuses: { health: 60, defense: 8 },
-      },
-      {
-        pieces: 4,
-        label: "聖衛壁壘",
-        description: "生命 +120 · 防禦 +16 · 暴擊傷害 +10%",
-        bonuses: { health: 120, defense: 16, critDamage: 10 },
-      },
-    ],
+    two: { label: "曙光誓約", bonuses: { health: 60, defense: 8 } },
+    four: { label: "聖衛壁壘", bonuses: { health: 120, defense: 16, critDamage: 10 } },
   },
   {
     id: "astral-sage",
     name: "星界賢者",
     description: "讓群星的知識流入每一次施法。",
-    bonuses: [
-      {
-        pieces: 2,
-        label: "星軌共鳴",
-        description: "智力 +12 · 施法速度 +4%",
-        bonuses: { intelligence: 12, castSpeedPercent: 4 },
-      },
-      {
-        pieces: 4,
-        label: "萬象洞悉",
-        description: "智力 +24 · 施法速度 +8% · 暴擊傷害 +12%",
-        bonuses: { intelligence: 24, castSpeedPercent: 8, critDamage: 12 },
-      },
-    ],
+    two: { label: "星軌共鳴", bonuses: { intelligence: 12, castSpeedPercent: 4 } },
+    four: { label: "萬象洞悉", bonuses: { intelligence: 24, castSpeedPercent: 8, critDamage: 12 } },
   },
   {
     id: "frost-stalker",
     name: "霜影獵行",
     description: "在寒霧與月影之間追獵目標。",
-    bonuses: [
-      {
-        pieces: 2,
-        label: "寒影步",
-        description: "力量 +10 · 閃避率 +3%",
-        bonuses: { strength: 10, dodgeRate: 3 },
-      },
-      {
-        pieces: 4,
-        label: "無聲獵殺",
-        description: "力量 +20 · 閃避率 +6% · 暴擊率 +5%",
-        bonuses: { strength: 20, dodgeRate: 6, critRate: 5 },
-      },
-    ],
+    two: { label: "寒影步", bonuses: { strength: 10, dodgeRate: 3 } },
+    four: { label: "無聲獵殺", bonuses: { strength: 20, dodgeRate: 6, critRate: 5 } },
   },
   {
     id: "abyss-conqueror",
     name: "深淵征服",
     description: "將深淵的毀滅力量化為征服意志。",
-    bonuses: [
-      {
-        pieces: 2,
-        label: "深淵印記",
-        description: "生命 +100 · 力量 +14",
-        bonuses: { health: 100, strength: 14 },
-      },
-      {
-        pieces: 4,
-        label: "終焉征服",
-        description: "生命 +200 · 力量 +28 · 暴擊傷害 +20%",
-        bonuses: { health: 200, strength: 28, critDamage: 20 },
-      },
-    ],
+    two: { label: "深淵印記", bonuses: { health: 100, strength: 14 } },
+    four: { label: "終焉征服", bonuses: { health: 200, strength: 28, critDamage: 20 } },
+  },
+  {
+    id: "verdant-vanguard",
+    name: "翠野先鋒",
+    description: "以森林的韌性穿越漫長冒險。",
+    two: { label: "森息回響", bonuses: { health: 80, dodgeRate: 2 } },
+    four: { label: "古木庇護", bonuses: { health: 160, defense: 18, dodgeRate: 4 } },
   },
 ];
+
+const setRarityMultiplier: Record<LootRarity, number> = {
+  普通: 1,
+  精良: 1.25,
+  稀有: 1.6,
+  史詩: 2.1,
+  傳說: 3,
+  神話: 4.5,
+};
+
+const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent", { label: string; unit: string }> = {
+  health: { label: "生命", unit: "" },
+  strength: { label: "力量", unit: "" },
+  defense: { label: "防禦", unit: "" },
+  intelligence: { label: "智力", unit: "" },
+  critRate: { label: "暴擊率", unit: "%" },
+  critDamage: { label: "暴擊傷害", unit: "%" },
+  dodgeRate: { label: "閃避率", unit: "%" },
+  castSpeedPercent: { label: "施法速度", unit: "%" },
+};
+
+function scaleSetBonuses(
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>,
+  multiplier: number
+) {
+  return Object.fromEntries(
+    Object.entries(bonuses).map(([stat, value]) => [
+      stat,
+      Math.max(1, Math.round((value ?? 0) * multiplier)),
+    ])
+  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>;
+}
+
+function describeSetBonuses(
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent", number>>
+) {
+  return Object.entries(bonuses)
+    .map(([stat, value]) => {
+      const info = setBonusLabels[stat as EquipmentAffixStat | "castSpeedPercent"];
+      return `${info.label} +${value}${info.unit}`;
+    })
+    .join(" · ");
+}
+
+export const EQUIPMENT_SET_DEFINITIONS: EquipmentSetDefinition[] = LOOT_RARITIES.flatMap(
+  rarity =>
+    equipmentSetThemes.map(theme => {
+      const multiplier = setRarityMultiplier[rarity];
+      const twoBonuses = scaleSetBonuses(theme.two.bonuses, multiplier);
+      const fourBonuses = scaleSetBonuses(theme.four.bonuses, multiplier);
+      return {
+        id: `${theme.id}-${rarity}`,
+        name: `${theme.name}·${rarity}`,
+        description: `${theme.description}本套裝為${rarity}階系列。`,
+        bonuses: [
+          { pieces: 2 as const, label: theme.two.label, description: describeSetBonuses(twoBonuses), bonuses: twoBonuses },
+          { pieces: 4 as const, label: theme.four.label, description: describeSetBonuses(fourBonuses), bonuses: fourBonuses },
+        ],
+      };
+    })
+);
 
 export type ActiveEquipmentSet = EquipmentSetDefinition & {
   equippedCount: number;
@@ -388,7 +414,8 @@ const treasureAffixByRarity: Partial<Record<LootRarity, TreasureAffix>> = {
 
 const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { minLevel: number }> = [
   {
-    name: "磨亮的冒險者短劍",
+    name: "翠野先鋒·普通短劍",
+    setId: "verdant-vanguard-普通",
     slot: "武器",
     weaponType: "劍",
     rarity: "普通",
@@ -398,7 +425,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "森林守護胸甲",
+    name: "翠野先鋒·普通胸甲",
+    setId: "verdant-vanguard-普通",
     slot: "胸甲",
     rarity: "普通",
     description: "以韌性藤木與輕甲片編成，守護旅人的軀幹。",
@@ -407,7 +435,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "旅者皮帽",
+    name: "翠野先鋒·普通皮帽",
+    setId: "verdant-vanguard-普通",
     slot: "頭盔",
     rarity: "普通",
     description: "縫有銅扣的輕便皮帽，能擋下沿途碎石。",
@@ -416,7 +445,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "見習者護腿",
+    name: "翠野先鋒·普通護腿",
+    setId: "verdant-vanguard-普通",
     slot: "護腿",
     rarity: "普通",
     description: "為長途跋涉準備的耐磨護腿。",
@@ -425,7 +455,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "森林守護護身符",
+    name: "翠野先鋒·普通護符",
+    setId: "verdant-vanguard-普通",
     slot: "護身符",
     rarity: "普通",
     description: "沾著森林露水的溫和護身符。",
@@ -434,7 +465,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "專注學者之戒",
+    name: "翠野先鋒·稀有學者戒",
+    setId: "verdant-vanguard-稀有",
     slot: "護身符",
     rarity: "稀有",
     description: "讓思緒保持清晰的藍晶戒指",
@@ -443,7 +475,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 5,
   },
   {
-    name: "迅捷旅者護腿",
+    name: "翠野先鋒·稀有迅行護腿",
+    setId: "verdant-vanguard-稀有",
     slot: "護腿",
     rarity: "稀有",
     description: "在林間行動時幾乎不會發出聲音的輕便護腿。",
@@ -452,7 +485,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 8,
   },
   {
-    name: "不屈心核",
+    name: "翠野先鋒·史詩不屈心核",
+    setId: "verdant-vanguard-史詩",
     slot: "護身符",
     rarity: "史詩",
     description: "即使倒下也會再次燃起的心核",
@@ -461,7 +495,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 15,
   },
   {
-    name: "裂空魔刃",
+    name: "翠野先鋒·史詩裂空魔刃",
+    setId: "verdant-vanguard-史詩",
     slot: "武器",
     weaponType: "劍",
     rarity: "史詩",
@@ -471,7 +506,8 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 25,
   },
   {
-    name: "區域王冠",
+    name: "翠野先鋒·傳說區域王冠",
+    setId: "verdant-vanguard-傳說",
     slot: "頭盔",
     rarity: "傳說",
     description: "只有征服區域魔王者才配戴的王冠",
