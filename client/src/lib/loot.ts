@@ -77,7 +77,7 @@ export type EquipmentSetBonus = {
   pieces: 2 | 4;
   label: string;
   description: string;
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>;
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>;
 };
 
 export type EquipmentSetDefinition = {
@@ -91,8 +91,8 @@ const equipmentSetThemes: Array<{
   id: string;
   name: string;
   description: string;
-  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>> };
-  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>> };
+  two: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>> };
+  four: { label: string; bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>> };
 }> = [
   {
     id: "dawn-warden",
@@ -106,14 +106,14 @@ const equipmentSetThemes: Array<{
     name: "影月獵行",
     description: "在月影與寂靜中追獵目標。",
     two: { label: "月影步", bonuses: { strength: 10, dodgeRate: 3 } },
-    four: { label: "無聲獵殺", bonuses: { strength: 20, dodgeRate: 6, critRate: 5 } },
+    four: { label: "無聲獵殺", bonuses: { strength: 10, dodgeRate: 6, critRate: 5 } },
   },
   {
     id: "astral-sage",
     name: "星界賢者",
     description: "讓群星的知識流入每一次施法。",
     two: { label: "星軌共鳴", bonuses: { intelligence: 12, castSpeedPercent: 4 } },
-    four: { label: "萬象洞悉", bonuses: { intelligence: 24, castSpeedPercent: 8, critDamage: 12 } },
+    four: { label: "萬象洞悉", bonuses: { intelligence: 12, castSpeedPercent: 6, magicPenetrationPercent: 10 } },
   },
   {
     id: "titan-bastion",
@@ -127,14 +127,14 @@ const equipmentSetThemes: Array<{
     name: "風暴劍魂",
     description: "以雷霆力量撕裂敵人的防線。",
     two: { label: "雷霆蓄勢", bonuses: { strength: 12, critRate: 3 } },
-    four: { label: "風暴連斬", bonuses: { strength: 25, critRate: 6, critDamage: 15 } },
+    four: { label: "風暴連斬", bonuses: { strength: 13, critRate: 6, critDamage: 15 } },
   },
   {
     id: "azure-dragon",
     name: "蒼龍天命",
     description: "承接蒼龍血脈，均衡駕馭各種戰局。",
-    two: { label: "蒼龍血脈", bonuses: { health: 35, strength: 5, defense: 5, intelligence: 5 } },
-    four: { label: "天命覺醒", bonuses: { health: 70, strength: 10, defense: 10, intelligence: 10, critDamage: 8 } },
+    two: { label: "蒼龍血脈", bonuses: { health: 20, strength: 3, defense: 3, intelligence: 3 } },
+    four: { label: "天命覺醒", bonuses: { health: 30, strength: 5, defense: 5, intelligence: 5, critDamage: 8 } },
   },
 ];
 
@@ -147,7 +147,7 @@ const setRarityMultiplier: Record<LootRarity, number> = {
   神話: 4.5,
 };
 
-const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", { label: string; unit: string }> = {
+const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", { label: string; unit: string }> = {
   health: { label: "生命", unit: "" },
   strength: { label: "力量", unit: "" },
   defense: { label: "防禦", unit: "" },
@@ -157,10 +157,11 @@ const setBonusLabels: Record<EquipmentAffixStat | "castSpeedPercent" | "damageRe
   dodgeRate: { label: "閃避率", unit: "%" },
   castSpeedPercent: { label: "施法速度", unit: "%" },
   damageReductionPercent: { label: "受到傷害", unit: "%" },
+  magicPenetrationPercent: { label: "魔法穿透", unit: "%" },
 };
 
 function scaleSetBonuses(
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>,
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>,
   multiplier: number
 ) {
   return Object.fromEntries(
@@ -168,15 +169,15 @@ function scaleSetBonuses(
       stat,
       Math.max(1, Math.round((value ?? 0) * multiplier)),
     ])
-  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>;
+  ) as Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>;
 }
 
 function describeSetBonuses(
-  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent", number>>
+  bonuses: Partial<Record<EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent", number>>
 ) {
   return Object.entries(bonuses)
     .map(([stat, value]) => {
-      const info = setBonusLabels[stat as EquipmentAffixStat | "castSpeedPercent"];
+      const info = setBonusLabels[stat as EquipmentAffixStat | "castSpeedPercent" | "damageReductionPercent" | "magicPenetrationPercent"];
       const sign = stat === "damageReductionPercent" ? "−" : "+";
       return `${info.label} ${sign}${value}${info.unit}`;
     })
@@ -208,11 +209,11 @@ export type ActiveEquipmentSet = EquipmentSetDefinition & {
 
 export function getEquipmentSetBonuses(items: EquipmentItem[]): {
   abilities: Required<Pick<EquipmentAffixBonuses, "health" | "strength" | "defense" | "intelligence">>;
-  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number; damageReductionPercent: number };
+  combat: Required<Pick<EquipmentAffixBonuses, "critRate" | "critDamage" | "dodgeRate">> & { castSpeedPercent: number; damageReductionPercent: number; magicPenetrationPercent: number };
   activeSets: ActiveEquipmentSet[];
 } {
   const abilities = { health: 0, strength: 0, defense: 0, intelligence: 0 };
-  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0, damageReductionPercent: 0 };
+  const combat = { critRate: 0, critDamage: 0, dodgeRate: 0, castSpeedPercent: 0, damageReductionPercent: 0, magicPenetrationPercent: 0 };
   const counts = new Map<string, number>();
   for (const item of items) {
     if (item.setId) counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1);
@@ -232,6 +233,7 @@ export function getEquipmentSetBonuses(items: EquipmentItem[]): {
       combat.dodgeRate += bonus.bonuses.dodgeRate ?? 0;
       combat.castSpeedPercent += bonus.bonuses.castSpeedPercent ?? 0;
       combat.damageReductionPercent += bonus.bonuses.damageReductionPercent ?? 0;
+      combat.magicPenetrationPercent += bonus.bonuses.magicPenetrationPercent ?? 0;
     }
     return [{ ...set, equippedCount, activeBonuses }];
   });

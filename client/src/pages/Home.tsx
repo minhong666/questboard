@@ -157,6 +157,7 @@ type CombatStats = {
   dodgeRate: number;
   castSpeedPercent?: number;
   damageReductionPercent?: number;
+  magicPenetrationPercent?: number;
 };
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
@@ -997,6 +998,9 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
       combat.dodgeRate = (combat.dodgeRate ?? 0) + value("閃避率");
     if (bonus.includes("施法速度"))
       combat.castSpeedPercent = (combat.castSpeedPercent ?? 0) + value("施法速度");
+    if (bonus.includes("魔法穿透"))
+      combat.magicPenetrationPercent =
+        (combat.magicPenetrationPercent ?? 0) + value("魔法穿透");
   }
   const affixBonuses = getEquipmentAffixBonuses(items);
   abilities.health += affixBonuses.health;
@@ -1018,6 +1022,8 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
     (combat.castSpeedPercent ?? 0) + setBonuses.combat.castSpeedPercent;
   combat.damageReductionPercent =
     (combat.damageReductionPercent ?? 0) + setBonuses.combat.damageReductionPercent;
+  combat.magicPenetrationPercent =
+    (combat.magicPenetrationPercent ?? 0) + setBonuses.combat.magicPenetrationPercent;
   return { abilities, combat, activeSets: setBonuses.activeSets };
 }
 
@@ -2424,6 +2430,10 @@ export default function Home() {
       80,
       equipmentBonuses.combat.damageReductionPercent ?? 0
     ),
+    magicPenetrationPercent: Math.min(
+      100,
+      equipmentBonuses.combat.magicPenetrationPercent ?? 0
+    ),
   };
   const unlockedSpecialSkills = getUnlockedSpecialSkills(
     state.jobClass,
@@ -2641,15 +2651,15 @@ export default function Home() {
     {
       key: "magic-penetration",
       label: "魔法穿透",
-      total: 0,
+      total: effectiveCombatStats.magicPenetrationPercent ?? 0,
       unit: "%",
       icon: Sparkles,
       tone: "violet",
       base: 0,
       classBonus: 0,
-      equipmentBonus: 0,
+      equipmentBonus: equipmentBonuses.combat.magicPenetrationPercent ?? 0,
       specializationBonus: 0,
-      note: "穿透數值依技能顯示，不是角色全域屬性",
+      note: "降低魔法攻擊套用的魔法抗性",
     },
     {
       key: "crit-rate",
@@ -2752,7 +2762,11 @@ export default function Home() {
       : normalDamage;
     const resistancePercent =
       skill.damageType === "魔法"
-        ? skillPreviewMonster.magicResistancePercent ?? 0
+        ? Math.max(
+            0,
+            (skillPreviewMonster.magicResistancePercent ?? 0) -
+              (effectiveCombatStats.magicPenetrationPercent ?? 0)
+          )
         : skillPreviewMonster.physicalResistancePercent ?? 0;
     const afterResistance = (damage: number) =>
       Math.max(1, Math.round(damage * (1 - resistancePercent / 100)));
@@ -2760,7 +2774,11 @@ export default function Home() {
     const maximumDamage = Math.max(normalDamage, criticalDamage);
     return {
       damageType: skill.damageType,
-      penetration: skill.defensePiercePercent,
+      penetration:
+        skill.defensePiercePercent +
+        (skill.damageType === "魔法"
+          ? effectiveCombatStats.magicPenetrationPercent ?? 0
+          : 0),
       resistancePercent,
       minimumDamage,
       maximumDamage,
@@ -3665,7 +3683,11 @@ export default function Home() {
             buffedPlayerDamage - getDefenseReduction(monster.defense)
           );
     const resistancePercent = damageType === "魔法"
-      ? monster.magicResistancePercent ?? 0
+      ? Math.max(
+          0,
+          (monster.magicResistancePercent ?? 0) -
+            (effectiveCombatStats.magicPenetrationPercent ?? 0)
+        )
       : monster.physicalResistancePercent ?? 0;
     const damageDealt = instantExecute
       ? battle.monsterHealth
@@ -5400,6 +5422,9 @@ export default function Home() {
                     ) : null}
                     {equipmentBonuses.combat.damageReductionPercent ? (
                       <b>受到傷害 −{equipmentBonuses.combat.damageReductionPercent}%</b>
+                    ) : null}
+                    {equipmentBonuses.combat.magicPenetrationPercent ? (
+                      <b>魔法穿透 +{equipmentBonuses.combat.magicPenetrationPercent}%</b>
                     ) : null}
                   </div>
                   <div className="equipment-set-summary">

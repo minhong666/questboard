@@ -301,6 +301,25 @@ describe("QuestBoard loot", () => {
     });
   });
 
+  it("uses the requested four-piece set values", () => {
+    const fourPieces = (setId: string) => [
+      { ...equipment(`${setId}-helmet`, "頭盔"), setId },
+      { ...equipment(`${setId}-chest`, "胸甲"), setId },
+      { ...equipment(`${setId}-legs`, "護腿"), setId },
+      { ...equipment(`${setId}-charm`, "護身符"), setId },
+    ];
+
+    expect(getEquipmentSetBonuses(fourPieces("moon-stalker-普通")).abilities).toMatchObject({ strength: 20 });
+    expect(getEquipmentSetBonuses(fourPieces("moon-stalker-普通")).combat).toMatchObject({ dodgeRate: 9, critRate: 5 });
+    expect(getEquipmentSetBonuses(fourPieces("astral-sage-普通")).abilities).toMatchObject({ intelligence: 24 });
+    expect(getEquipmentSetBonuses(fourPieces("astral-sage-普通")).combat).toMatchObject({ castSpeedPercent: 10, magicPenetrationPercent: 10 });
+    expect(getEquipmentSetBonuses(fourPieces("storm-sword-普通")).abilities).toMatchObject({ strength: 25 });
+    expect(getEquipmentSetBonuses(fourPieces("storm-sword-普通")).combat).toMatchObject({ critRate: 9, critDamage: 15 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通").slice(0, 2)).abilities).toMatchObject({ health: 20, strength: 3, defense: 3, intelligence: 3 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通")).abilities).toMatchObject({ health: 50, strength: 8, defense: 8, intelligence: 8 });
+    expect(getEquipmentSetBonuses(fourPieces("azure-dragon-普通")).combat).toMatchObject({ critDamage: 8 });
+  });
+
   it("keeps old equipment without a set id usable", () => {
     const oldItem = parseLootItem({
       id: "old-setless-gear",
