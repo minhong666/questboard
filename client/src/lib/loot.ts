@@ -102,6 +102,13 @@ const equipmentSetThemes: Array<{
     four: { label: "聖衛壁壘", bonuses: { health: 120, defense: 16, critDamage: 10 } },
   },
   {
+    id: "moon-stalker",
+    name: "影月獵行",
+    description: "在月影與寂靜中追獵目標。",
+    two: { label: "月影步", bonuses: { strength: 10, dodgeRate: 3 } },
+    four: { label: "無聲獵殺", bonuses: { strength: 20, dodgeRate: 6, critRate: 5 } },
+  },
+  {
     id: "astral-sage",
     name: "星界賢者",
     description: "讓群星的知識流入每一次施法。",
@@ -109,25 +116,25 @@ const equipmentSetThemes: Array<{
     four: { label: "萬象洞悉", bonuses: { intelligence: 24, castSpeedPercent: 8, critDamage: 12 } },
   },
   {
-    id: "frost-stalker",
-    name: "霜影獵行",
-    description: "在寒霧與月影之間追獵目標。",
-    two: { label: "寒影步", bonuses: { strength: 10, dodgeRate: 3 } },
-    four: { label: "無聲獵殺", bonuses: { strength: 20, dodgeRate: 6, critRate: 5 } },
+    id: "titan-bastion",
+    name: "鐵壁巨神",
+    description: "以巨神之軀承受最猛烈的衝擊。",
+    two: { label: "巨神鎧意", bonuses: { health: 100, defense: 10 } },
+    four: { label: "不動壁壘", bonuses: { health: 220, defense: 24 } },
   },
   {
-    id: "abyss-conqueror",
-    name: "深淵征服",
-    description: "將深淵的毀滅力量化為征服意志。",
-    two: { label: "深淵印記", bonuses: { health: 100, strength: 14 } },
-    four: { label: "終焉征服", bonuses: { health: 200, strength: 28, critDamage: 20 } },
+    id: "storm-sword",
+    name: "風暴劍魂",
+    description: "以雷霆力量撕裂敵人的防線。",
+    two: { label: "雷霆蓄勢", bonuses: { strength: 12, critRate: 3 } },
+    four: { label: "風暴連斬", bonuses: { strength: 25, critRate: 6, critDamage: 15 } },
   },
   {
-    id: "verdant-vanguard",
-    name: "翠野先鋒",
-    description: "以森林的韌性穿越漫長冒險。",
-    two: { label: "森息回響", bonuses: { health: 80, dodgeRate: 2 } },
-    four: { label: "古木庇護", bonuses: { health: 160, defense: 18, dodgeRate: 4 } },
+    id: "azure-dragon",
+    name: "蒼龍天命",
+    description: "承接蒼龍血脈，均衡駕馭各種戰局。",
+    two: { label: "蒼龍血脈", bonuses: { health: 35, strength: 5, defense: 5, intelligence: 5 } },
+    four: { label: "天命覺醒", bonuses: { health: 70, strength: 10, defense: 10, intelligence: 10, critDamage: 8 } },
   },
 ];
 
@@ -414,8 +421,7 @@ const treasureAffixByRarity: Partial<Record<LootRarity, TreasureAffix>> = {
 
 const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { minLevel: number }> = [
   {
-    name: "翠野先鋒·普通短劍",
-    setId: "verdant-vanguard-普通",
+    name: "磨亮的冒險者短劍",
     slot: "武器",
     weaponType: "劍",
     rarity: "普通",
@@ -425,8 +431,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "翠野先鋒·普通胸甲",
-    setId: "verdant-vanguard-普通",
+    name: "森林守護胸甲",
     slot: "胸甲",
     rarity: "普通",
     description: "以韌性藤木與輕甲片編成，守護旅人的軀幹。",
@@ -435,8 +440,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "翠野先鋒·普通皮帽",
-    setId: "verdant-vanguard-普通",
+    name: "旅者皮帽",
     slot: "頭盔",
     rarity: "普通",
     description: "縫有銅扣的輕便皮帽，能擋下沿途碎石。",
@@ -445,8 +449,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "翠野先鋒·普通護腿",
-    setId: "verdant-vanguard-普通",
+    name: "見習者護腿",
     slot: "護腿",
     rarity: "普通",
     description: "為長途跋涉準備的耐磨護腿。",
@@ -455,8 +458,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "翠野先鋒·普通護符",
-    setId: "verdant-vanguard-普通",
+    name: "森林守護護身符",
     slot: "護身符",
     rarity: "普通",
     description: "沾著森林露水的溫和護身符。",
@@ -465,8 +467,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 1,
   },
   {
-    name: "翠野先鋒·稀有學者戒",
-    setId: "verdant-vanguard-稀有",
+    name: "專注學者之戒",
     slot: "護身符",
     rarity: "稀有",
     description: "讓思緒保持清晰的藍晶戒指",
@@ -475,8 +476,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 5,
   },
   {
-    name: "翠野先鋒·稀有迅行護腿",
-    setId: "verdant-vanguard-稀有",
+    name: "迅捷旅者護腿",
     slot: "護腿",
     rarity: "稀有",
     description: "在林間行動時幾乎不會發出聲音的輕便護腿。",
@@ -485,8 +485,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 8,
   },
   {
-    name: "翠野先鋒·史詩不屈心核",
-    setId: "verdant-vanguard-史詩",
+    name: "不屈心核",
     slot: "護身符",
     rarity: "史詩",
     description: "即使倒下也會再次燃起的心核",
@@ -495,8 +494,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 15,
   },
   {
-    name: "翠野先鋒·史詩裂空魔刃",
-    setId: "verdant-vanguard-史詩",
+    name: "裂空魔刃",
     slot: "武器",
     weaponType: "劍",
     rarity: "史詩",
@@ -506,8 +504,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     minLevel: 25,
   },
   {
-    name: "翠野先鋒·傳說區域王冠",
-    setId: "verdant-vanguard-傳說",
+    name: "區域王冠",
     slot: "頭盔",
     rarity: "傳說",
     description: "只有征服區域魔王者才配戴的王冠",

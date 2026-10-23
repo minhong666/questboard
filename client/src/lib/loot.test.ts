@@ -102,7 +102,7 @@ describe("QuestBoard loot", () => {
     const module = await import("./equipment-database");
     const weaponTypes = ["劍", "短刀", "弓", "法杖"] as const;
     for (const rarity of LOOT_RARITIES) {
-      expect(module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)).toHaveLength(45);
+      expect(module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)).toHaveLength(90);
       for (const weaponType of weaponTypes) {
         const weapons = module.RPG_EQUIPMENT_TEMPLATES.filter(
           item =>
@@ -116,7 +116,7 @@ describe("QuestBoard loot", () => {
           (weaponType === "弓" && ["精良", "傳說"].includes(rarity))
             ? 1
             : 0;
-        expect(weapons).toHaveLength(5 + legacyWeaponCount);
+        expect(weapons).toHaveLength(10 + legacyWeaponCount * 2);
         expect(weapons.every(item => item.equipmentLevel === LOOT_RARITIES.indexOf(rarity) + 1)).toBe(true);
         expect(weapons.every(item => item.minLevel === 1 + LOOT_RARITIES.indexOf(rarity) * 10)).toBe(true);
         expect(
@@ -133,11 +133,15 @@ describe("QuestBoard loot", () => {
     }
   });
 
-  it("assigns every database equipment template to a named set", async () => {
+  it("keeps the original database equipment and adds six named set copies", async () => {
     const module = await import("./equipment-database");
-    expect(module.RPG_EQUIPMENT_TEMPLATES.every(item => Boolean(item.setId))).toBe(true);
-    expect(module.RPG_EQUIPMENT_TEMPLATES.every(item => item.name.includes("·"))).toBe(true);
-    expect(new Set(module.RPG_EQUIPMENT_TEMPLATES.map(item => item.setId)).size).toBe(30);
+    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 270);
+    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(270);
+    expect(originals.every(item => item.setId === undefined)).toBe(true);
+    expect(setCopies).toHaveLength(270);
+    expect(setCopies.every(item => Boolean(item.setId) && item.name.includes("·"))).toBe(true);
+    expect(new Set(setCopies.map(item => item.setId)).size).toBe(36);
+    expect(setCopies.every((item, index) => item.bonus === originals[index].bonus)).toBe(true);
   });
 
   it("preserves the existing 65% ordinary drop chance", () => {

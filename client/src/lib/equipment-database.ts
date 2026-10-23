@@ -65,82 +65,82 @@ const LEGACY_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
   { name: '綠翡翠護符', slot: '護身符', rarity: '精良', description: "依照設計基準打造的精良護身符。", bonus: '生命 +60 · 防禦 +7', icon: 'star', minLevel: 11, equipmentLevel: 2 },
   { name: '疾風護符', slot: '護身符', rarity: '精良', description: "依照設計基準打造的精良護身符。", bonus: '力量 +6 · 閃避率 +2.0%', icon: 'star', minLevel: 11, equipmentLevel: 2 },
   { name: '堅固防禦護符', slot: '護身符', rarity: '精良', description: "依照設計基準打造的精良護身符。", bonus: '生命 +60 · 防禦 +8', icon: 'star', minLevel: 11, equipmentLevel: 2 },
-  { name: '曙光聖衛盔', setId: 'dawn-warden', slot: '頭盔', rarity: '稀有', description: "曙光聖衛套裝的頭盔，守護黎明前線。", bonus: '生命 +130 · 防禦 +13 · 力量 +12', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
+  { name: '騎士榮耀鐵盔', slot: '頭盔', rarity: '稀有', description: "依照設計基準打造的稀有頭盔。", bonus: '生命 +130 · 防禦 +13 · 力量 +12', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
   { name: '幻影刺客兜帽', slot: '頭盔', rarity: '稀有', description: "依照設計基準打造的稀有頭盔。", bonus: '防禦 +10 · 力量 +16 · 閃避率 +3.5%', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
   { name: '大魔法師面罩', slot: '頭盔', rarity: '稀有', description: "依照設計基準打造的稀有頭盔。", bonus: '生命 +90 · 防禦 +9 · 智力 +18', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
   { name: '大地守護者鋼盔', slot: '頭盔', rarity: '稀有', description: "依照設計基準打造的稀有頭盔。", bonus: '生命 +150 · 防禦 +15', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
   { name: '狂戰士骨盔', slot: '頭盔', rarity: '稀有', description: "依照設計基準打造的稀有頭盔。", bonus: '生命 +100 · 防禦 +11 · 力量 +17', icon: 'shield-check', minLevel: 21, equipmentLevel: 3 },
-  { name: '曙光聖衛胸甲', setId: 'dawn-warden', slot: '胸甲', rarity: '稀有', description: "曙光聖衛套裝的胸甲，承受最猛烈的衝擊。", bonus: '生命 +140 · 防禦 +15 · 力量 +11', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
+  { name: '聖殿騎士胸甲', slot: '胸甲', rarity: '稀有', description: "依照設計基準打造的稀有胸甲。", bonus: '生命 +140 · 防禦 +15 · 力量 +11', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
   { name: '暗影皮革胸甲', slot: '胸甲', rarity: '稀有', description: "依照設計基準打造的稀有胸甲。", bonus: '生命 +100 · 防禦 +11 · 力量 +15 · 閃避率 +3.8%', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
   { name: '星空秘法長袍', slot: '胸甲', rarity: '稀有', description: "依照設計基準打造的稀有胸甲。", bonus: '生命 +110 · 防禦 +10 · 智力 +19', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
   { name: '熔岩重鎧', slot: '胸甲', rarity: '稀有', description: "依照設計基準打造的稀有胸甲。", bonus: '生命 +150 · 防禦 +15', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
   { name: '疾風獵手輕甲', slot: '胸甲', rarity: '稀有', description: "依照設計基準打造的稀有胸甲。", bonus: '生命 +90 · 防禦 +12 · 力量 +14 · 閃避率 +3.0%', icon: 'shield', minLevel: 21, equipmentLevel: 3 },
-  { name: '曙光聖衛護腿', setId: 'dawn-warden', slot: '護腿', rarity: '稀有', description: "曙光聖衛套裝的護腿，穩住每一步防線。", bonus: '生命 +120 · 防禦 +14 · 力量 +12', icon: 'target', minLevel: 21, equipmentLevel: 3 },
+  { name: '聖殿騎士護腿', slot: '護腿', rarity: '稀有', description: "依照設計基準打造的稀有護腿。", bonus: '生命 +120 · 防禦 +14 · 力量 +12', icon: 'target', minLevel: 21, equipmentLevel: 3 },
   { name: '暗影皮革護腿', slot: '護腿', rarity: '稀有', description: "依照設計基準打造的稀有護腿。", bonus: '防禦 +10 · 力量 +13 · 閃避率 +3.2%', icon: 'target', minLevel: 21, equipmentLevel: 3 },
   { name: '星空秘法長褲', slot: '護腿', rarity: '稀有', description: "依照設計基準打造的稀有護腿。", bonus: '生命 +85 · 防禦 +9 · 智力 +15', icon: 'target', minLevel: 21, equipmentLevel: 3 },
   { name: '熔岩護腿', slot: '護腿', rarity: '稀有', description: "依照設計基準打造的稀有護腿。", bonus: '生命 +130 · 防禦 +15', icon: 'target', minLevel: 21, equipmentLevel: 3 },
   { name: '疾風獵手護腿', slot: '護腿', rarity: '稀有', description: "依照設計基準打造的稀有護腿。", bonus: '防禦 +11 · 力量 +12 · 閃避率 +4.0%', icon: 'target', minLevel: 21, equipmentLevel: 3 },
-  { name: '曙光聖衛徽章', setId: 'dawn-warden', slot: '護身符', rarity: '稀有', description: "曙光聖衛套裝的徽章，銘刻守護誓言。", bonus: '生命 +110 · 力量 +18', icon: 'star', minLevel: 21, equipmentLevel: 3 },
+  { name: '血色誓約護符', slot: '護身符', rarity: '稀有', description: "依照設計基準打造的稀有護身符。", bonus: '生命 +110 · 力量 +18', icon: 'star', minLevel: 21, equipmentLevel: 3 },
   { name: '魔力源泉項鏈', slot: '護身符', rarity: '稀有', description: "依照設計基準打造的稀有護身符。", bonus: '生命 +90 · 智力 +20', icon: 'star', minLevel: 21, equipmentLevel: 3 },
   { name: '巨龍之鱗護符', slot: '護身符', rarity: '稀有', description: "依照設計基準打造的稀有護身符。", bonus: '生命 +140 · 防禦 +14', icon: 'star', minLevel: 21, equipmentLevel: 3 },
   { name: '致命影爪吊墜', slot: '護身符', rarity: '稀有', description: "依照設計基準打造的稀有護身符。", bonus: '力量 +16 · 閃避率 +3.5%', icon: 'star', minLevel: 21, equipmentLevel: 3 },
   { name: '靈動風神護符', slot: '護身符', rarity: '稀有', description: "依照設計基準打造的稀有護身符。", bonus: '防禦 +10 · 智力 +12 · 閃避率 +3.0%', icon: 'star', minLevel: 21, equipmentLevel: 3 },
-  { name: '星界賢者冠', setId: 'astral-sage', slot: '頭盔', rarity: '史詩', description: "星界賢者套裝的頭冠，映照群星智慧。", bonus: '生命 +180 · 防禦 +22 · 力量 +26', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
+  { name: '龍骨戰盔', slot: '頭盔', rarity: '史詩', description: "依照設計基準打造的史詩頭盔。", bonus: '生命 +180 · 防禦 +22 · 力量 +26', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
   { name: '夜魔暗影頭飾', slot: '頭盔', rarity: '史詩', description: "依照設計基準打造的史詩頭盔。", bonus: '防禦 +18 · 力量 +30 · 閃避率 +5.5%', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
   { name: '大天使冠冕', slot: '頭盔', rarity: '史詩', description: "依照設計基準打造的史詩頭盔。", bonus: '生命 +160 · 防禦 +17 · 智力 +33', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
   { name: '不朽巨魔鐵盔', slot: '頭盔', rarity: '史詩', description: "依照設計基準打造的史詩頭盔。", bonus: '生命 +200 · 防禦 +25', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
   { name: '風暴主宰面具', slot: '頭盔', rarity: '史詩', description: "依照設計基準打造的史詩頭盔。", bonus: '生命 +150 · 防禦 +20 · 力量 +18 · 智力 +22', icon: 'shield-check', minLevel: 31, equipmentLevel: 4 },
-  { name: '星界賢者法袍', setId: 'astral-sage', slot: '胸甲', rarity: '史詩', description: "星界賢者套裝的法袍，流動著星軌奧能。", bonus: '生命 +190 · 防禦 +24 · 力量 +28', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
+  { name: '滅世者重鎧', slot: '胸甲', rarity: '史詩', description: "依照設計基準打造的史詩胸甲。", bonus: '生命 +190 · 防禦 +24 · 力量 +28', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
   { name: '虛空獵手皮甲', slot: '胸甲', rarity: '史詩', description: "依照設計基準打造的史詩胸甲。", bonus: '生命 +160 · 防禦 +18 · 力量 +32 · 閃避率 +6.0%', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
   { name: '大元素師長袍', slot: '胸甲', rarity: '史詩', description: "依照設計基準打造的史詩胸甲。", bonus: '生命 +170 · 防禦 +16 · 智力 +35', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
   { name: '泰坦壁壘重甲', slot: '胸甲', rarity: '史詩', description: "依照設計基準打造的史詩胸甲。", bonus: '生命 +200 · 防禦 +25', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
   { name: '幻影幽靈胸甲', slot: '胸甲', rarity: '史詩', description: "依照設計基準打造的史詩胸甲。", bonus: '生命 +150 · 防禦 +20 · 力量 +25 · 閃避率 +5.0%', icon: 'shield', minLevel: 31, equipmentLevel: 4 },
-  { name: '星界賢者長褲', setId: 'astral-sage', slot: '護腿', rarity: '史詩', description: "星界賢者套裝的長褲，讓施法步伐更加穩定。", bonus: '生命 +175 · 防禦 +21 · 力量 +25', icon: 'target', minLevel: 31, equipmentLevel: 4 },
+  { name: '滅世者護腿', slot: '護腿', rarity: '史詩', description: "依照設計基準打造的史詩護腿。", bonus: '生命 +175 · 防禦 +21 · 力量 +25', icon: 'target', minLevel: 31, equipmentLevel: 4 },
   { name: '虛空獵手護腿', slot: '護腿', rarity: '史詩', description: "依照設計基準打造的史詩護腿。", bonus: '防禦 +17 · 力量 +28 · 閃避率 +5.8%', icon: 'target', minLevel: 31, equipmentLevel: 4 },
   { name: '大元素師長褲', slot: '護腿', rarity: '史詩', description: "依照設計基準打造的史詩護腿。", bonus: '生命 +150 · 防禦 +16 · 智力 +29', icon: 'target', minLevel: 31, equipmentLevel: 4 },
   { name: '泰坦壁壘護腿', slot: '護腿', rarity: '史詩', description: "依照設計基準打造的史詩護腿。", bonus: '生命 +190 · 防禦 +23', icon: 'target', minLevel: 31, equipmentLevel: 4 },
   { name: '幻影幽靈護腿', slot: '護腿', rarity: '史詩', description: "依照設計基準打造的史詩護腿。", bonus: '防禦 +18 · 力量 +24 · 閃避率 +6.5%', icon: 'target', minLevel: 31, equipmentLevel: 4 },
-  { name: '星界賢者星印', setId: 'astral-sage', slot: '護身符', rarity: '史詩', description: "星界賢者套裝的星印，凝聚純粹奧術。", bonus: '生命 +160 · 力量 +33', icon: 'star', minLevel: 31, equipmentLevel: 4 },
+  { name: '屠龍者胸針', slot: '護身符', rarity: '史詩', description: "依照設計基準打造的史詩護身符。", bonus: '生命 +160 · 力量 +33', icon: 'star', minLevel: 31, equipmentLevel: 4 },
   { name: '靈魂吞噬者護符', slot: '護身符', rarity: '史詩', description: "依照設計基準打造的史詩護身符。", bonus: '生命 +150 · 智力 +34', icon: 'star', minLevel: 31, equipmentLevel: 4 },
   { name: '不滅之星護符', slot: '護身符', rarity: '史詩', description: "依照設計基準打造的史詩護身符。", bonus: '生命 +180 · 防禦 +24', icon: 'star', minLevel: 31, equipmentLevel: 4 },
   { name: '影之刺客吊墜', slot: '護身符', rarity: '史詩', description: "依照設計基準打造的史詩護身符。", bonus: '力量 +30 · 閃避率 +6.0%', icon: 'star', minLevel: 31, equipmentLevel: 4 },
   { name: '時空樞紐護符', slot: '護身符', rarity: '史詩', description: "依照設計基準打造的史詩護身符。", bonus: '防禦 +19 · 智力 +28 · 閃避率 +4.5%', icon: 'star', minLevel: 31, equipmentLevel: 4 },
-  { name: '霜影獵行兜帽', setId: 'frost-stalker', slot: '頭盔', rarity: '傳說', description: "霜影獵行套裝的兜帽，藏身於無聲寒霧。", bonus: '生命 +240 · 防禦 +32 · 力量 +46', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
+  { name: '阿修羅戰神兜盔', slot: '頭盔', rarity: '傳說', description: "依照設計基準打造的傳說頭盔。", bonus: '生命 +240 · 防禦 +32 · 力量 +46', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
   { name: '夜魔主宰面具', slot: '頭盔', rarity: '傳說', description: "依照設計基準打造的傳說頭盔。", bonus: '防禦 +28 · 力量 +52 · 閃避率 +8.5%', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
   { name: '星辰智者之冠', slot: '頭盔', rarity: '傳說', description: "依照設計基準打造的傳說頭盔。", bonus: '生命 +220 · 防禦 +26 · 智力 +53', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
   { name: '永恆山脈巨盔', slot: '頭盔', rarity: '傳說', description: "依照設計基準打造的傳說頭盔。", bonus: '生命 +280 · 防禦 +40', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
   { name: '鳳凰涅槃面具', slot: '頭盔', rarity: '傳說', description: "依照設計基準打造的傳說頭盔。", bonus: '生命 +260 · 防禦 +30 · 力量 +38 · 智力 +38', icon: 'shield-check', minLevel: 41, equipmentLevel: 5 },
-  { name: '霜影獵行皮甲', setId: 'frost-stalker', slot: '胸甲', rarity: '傳說', description: "霜影獵行套裝的皮甲，貼合獵人的身形。", bonus: '生命 +270 · 防禦 +38 · 力量 +42', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
+  { name: '帝王光輝聖甲', slot: '胸甲', rarity: '傳說', description: "依照設計基準打造的傳說胸甲。", bonus: '生命 +270 · 防禦 +38 · 力量 +42', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
   { name: '深淵獵手皮革', slot: '胸甲', rarity: '傳說', description: "依照設計基準打造的傳說胸甲。", bonus: '生命 +210 · 防禦 +28 · 力量 +52 · 閃避率 +9.5%', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
   { name: '真理之門法袍', slot: '胸甲', rarity: '傳說', description: "依照設計基準打造的傳說胸甲。", bonus: '生命 +230 · 防禦 +27 · 智力 +55', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
   { name: '神聖守護者之壁', slot: '胸甲', rarity: '傳說', description: "依照設計基準打造的傳說胸甲。", bonus: '生命 +280 · 防禦 +40', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
   { name: '疾風劍聖法衣', slot: '胸甲', rarity: '傳說', description: "依照設計基準打造的傳說胸甲。", bonus: '生命 +220 · 防禦 +30 · 力量 +48 · 閃避率 +8.0%', icon: 'shield', minLevel: 41, equipmentLevel: 5 },
-  { name: '霜影獵行護腿', setId: 'frost-stalker', slot: '護腿', rarity: '傳說', description: "霜影獵行套裝的護腿，追蹤時不留足跡。", bonus: '生命 +230 · 防禦 +31 · 力量 +41', icon: 'target', minLevel: 41, equipmentLevel: 5 },
+  { name: '阿修羅戰神護腿', slot: '護腿', rarity: '傳說', description: "依照設計基準打造的傳說護腿。", bonus: '生命 +230 · 防禦 +31 · 力量 +41', icon: 'target', minLevel: 41, equipmentLevel: 5 },
   { name: '夜魔主宰護腿', slot: '護腿', rarity: '傳說', description: "依照設計基準打造的傳說護腿。", bonus: '防禦 +27 · 力量 +46 · 閃避率 +8.8%', icon: 'target', minLevel: 41, equipmentLevel: 5 },
   { name: '星辰智者長褲', slot: '護腿', rarity: '傳說', description: "依照設計基準打造的傳說護腿。", bonus: '生命 +200 · 防禦 +26 · 智力 +45', icon: 'target', minLevel: 41, equipmentLevel: 5 },
   { name: '永恆山脈護腿', slot: '護腿', rarity: '傳說', description: "依照設計基準打造的傳說護腿。", bonus: '生命 +260 · 防禦 +36', icon: 'target', minLevel: 41, equipmentLevel: 5 },
   { name: '疾風劍聖護腿', slot: '護腿', rarity: '傳說', description: "依照設計基準打造的傳說護腿。", bonus: '防禦 +28 · 力量 +44 · 閃避率 +10.0%', icon: 'target', minLevel: 41, equipmentLevel: 5 },
-  { name: '霜影獵行護符', setId: 'frost-stalker', slot: '護身符', rarity: '傳說', description: "霜影獵行套裝的護符，封存寒星獵意。", bonus: '生命 +220 · 力量 +50 · 智力 +45', icon: 'star', minLevel: 41, equipmentLevel: 5 },
+  { name: '太陽神之眼', slot: '護身符', rarity: '傳說', description: "依照設計基準打造的傳說護身符。", bonus: '生命 +220 · 力量 +50 · 智力 +45', icon: 'star', minLevel: 41, equipmentLevel: 5 },
   { name: '美杜莎之瞳', slot: '護身符', rarity: '傳說', description: "依照設計基準打造的傳說護身符。", bonus: '力量 +48 · 閃避率 +9.0%', icon: 'star', minLevel: 41, equipmentLevel: 5 },
   { name: '利維坦之心', slot: '護身符', rarity: '傳說', description: "依照設計基準打造的傳說護身符。", bonus: '生命 +280 · 防禦 +35', icon: 'star', minLevel: 41, equipmentLevel: 5 },
   { name: '獵王之牙', slot: '護身符', rarity: '傳說', description: "依照設計基準打造的傳說護身符。", bonus: '力量 +54 · 閃避率 +7.0%', icon: 'star', minLevel: 41, equipmentLevel: 5 },
   { name: '時空交界水晶', slot: '護身符', rarity: '傳說', description: "依照設計基準打造的傳說護身符。", bonus: '防禦 +29 · 智力 +48 · 閃避率 +8.5%', icon: 'star', minLevel: 41, equipmentLevel: 5 },
-  { name: '深淵征服戰盔', setId: 'abyss-conqueror', slot: '頭盔', rarity: '神話', description: "深淵征服套裝的戰盔，直面終焉黑潮。", bonus: '生命 +350 · 防禦 +52 · 力量 +65 · 智力 +60', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
+  { name: '創世者·秩序之冠', slot: '頭盔', rarity: '神話', description: "依照設計基準打造的神話頭盔。", bonus: '生命 +350 · 防禦 +52 · 力量 +65 · 智力 +60', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
   { name: '虛空之主·終焉面具', slot: '頭盔', rarity: '神話', description: "依照設計基準打造的神話頭盔。", bonus: '防禦 +45 · 力量 +78 · 閃避率 +13.5%', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
   { name: '全知者·真理之冠', slot: '頭盔', rarity: '神話', description: "依照設計基準打造的神話頭盔。", bonus: '生命 +320 · 防禦 +42 · 智力 +80', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
   { name: '滅世巨神·荒古重盔 (極品)', slot: '頭盔', rarity: '神話', description: "依照設計基準打造的神話頭盔。", bonus: '生命 +400 · 防禦 +65', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
   { name: '末日狂刃·血神之面 (極品)', slot: '頭盔', rarity: '神話', description: "依照設計基準打造的神話頭盔。", bonus: '生命 +320 · 防禦 +48 · 力量 +85', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
-  { name: '深淵征服重甲', setId: 'abyss-conqueror', slot: '胸甲', rarity: '神話', description: "深淵征服套裝的重甲，承載征服者的意志。", bonus: '生命 +370 · 防禦 +58 · 力量 +60 · 智力 +60', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
+  { name: '創世者·不朽聖軀', slot: '胸甲', rarity: '神話', description: "依照設計基準打造的神話胸甲。", bonus: '生命 +370 · 防禦 +58 · 力量 +60 · 智力 +60', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
   { name: '虛空之主·無形影甲', slot: '胸甲', rarity: '神話', description: "依照設計基準打造的神話胸甲。", bonus: '生命 +300 · 防禦 +43 · 力量 +76 · 閃避率 +15.0%', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
   { name: '全知者·元素起源法袍', slot: '胸甲', rarity: '神話', description: "依照設計基準打造的神話胸甲。", bonus: '生命 +310 · 防禦 +41 · 智力 +78', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
   { name: '滅世巨神·永恆堡壘 (極品)', slot: '胸甲', rarity: '神話', description: "依照設計基準打造的神話胸甲。", bonus: '生命 +400 · 防禦 +65', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
   { name: '末日狂刃·屠戮胸甲 (極品)', slot: '胸甲', rarity: '神話', description: "依照設計基準打造的神話胸甲。", bonus: '生命 +350 · 防禦 +50 · 力量 +85', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
-  { name: '深淵征服護腿', setId: 'abyss-conqueror', slot: '護腿', rarity: '神話', description: "深淵征服套裝的護腿，踏過破碎星界。", bonus: '生命 +320 · 防禦 +48 · 力量 +62 · 智力 +58', icon: 'target', minLevel: 51, equipmentLevel: 6 },
+  { name: '創世者·踏空神履', slot: '護腿', rarity: '神話', description: "依照設計基準打造的神話護腿。", bonus: '生命 +320 · 防禦 +48 · 力量 +62 · 智力 +58', icon: 'target', minLevel: 51, equipmentLevel: 6 },
   { name: '虛空之主·幻影護腿', slot: '護腿', rarity: '神話', description: "依照設計基準打造的神話護腿。", bonus: '防禦 +42 · 力量 +72 · 閃避率 +13.0%', icon: 'target', minLevel: 51, equipmentLevel: 6 },
   { name: '全知者·星軌長褲', slot: '護腿', rarity: '神話', description: "依照設計基準打造的神話護腿。", bonus: '生命 +290 · 防禦 +41 · 智力 +70', icon: 'target', minLevel: 51, equipmentLevel: 6 },
   { name: '滅世巨神·大地之足', slot: '護腿', rarity: '神話', description: "依照設計基準打造的神話護腿。", bonus: '生命 +360 · 防禦 +55', icon: 'target', minLevel: 51, equipmentLevel: 6 },
   { name: '末日狂刃·疾風戰腿', slot: '護腿', rarity: '神話', description: "依照設計基準打造的神話護腿。", bonus: '防禦 +44 · 力量 +75 · 閃避率 +12.0%', icon: 'target', minLevel: 51, equipmentLevel: 6 },
-  { name: '深淵征服核心', setId: 'abyss-conqueror', slot: '護身符', rarity: '神話', description: "深淵征服套裝的核心，燃燒著終焉之力。", bonus: '生命 +380 · 防禦 +50 · 力量 +80 · 智力 +80 · 閃避率 +11.0%', icon: 'star', minLevel: 51, equipmentLevel: 6 },
+  { name: '創世核心·萬物之源 (極品)', slot: '護身符', rarity: '神話', description: "依照設計基準打造的神話護身符。", bonus: '生命 +380 · 防禦 +50 · 力量 +80 · 智力 +80 · 閃避率 +11.0%', icon: 'star', minLevel: 51, equipmentLevel: 6 },
   { name: '深淵之眼·終極恐懼 (極品)', slot: '護身符', rarity: '神話', description: "依照設計基準打造的神話護身符。", bonus: '力量 +85 · 閃避率 +14.0%', icon: 'star', minLevel: 51, equipmentLevel: 6 },
   { name: '時光之輪·永恆交響', slot: '護身符', rarity: '神話', description: "依照設計基準打造的神話護身符。", bonus: '生命 +340 · 防禦 +48 · 智力 +75 · 閃避率 +12.5%', icon: 'star', minLevel: 51, equipmentLevel: 6 },
   { name: '阿瓦隆之庇護·神聖之心 (極品)', slot: '護身符', rarity: '神話', description: "依照設計基準打造的神話護身符。", bonus: '生命 +400 · 防禦 +60', icon: 'star', minLevel: 51, equipmentLevel: 6 },
@@ -229,15 +229,16 @@ const generatedWeaponTemplates: EquipmentDatabaseTemplate[] = weaponRarityProfil
     )
 );
 
-const equipmentSetThemes = [
+const sixSetThemes = [
   { id: "dawn-warden", name: "曙光聖衛" },
+  { id: "moon-stalker", name: "影月獵行" },
   { id: "astral-sage", name: "星界賢者" },
-  { id: "frost-stalker", name: "霜影獵行" },
-  { id: "abyss-conqueror", name: "深淵征服" },
-  { id: "verdant-vanguard", name: "翠野先鋒" },
+  { id: "titan-bastion", name: "鐵壁巨神" },
+  { id: "storm-sword", name: "風暴劍魂" },
+  { id: "azure-dragon", name: "蒼龍天命" },
 ] as const;
 
-const equipmentSlotNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
+const setPieceNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
   頭盔: "盔",
   胸甲: "胸甲",
   武器: "武器",
@@ -245,32 +246,65 @@ const equipmentSlotNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
   護身符: "徽記",
 };
 
-function applyEquipmentSetMetadata(
+const weaponFamilyIndex: Record<string, number> = {
+  "曙光劍": 0,
+  "獵影短刀": 0,
+  "林風弓": 0,
+  "木靈法杖": 0,
+  "鐵衛劍": 1,
+  "迅牙短刀": 1,
+  "沙羽弓": 1,
+  "藍晶法杖": 1,
+  "月影劍": 2,
+  "毒棘短刀": 2,
+  "月弦弓": 2,
+  "星語法杖": 2,
+  "王道劍": 3,
+  "幻步短刀": 3,
+  "天穹弓": 3,
+  "炎脈法杖": 3,
+  "星界劍": 4,
+  "虛空短刀": 4,
+  "日輪弓": 4,
+  "創世法杖": 4,
+};
+
+const originalRpgEquipmentTemplates = [
+  ...LEGACY_EQUIPMENT_TEMPLATES,
+  ...generatedWeaponTemplates,
+];
+
+function getSetFamilyIndex(
+  template: EquipmentDatabaseTemplate,
   templates: EquipmentDatabaseTemplate[]
-): EquipmentDatabaseTemplate[] {
-  const counters = new Map<string, number>();
-  return templates.map(template => {
-    const counterKey = `${template.rarity}-${template.slot}`;
-    const groupIndex = counters.get(counterKey) ?? 0;
-    counters.set(counterKey, groupIndex + 1);
-    const theme = equipmentSetThemes[groupIndex % equipmentSetThemes.length];
-    const variantIndex = Math.floor(groupIndex / equipmentSetThemes.length) + 1;
+) {
+  if (template.slot === "武器") {
+    const weaponKey = Object.keys(weaponFamilyIndex).find(key =>
+      template.name.includes(key)
+    );
+    return weaponKey ? weaponFamilyIndex[weaponKey] : 5;
+  }
+  return templates.filter(
+    item => item.rarity === template.rarity && item.slot === template.slot
+  ).indexOf(template) % sixSetThemes.length;
+}
+
+const sixSetEquipmentTemplates: EquipmentDatabaseTemplate[] =
+  originalRpgEquipmentTemplates.map(template => {
+    const familyIndex = getSetFamilyIndex(template, originalRpgEquipmentTemplates);
+    const theme = sixSetThemes[familyIndex];
     const pieceName = template.weaponType
-      ? `${template.weaponType}${equipmentSlotNames.武器}`
-      : equipmentSlotNames[template.slot];
-    const variantName = variantIndex > 1 ? `·款${variantIndex}` : "";
+      ? `${template.weaponType}${setPieceNames.武器}`
+      : setPieceNames[template.slot];
     return {
       ...template,
       setId: `${theme.id}-${template.rarity}`,
-      name: `${theme.name}·${template.rarity}${pieceName}${variantName}`,
-      description: `${theme.name}套裝的${template.rarity}${pieceName}，同系列裝備可啟用套裝效果。`,
+      name: `${theme.name}·${template.rarity}${pieceName}`,
+      description: `${theme.name}套裝的${template.rarity}${pieceName}，沿用原始裝備數值。`,
     };
   });
-}
 
 export const RPG_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
-  ...applyEquipmentSetMetadata([
-    ...LEGACY_EQUIPMENT_TEMPLATES,
-    ...generatedWeaponTemplates,
-  ]),
+  ...originalRpgEquipmentTemplates,
+  ...sixSetEquipmentTemplates,
 ];
