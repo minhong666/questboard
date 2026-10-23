@@ -219,6 +219,18 @@ type BattleStatus = {
   turnsRemaining: number;
   damagePerTurn: number;
 };
+type BattleFx = {
+  id: number;
+  action: "attack" | "skill" | "idle";
+  monsterDamage: number;
+  playerDamage: number;
+  healing: number;
+  critical: boolean;
+  monsterDodged: boolean;
+  playerDodged: boolean;
+  monsterDefeated: boolean;
+  playerDefeated: boolean;
+};
 function applyBattleStatusEffects(
   current: BattleStatus[],
   effects: (SkillStatusEffect | undefined)[],
@@ -1823,6 +1835,8 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [battle, setBattle] = useState<BattleState | null>(null);
+  const [battleFx, setBattleFx] = useState<BattleFx | null>(null);
+  const battleFxIdRef = useRef(0);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [selectedLootCategory, setSelectedLootCategory] =
     useState<LootCategory>("頭盔");
@@ -2490,6 +2504,7 @@ export default function Home() {
       allAvailableMonsters.find(monster => monster.id === battle.monsterId) ??
       null)
     : null;
+  const BattleMonsterIcon = activeBattleMonster?.icon ?? Skull;
   const skillPreviewMonster =
     activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
   const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
@@ -3182,6 +3197,10 @@ export default function Home() {
     showToast(`合成成功：${fusion.result.rarity} ${fusion.result.name}`);
   };
 
+  const showBattleFx = (effect: Omit<BattleFx, "id">) => {
+    battleFxIdRef.current += 1;
+    setBattleFx({ ...effect, id: battleFxIdRef.current });
+  };
   const startBattle = (monster: Monster) => {
     const isSoulTrialMonster = monster.id.startsWith("soul-trial-");
     const cooldownUntil = isSoulTrialMonster
@@ -3226,6 +3245,7 @@ export default function Home() {
       lootDrop: null,
       outcome: "fighting",
     });
+    setBattleFx(null);
   };
 
   const runBattleTurn = (skillId?: string) => {
@@ -3442,6 +3462,17 @@ export default function Home() {
         lootDrop,
         outcome: "victory" as const,
       };
+      showBattleFx({
+        action: selectedSkill ? "skill" : "attack",
+        monsterDamage: damageDealt + statusDamage,
+        playerDamage: reactiveDamageOnDeath,
+        healing: lifestealHealing + activeBuffHealing,
+        critical: criticalHit,
+        monsterDodged: false,
+        playerDodged: false,
+        monsterDefeated: true,
+        playerDefeated: false,
+      });
       setBattle(nextBattle);
       setState(previous => {
         const previousDefeatedMonsterIds = Array.isArray(
@@ -3562,6 +3593,17 @@ export default function Home() {
     ];
     const nextDamageTaken = battle.damageTaken + damageTaken;
     if (playerHealth <= 0) {
+      showBattleFx({
+        action: selectedSkill ? "skill" : "attack",
+        monsterDamage: damageDealt + statusDamage,
+        playerDamage: damageTaken,
+        healing: lifestealHealing + activeBuffHealing,
+        critical: criticalHit || monsterCritical,
+        monsterDodged: monsterDodges,
+        playerDodged: playerDodges,
+        monsterDefeated: false,
+        playerDefeated: true,
+      });
       const isSoulTrialBattle = monster.id.startsWith("soul-trial-");
       if (isSoulTrialBattle) {
         setBattle({
@@ -3640,6 +3682,17 @@ export default function Home() {
       );
       return;
     }
+    showBattleFx({
+      action: selectedSkill ? "skill" : "attack",
+      monsterDamage: damageDealt + statusDamage,
+      playerDamage: damageTaken,
+      healing: lifestealHealing + activeBuffHealing,
+      critical: criticalHit || monsterCritical,
+      monsterDodged: monsterDodges,
+      playerDodged: playerDodges,
+      monsterDefeated: false,
+      playerDefeated: false,
+    });
     setBattle({
       ...battle,
       playerHealth,
@@ -7336,10 +7389,25 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <div className="battle-arena">
-              <div className="battle-unit player-unit">
+            <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
+              <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
+                <div className={`battle-visual battle-visual-player battle-hero-${state.jobClass} ${battleFx?.action === "attack" || battleFx?.action === "skill" ? "is-attacking" : ""}`}>
+                  <div className="battle-hero-aura" />
+                  <div className="battle-character-art">
+                    {getTaskIcon(classDefinition.icon, 48)}
+                  </div>
+                  {battleFx?.playerDamage ? (
+                    <span className="battle-float battle-float-damage">−{battleFx.playerDamage}</span>
+                  ) : null}
+                  {battleFx?.healing ? (
+                    <span className="battle-float battle-float-heal">+{battleFx.healing}</span>
+                  ) : null}
+                  {battleFx?.playerDodged ? (
+                    <span className="battle-float battle-float-dodge">閃避</span>
+                  ) : null}
+                </div>
                 <span className="battle-unit-label">
-                  MIRA · LV. {player.level}
+                  {state.userName || "冒險者"} · LV. {player.level}
                 </span>
                 <strong>{battle.playerHealth}</strong>
                 <div className="battle-hp-track">
@@ -7351,8 +7419,22 @@ export default function Home() {
                 </div>
                 <small>/ {effectiveAbilities.health} 生命</small>
               </div>
-              <div className="battle-vs">VS</div>
-              <div className="battle-unit enemy-unit">
+              <div className="battle-vs"><span>VS</span><i /></div>
+              <div className={`battle-unit enemy-unit ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
+                <div className={`battle-visual battle-visual-enemy monster-tone-${activeBattleMonster.tone} ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
+                  <div className="battle-monster-aura" />
+                  <div className="battle-monster-art">
+                    <BattleMonsterIcon size={50} strokeWidth={1.8} />
+                  </div>
+                  {battleFx?.monsterDamage ? (
+                    <span className={`battle-float battle-float-damage ${battleFx.critical ? "is-critical" : ""}`}>
+                      −{battleFx.monsterDamage}{battleFx.critical ? "!" : ""}
+                    </span>
+                  ) : null}
+                  {battleFx?.monsterDodged ? (
+                    <span className="battle-float battle-float-dodge">閃避</span>
+                  ) : null}
+                </div>
                 <span className="battle-unit-label">
                   {activeBattleMonster.name} · LV. {activeBattleMonster.level}
                 </span>
