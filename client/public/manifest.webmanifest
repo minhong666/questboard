@@ -1,0 +1,19 @@
+{
+  "name": "QuestBoard · RPG 待辦賓果",
+  "short_name": "QuestBoard",
+  "description": "把今天的小事，變成下一段冒險的經驗值。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#080e1d",
+  "theme_color": "#111a33",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/questboard-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
