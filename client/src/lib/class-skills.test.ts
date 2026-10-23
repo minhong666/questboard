@@ -128,6 +128,10 @@ describe("class-specific special skills", () => {
       "狂戰重擊",
       "滅世斬",
     ]);
+    const knightHeart = getUnlockedSpecialSkills("warrior", 25, 0)[0];
+    expect(knightHeart.name).toBe("騎士之心");
+    expect(knightHeart.durationTurns).toBe(3);
+    expect(knightHeart.description).toContain("持續 3 回合");
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     expect(skill.description).toBe("造成自身1.5倍的傷害；冷卻 4 回合。");
     expect(skill.damageMultiplier).toBe(1.5);

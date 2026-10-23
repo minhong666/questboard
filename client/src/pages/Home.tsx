@@ -7641,7 +7641,7 @@ export default function Home() {
                                 </small>
                               )}
                             </span>
-                            <small>{cooldown > 0 ? `冷卻 ${cooldown} 回合` : skill.effectType === "buff" ? "持續 2 回合" : `破防 ${skill.defensePiercePercent}%`}</small>
+                            <small>{cooldown > 0 ? `冷卻 ${cooldown} 回合` : skill.effectType === "buff" ? `持續 ${skill.durationTurns} 回合` : `破防 ${skill.defensePiercePercent}%`}</small>
                           </button>
                         );
                       })}

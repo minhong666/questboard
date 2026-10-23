@@ -200,7 +200,7 @@ export function getUnlockedSpecialSkills(
           ),
       effectType: isKnightHeart ? "buff" : isArcherFocus ? "passive" : "damage",
       description: isKnightHeart
-        ? "自身造成傷害 +20%，受到傷害 −20%，持續 2 回合；冷卻 5 回合。"
+        ? "自身造成傷害 +20%，受到傷害 −20%，持續 3 回合；冷卻 5 回合。"
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
         : isArcherPiercingShot
@@ -213,7 +213,7 @@ export function getUnlockedSpecialSkills(
           ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
           : `${damageType}技能，造成 ${isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
       cooldownTurns,
-      durationTurns: isKnightHeart ? 2 : 0,
+      durationTurns: isKnightHeart ? 3 : 0,
       damageBonusPercent: isKnightHeart ? 20 : 0,
       damageReductionPercent: isKnightHeart ? 20 : 0,
       flatDamageBonus: 0,
