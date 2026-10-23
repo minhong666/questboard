@@ -1,5 +1,6 @@
 import {
   clampDefensePiercePercent,
+  type SkillStatusEffect,
   type SpecialCombatSkill,
 } from "./class-skills";
 
@@ -123,7 +124,8 @@ function createSpecializationSkill(
   critRateBonusPercent = 0,
   dodgeRateBonusPercent = 0,
   cooldownTurns = effectType === "buff" ? 5 : 3,
-  executeBelowHealthPercent = 0
+  executeBelowHealthPercent = 0,
+  statusEffect?: SkillStatusEffect
 ): SpecialCombatSkill {
   const isMage = specialization.jobClass === "mage";
   const damageReductionLabel = damageReductionPercent >= 0
@@ -153,7 +155,7 @@ function createSpecializationSkill(
         ? `轉職專精技能：造成傷害 +${damageBonusPercent}%，${damageReductionLabel}，每回合恢復最大生命 ${healPercentMaxHealth}%，持續 ${durationTurns} 回合。`
         : effectType === "passive"
           ? `轉職專精被動：暴擊率增加 ${critRateBonusPercent}%，暴擊傷害增加 ${critDamageBonusPercent}%，閃避增加 ${dodgeRateBonusPercent}%。`
-          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${damageReductionPercent !== 0 ? `，${damageReductionLabel}，持續 ${durationTurns} 回合` : ""}${executeBelowHealthPercent > 0 ? `，敵人生命低於 ${executeBelowHealthPercent}% 時直接斬殺` : ""}。`,
+          : `轉職專精技能：造成 ${damageMultiplier.toFixed(2)} 倍${isMage ? "魔法" : "物理"}傷害${defensePiercePercent > 0 ? `，防禦穿透 ${clampDefensePiercePercent(defensePiercePercent)}%` : ""}${damageReductionPercent !== 0 ? `，${damageReductionLabel}，持續 ${durationTurns} 回合` : ""}${executeBelowHealthPercent > 0 ? `，敵人生命低於 ${executeBelowHealthPercent}% 時直接斬殺` : ""}${statusEffect?.damagePercentOfSkill ? `，每回合受到該技能 ${statusEffect.damagePercentOfSkill}% 魔法傷害，持續 ${statusEffect.durationTurns} 回合` : statusEffect?.kind === "冰凍" ? `，無法攻擊 ${statusEffect.durationTurns} 回合` : ""}。`,
     cooldownTurns,
     durationTurns,
     damageBonusPercent,
@@ -164,6 +166,7 @@ function createSpecializationSkill(
     dodgeRateBonusPercent,
     executeBelowHealthPercent,
     healPercentMaxHealth,
+    statusEffect,
   };
 }
 
@@ -192,14 +195,94 @@ export function getAllSpecializationSkills(
       createSpecializationSkill(specialization, 100, "終焉狙殺", "damage", 4.2, 60, 0, 0, 0, 0, 0, 0, 0, 8),
     ],
     "mage-elementalist": [
-      createSpecializationSkill(specialization, 50, "元素共鳴", "damage", 2.2, 25),
-      createSpecializationSkill(specialization, 75, "元素爆裂", "damage", 3.1, 45),
-      createSpecializationSkill(specialization, 100, "天災降臨", "damage", 4.2, 65),
+      createSpecializationSkill(specialization, 50, "元素共鳴", "damage", 2, 25),
+      createSpecializationSkill(specialization, 75, "元素爆裂", "damage", 3.1, 45, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(
+        specialization,
+        100,
+        "天災降臨",
+        "damage",
+        4.2,
+        60,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        0,
+        {
+          kind: "災厄",
+          element: "奧術",
+          chance: 1,
+          durationTurns: 3,
+          damagePerTurn: 0,
+          damagePercentOfSkill: 5,
+        }
+      ),
     ],
     "mage-frostguard": [
-      createSpecializationSkill(specialization, 50, "寒霜護體", "buff", 0, 0, 0, 25),
-      createSpecializationSkill(specialization, 75, "冰封審判", "damage", 2.1, 40),
-      createSpecializationSkill(specialization, 100, "絕對零度", "damage", 3.3, 60),
+      {
+        ...createSpecializationSkill(specialization, 50, "寒霜護體", "buff", 0, 0, -20, 50, 0, 0, 2, 0, 0, 5),
+        description: "轉職專精技能：受到傷害 −50%，造成傷害 −20%，持續 2 回合；冷卻 5 回合。",
+      },
+      {
+        ...createSpecializationSkill(
+          specialization,
+          75,
+          "冰封審判",
+          "damage",
+          2.1,
+          20,
+          0,
+          30,
+          0,
+          0,
+          2,
+          0,
+          0,
+          5,
+          0,
+          {
+            kind: "冰凍",
+            element: "冰霜",
+            chance: 1,
+            durationTurns: 2,
+            damagePerTurn: 0,
+          }
+        ),
+        defensePiercePercent: 20,
+        description: "轉職專精技能：造成 2.10 倍魔法傷害，防禦穿透 20%，受到傷害 −30%，持續 2 回合；冷卻 5 回合。",
+      },
+      {
+        ...createSpecializationSkill(
+          specialization,
+          100,
+          "絕對零度",
+          "damage",
+          3.3,
+          50,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          5,
+          0,
+          {
+            kind: "冰凍",
+            element: "冰霜",
+            chance: 1,
+            durationTurns: 2,
+            damagePerTurn: 0,
+          }
+        ),
+        description: "轉職專精技能：造成 3.30 倍魔法傷害，防禦穿透 50%，並讓對手無法攻擊 2 回合；冷卻 5 回合。",
+      },
     ],
     "rogue-assassin": [
       createSpecializationSkill(specialization, 50, "暗殺契約", "damage", 2.5, 30),
