@@ -54,7 +54,7 @@ const ROGUE_SKILL_STEP = 10;
 const ROGUE_SKILL_LIMIT = 3;
 const WARRIOR_SKILL_LIMIT = 4;
 const warriorSkillNames = ["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"];
-const archerSkillNames = ["鷹眼"];
+const archerSkillNames = ["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"];
 const mageSkillNames = ["火球術", "冰霜矛", "雷霆風暴", "隕星術"];
 const rogueSkillNames = ["背刺", "影刃連擊", "死亡標記"];
 
@@ -79,7 +79,13 @@ export function getNextSkillUnlockThreshold(
   }
   if (jobClass === "warrior" && safeAttributeValue(strength) >= 100) return null;
   if (jobClass === "archer") {
-    return safeAttributeValue(intelligence) < 5 ? 5 : null;
+    const unlockedCount = Math.min(
+      archerSkillNames.length,
+      Math.floor(safeAttributeValue(critRate) / 5)
+    );
+    return unlockedCount < archerSkillNames.length
+      ? (unlockedCount + 1) * 5
+      : null;
   }
   if (jobClass !== "warrior" && jobClass !== "mage") return null;
   const currentValue = safeAttributeValue(
@@ -100,7 +106,7 @@ export function getUnlockedSpecialSkills(
 
   const isRogue = jobClass === "rogue";
   const isArcher = jobClass === "archer";
-  const attributeName = isRogue
+  const attributeName = isRogue || isArcher
     ? "暴擊率"
     : jobClass === "warrior"
       ? "力量"
@@ -116,11 +122,11 @@ export function getUnlockedSpecialSkills(
         ? mageSkillNames
         : rogueSkillNames;
   const currentValue = safeAttributeValue(
-    isRogue ? critRate : jobClass === "warrior" ? strength : intelligence
+    isRogue || isArcher ? critRate : jobClass === "warrior" ? strength : intelligence
   );
   const skillStep = isRogue ? ROGUE_SKILL_STEP : isArcher ? 5 : SKILL_STEP;
   const skillCount = isArcher
-    ? Math.min(1, Math.floor(currentValue / skillStep))
+    ? Math.min(archerSkillNames.length, Math.floor(currentValue / skillStep))
     : jobClass === "warrior"
     ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
     : isRogue
@@ -186,12 +192,12 @@ export function getUnlockedSpecialSkills(
 }
 
 export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 5 : 100;
+  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,
-    jobClass === "mage" || jobClass === "archer" ? maxValue : 0,
-    jobClass === "rogue" ? maxValue : 0
+    jobClass === "mage" ? maxValue : 0,
+    jobClass === "rogue" || jobClass === "archer" ? maxValue : 0
   );
 }
 
