@@ -4117,6 +4117,19 @@ h2 {
   flex: 1;
   line-height: 1.4;
 }
+.toast-undo-button {
+  flex: 0 0 auto;
+  padding: 4px 7px !important;
+  color: #c9c4ff !important;
+  border: 1px solid rgba(169, 158, 255, 0.42) !important;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.toast-undo-button:hover {
+  color: #ffffff !important;
+  background: rgba(145, 130, 255, 0.18) !important;
+}
 .toast-message button {
   display: grid;
   place-items: center;
