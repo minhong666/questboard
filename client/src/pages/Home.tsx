@@ -7529,7 +7529,7 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
+            <div className="battle-arena">
               <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
                 <div className="battle-effects battle-effects-player">
                   {battleFx?.playerDamage ? (
