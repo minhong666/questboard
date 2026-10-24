@@ -4215,7 +4215,8 @@ h2 {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #58c99e, #9fe4d3);
-  transition: width 0.3s ease;
+  will-change: width;
+  transition: width 0.65s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .enemy-unit .battle-hp-track span {
   background: linear-gradient(90deg, #d36c77, #f2a0aa);
