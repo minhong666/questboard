@@ -5032,8 +5032,9 @@ export default function Home() {
             <div className="brand-subtitle">DAILY RPG PLANNER</div>
           </div>
         </div>
-        <div className="sidebar-section-label">冒險地圖</div>
-        <nav className="sidebar-nav">
+        <div className="sidebar-scroll" aria-label="側邊導覽選單">
+          <div className="sidebar-section-label">冒險地圖</div>
+          <nav className="sidebar-nav" aria-label="冒險地圖">
           <button
             className={`sidebar-link ${activePage === "dashboard" ? "active" : ""}`}
             onClick={() => navigateTo("dashboard")}
@@ -5113,9 +5114,9 @@ export default function Home() {
             <Trophy size={18} />
             <span>成就里程碑</span>
           </button>
-        </nav>
-        <div className="sidebar-section-label sidebar-label-spaced">系統</div>
-        <nav className="sidebar-nav">
+          </nav>
+          <div className="sidebar-section-label sidebar-label-spaced">系統</div>
+          <nav className="sidebar-nav" aria-label="系統">
           <button
             type="button"
             className="sidebar-link"
@@ -5135,7 +5136,8 @@ export default function Home() {
             <ShieldCheck size={18} />
             <span>資料安全</span>
           </button>
-        </nav>
+          </nav>
+        </div>
         <div className="sidebar-footer-card">
           <div className="mini-spark">
             <Sparkles size={16} />
