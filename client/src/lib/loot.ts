@@ -792,6 +792,53 @@ export function rollLoot(
   };
 }
 
+/**
+ * Rolls the optional item inside a daily quest chest.
+ * Gold and XP are awarded by the app state layer; this handles only the
+ * 35% equipment / 35% treasure / 30% empty item roll.
+ */
+export function rollQuestChestLoot(
+  playerLevel: number,
+  random: () => number = Math.random,
+  now: () => number = Date.now
+): LootItem | null {
+  const itemRoll = random();
+  if (itemRoll >= 0.7) return null;
+
+  const level = Math.max(1, Math.floor(playerLevel));
+  const monster = { level };
+  const rolledRarity = rollRarity(monster, random);
+  const idSuffix = () => `${now()}-${Math.floor(random() * 1_000_000)}`;
+
+  if (itemRoll < 0.35) {
+    const pool = getEquipmentPool(monster);
+    const template = pick(pool.length > 0 ? pool : equipmentTemplates, random);
+    const rarity = higherRarity(template.rarity, rolledRarity);
+    const affixes = rollEquipmentAffixes(rarity, random);
+    return {
+      ...template,
+      id: `${template.name}-${idSuffix()}`,
+      kind: "equipment",
+      rarity,
+      bonus: scaleBonusByRarity(template.bonus, template.rarity, rarity),
+      affixes,
+    };
+  }
+
+  const template = pick(treasureTemplates, random);
+  const affixes = rollTreasureAffixes(rolledRarity);
+  const baseValue = getTreasureSellValue(rolledRarity, level);
+  return {
+    ...template,
+    id: `${template.name}-${idSuffix()}`,
+    kind: "treasure",
+    slot: "寶藏",
+    rarity: rolledRarity,
+    sellValue: applyTreasureAffixes(baseValue, affixes),
+    affixes,
+  };
+}
+
 function parseEquipmentAffixes(value: unknown): EquipmentAffix[] {
   if (!Array.isArray(value)) return [];
   const affixes: EquipmentAffix[] = [];
