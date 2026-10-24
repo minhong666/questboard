@@ -61,6 +61,7 @@ import {
   prepareEquipmentFusion,
   removeTreasureFromInventory,
   rollLoot,
+  rollQuestChestLoot,
   toggleEquippedItemIds,
   type EquipmentItem,
   type LootItem,
@@ -335,6 +336,8 @@ type AppState = {
   combatStats: CombatStats;
   archerDodgeFailStacks: number;
   allTasksBonusClaimed: boolean;
+  dailyQuestChestClaims?: number[];
+  dailyQuestChestPeriodKey?: string;
   inventory: LootItem[];
   equippedItemIds: string[];
   skillUpgradePoints: number;
@@ -483,6 +486,13 @@ function normalizeAchievementIds(value: unknown): string[] {
   return Array.isArray(value)
     ? [...new Set(value.filter((id): id is string => typeof id === "string"))]
     : [];
+}
+
+function normalizeDailyQuestChestClaims(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((milestone): milestone is number =>
+    milestone === 3 || milestone === 6 || milestone === 9
+  ))];
 }
 
 const defaultNotificationSettings: NotificationSettings = {
@@ -1263,6 +1273,8 @@ const initialState: AppState = {
   combatStats: defaultCombatStats,
   archerDodgeFailStacks: 0,
   allTasksBonusClaimed: false,
+  dailyQuestChestClaims: [],
+  dailyQuestChestPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   inventory: [],
   equippedItemIds: [],
   skillUpgradePoints: 14,
@@ -1484,6 +1496,13 @@ function loadState(): AppState {
         parsed.archerDodgeFailStacks
       ),
       allTasksBonusClaimed: parsed.allTasksBonusClaimed === true,
+      dailyQuestChestClaims: normalizeDailyQuestChestClaims(
+        parsed.dailyQuestChestClaims
+      ),
+      dailyQuestChestPeriodKey:
+        typeof parsed.dailyQuestChestPeriodKey === "string"
+          ? parsed.dailyQuestChestPeriodKey
+          : getRepeatPeriodKey("daily", new Date(), dailyResetMinutes),
       inventory,
       equippedItemIds,
       skillUpgradePoints,
@@ -2162,6 +2181,15 @@ export default function Home() {
   );
   const activeTasks = boardTasks.length;
   const completedTasks = boardTasks.filter(task => task.completed).length;
+  const dailyChestPeriodKey = getRepeatPeriodKey(
+    "daily",
+    new Date(currentTime),
+    state.dailyResetMinutes
+  );
+  const dailyChestClaims =
+    state.dailyQuestChestPeriodKey === dailyChestPeriodKey
+      ? normalizeDailyQuestChestClaims(state.dailyQuestChestClaims)
+      : [];
   const completionPercent = activeTasks
     ? Math.round((completedTasks / activeTasks) * 100)
     : 0;
@@ -3291,6 +3319,8 @@ export default function Home() {
             tasks,
             boardRefreshPeriodKey: dailyPeriodKey,
             allTasksBonusClaimed: false,
+            dailyQuestChestClaims: [],
+            dailyQuestChestPeriodKey: dailyPeriodKey,
           }
         : previous;
     });
@@ -3373,6 +3403,12 @@ export default function Home() {
       soulTrialCooldownUntil: 0,
       combatStats: defaultCombatStats,
       allTasksBonusClaimed: false,
+      dailyQuestChestClaims: [],
+      dailyQuestChestPeriodKey: getRepeatPeriodKey(
+        "daily",
+        new Date(),
+        previous.dailyResetMinutes
+      ),
       inventory: [],
       equippedItemIds: [],
       jobClass: previous.jobClass,
@@ -4468,7 +4504,45 @@ export default function Home() {
       Math.round(task.xp * (1 + experienceBonusPercent / 100))
     );
     const xpDelta = nextCompleted ? earnedXp : -(task.awardedXp ?? task.xp);
-    const nextTotalXp = Math.max(0, state.totalXp + xpDelta);
+    const nextTasksPreview = state.tasks.map(item =>
+      item.id === task.id ? { ...item, completed: nextCompleted } : item
+    );
+    const completedTaskCount = nextTasksPreview.filter(
+      item => item.slot < boardSlotCount && item.completed
+    ).length;
+    const dailyChestMilestones = [3, 6, 9];
+    const currentDailyPeriodKey = getRepeatPeriodKey(
+      "daily",
+      new Date(),
+      state.dailyResetMinutes
+    );
+    const claimedChestMilestones =
+      state.dailyQuestChestPeriodKey === currentDailyPeriodKey
+        ? normalizeDailyQuestChestClaims(state.dailyQuestChestClaims)
+        : [];
+    const newlyUnlockedChestMilestones = nextCompleted
+      ? dailyChestMilestones.filter(
+          milestone =>
+            completedTaskCount >= milestone &&
+            !claimedChestMilestones.includes(milestone)
+        )
+      : [];
+    const chestRewards = newlyUnlockedChestMilestones.map(milestone => ({
+      milestone,
+      gold: 50 + Math.floor(Math.random() * 26),
+      xp: 50 + Math.floor(Math.random() * 76),
+      loot: rollQuestChestLoot(
+        getPlayerStats(state.totalXp).level,
+        Math.random,
+        Date.now
+      ),
+    }));
+    const chestGold = chestRewards.reduce((total, reward) => total + reward.gold, 0);
+    const chestXp = chestRewards.reduce((total, reward) => total + reward.xp, 0);
+    const chestLoot = chestRewards.flatMap(reward =>
+      reward.loot ? [reward.loot] : []
+    );
+    const nextTotalXp = Math.max(0, state.totalXp + xpDelta + chestXp);
     const nextLevel = getPlayerStats(nextTotalXp).level;
     const levelUps = Math.max(0, nextLevel - state.abilityLevel);
     const earnedAbilityPoints = levelUps * 5;
@@ -4501,6 +4575,7 @@ export default function Home() {
           0,
           previous.coins +
             (nextCompleted ? task.coins : -task.coins) +
+            chestGold +
             (allTasksBonus ? 50 : 0)
         ),
         abilityPoints:
@@ -4510,12 +4585,25 @@ export default function Home() {
         skillUpgradePoints: previous.skillUpgradePoints + levelUps,
         abilityLevel: Math.max(previous.abilityLevel, nextLevel),
         allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
+        dailyQuestChestClaims:
+          nextCompleted && newlyUnlockedChestMilestones.length > 0
+            ? [...new Set([
+                ...claimedChestMilestones,
+                ...newlyUnlockedChestMilestones,
+              ])]
+            : claimedChestMilestones,
+        dailyQuestChestPeriodKey: currentDailyPeriodKey,
+        inventory:
+          chestLoot.length > 0
+            ? [...previous.inventory, ...chestLoot]
+            : previous.inventory,
         weeklyStats: nextCompleted
           ? addWeeklyStats(
               previous.weeklyStats,
               {
                 tasksCompleted: 1,
-                coinsEarned: task.coins + (allTasksBonus ? 50 : 0),
+                coinsEarned:
+                  task.coins + chestGold + (allTasksBonus ? 50 : 0),
                 levelsGained: levelUps,
                 abilitiesGained: levelGrowth.abilities,
               },
@@ -4568,14 +4656,18 @@ export default function Home() {
         allTasksCompleteNow && !state.allTasksBonusClaimed
           ? " · 全任務完成：+5 點能力點、+50 金幣"
           : "";
+      const chestMessage =
+        chestRewards.length > 0
+          ? ` · 解鎖 ${chestRewards.map(reward => `${reward.milestone} 任務寶箱`).join("、")}：+${chestGold} 金幣、+${chestXp} XP${chestLoot.length > 0 ? `、獲得${chestLoot.map(item => item.name).join("、")}` : ""}`
+          : "";
       const levelUpMessage =
         levelUps > 0
           ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${earnedAbilityPoints} 點能力點與 ${levelUps} 點技能升級點數`
           : "";
       showToast(
         newLines > bingoLines.length
-          ? `任務完成！+${earnedXp} XP · +${task.coins} 金幣${levelUpMessage}${allTasksBonusMessage} · 額外寶箱已解鎖`
-          : `任務完成！+${earnedXp} XP · +${task.coins} 金幣${levelUpMessage}${allTasksBonusMessage}`
+          ? `任務完成！+${earnedXp} XP · +${task.coins} 金幣${levelUpMessage}${allTasksBonusMessage}${chestMessage} · 額外寶箱已解鎖`
+          : `任務完成！+${earnedXp} XP · +${task.coins} 金幣${levelUpMessage}${allTasksBonusMessage}${chestMessage}`
       );
     } else {
       showToast("任務標記為未完成，獎勵已回收");
@@ -6596,6 +6688,28 @@ export default function Home() {
                         </strong>
                       </div>
                       <ChevronRight size={16} />
+                    </div>
+                    <div className="daily-chest-progress">
+                      <div className="daily-chest-heading">
+                        <span>每日任務寶箱</span>
+                        <small>金幣 50–75 · XP 50–125 · 裝備／寶物各 35%</small>
+                      </div>
+                      <div className="daily-chest-milestones">
+                        {[3, 6, 9].map(milestone => {
+                          const claimed = dailyChestClaims.includes(milestone);
+                          const reached = completedTasks >= milestone;
+                          return (
+                            <div
+                              key={milestone}
+                              className={`daily-chest-milestone ${claimed ? "claimed" : reached ? "reached" : ""}`}
+                            >
+                              <Gift size={14} />
+                              <strong>{milestone}</strong>
+                              <span>{claimed ? "已領取" : reached ? "可領取" : "待解鎖"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 

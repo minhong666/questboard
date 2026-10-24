@@ -17,6 +17,7 @@ import {
   prepareEquipmentFusion,
   removeTreasureFromInventory,
   rollLoot,
+  rollQuestChestLoot,
   scaleBonusByRarity,
   toggleEquippedItemIds,
   type EquipmentAffix,
@@ -72,6 +73,28 @@ describe("QuestBoard loot", () => {
       "護腿",
       "護身符",
     ]);
+  });
+
+  it("rolls equipment, treasure, or no item at the requested chest rates", () => {
+    expect(
+      rollQuestChestLoot(10, randomSequence(0.1, 0, 0), () => 100)
+    ).toMatchObject({
+      kind: "equipment",
+      id: expect.stringContaining("-100-"),
+    });
+    expect(
+      rollQuestChestLoot(10, randomSequence(0.5, 0, 0), () => 101)
+    ).toMatchObject({
+      kind: "treasure",
+      id: expect.stringContaining("-101-"),
+    });
+    expect(rollQuestChestLoot(10, randomSequence(0.7), () => 102)).toBeNull();
+  });
+
+  it("keeps chest equipment eligible for the player's level", () => {
+    const loot = rollQuestChestLoot(1, randomSequence(0.1, 0, 0), () => 103);
+    expect(loot?.kind).toBe("equipment");
+    expect(loot?.rarity).toBe("普通");
   });
 
   it("limits each weapon type to its matching job class", () => {
