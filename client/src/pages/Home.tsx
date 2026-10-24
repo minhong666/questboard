@@ -4679,6 +4679,16 @@ export default function Home() {
     setModal({ kind: "reward" });
   };
 
+  const openEditReward = (reward: Reward) => {
+    setRewardDraft({
+      title: reward.title,
+      description: reward.description,
+      cost: String(reward.cost),
+      icon: reward.icon,
+    });
+    setModal({ kind: "reward", rewardId: reward.id });
+  };
+
   const saveReward = () => {
     const title = rewardDraft.title.trim();
     const cost = Number.parseInt(rewardDraft.cost, 10);
@@ -4686,23 +4696,42 @@ export default function Home() {
       showToast("獎勵名稱與金幣需求都要填寫");
       return;
     }
-    setState(previous => ({
-      ...previous,
-      rewards: [
-        ...previous.rewards,
-        {
-          id: `reward-${Date.now()}`,
-          title,
-          description:
-            rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
-          cost,
-          icon: rewardDraft.icon,
-          custom: true,
-        },
-      ],
-    }));
+    setState(previous => {
+      if (modal?.kind === "reward" && modal.rewardId) {
+        return {
+          ...previous,
+          rewards: previous.rewards.map(reward =>
+            reward.id === modal.rewardId
+              ? {
+                  ...reward,
+                  title,
+                  description:
+                    rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
+                  cost,
+                  icon: rewardDraft.icon,
+                }
+              : reward
+          ),
+        };
+      }
+      return {
+        ...previous,
+        rewards: [
+          ...previous.rewards,
+          {
+            id: `reward-${Date.now()}`,
+            title,
+            description:
+              rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
+            cost,
+            icon: rewardDraft.icon,
+            custom: true,
+          },
+        ],
+      };
+    });
     setModal(null);
-    showToast("自訂獎勵已放入寶庫");
+    showToast(modal?.kind === "reward" && modal.rewardId ? "獎勵設定已更新" : "自訂獎勵已放入寶庫");
   };
 
   const redeemReward = (reward: Reward) => {
@@ -4733,7 +4762,7 @@ export default function Home() {
       ...previous,
       rewards: previous.rewards.filter(item => item.id !== reward.id),
     }));
-    showToast("自訂獎勵已刪除");
+    showToast("獎勵已刪除");
   };
 
   const addTimerActivity = () => {
@@ -7537,7 +7566,14 @@ export default function Home() {
                         <div className="reward-icon">
                           <Gift size={21} />
                         </div>
-                        {reward.custom && (
+                        <div className="reward-card-actions">
+                          <button
+                            className="reward-edit"
+                            aria-label={`編輯${reward.title}`}
+                            onClick={() => openEditReward(reward)}
+                          >
+                            <Pencil size={14} />
+                          </button>
                           <button
                             className="reward-delete"
                             aria-label={`刪除${reward.title}`}
@@ -7545,7 +7581,7 @@ export default function Home() {
                           >
                             <Trash2 size={14} />
                           </button>
-                        )}
+                        </div>
                       </div>
                       <h3>{reward.title}</h3>
                       <p>{reward.description}</p>
@@ -8427,7 +8463,9 @@ export default function Home() {
                           ? "手機 App 與通知"
                         : modal.kind === "saves"
                           ? "冒險存檔"
-                          : "建立自訂獎勵"}
+                          : modal.kind === "reward" && modal.rewardId
+                            ? "編輯獎勵"
+                            : "建立自訂獎勵"}
                 </h2>
               </div>
               <button
@@ -8812,7 +8850,7 @@ export default function Home() {
                   className="primary-button modal-submit"
                   onClick={saveReward}
                 >
-                  放入獎勵寶庫 <ChevronRight size={16} />
+                  {modal.kind === "reward" && modal.rewardId ? "保存獎勵設定" : "放入獎勵寶庫"} <ChevronRight size={16} />
                 </button>
               </div>
             )}

@@ -3822,6 +3822,10 @@ h2 {
   justify-content: space-between;
   align-items: flex-start;
 }
+.reward-card-actions {
+  display: flex;
+  gap: 4px;
+}
 .reward-icon {
   width: 39px;
   height: 39px;
@@ -3831,6 +3835,7 @@ h2 {
   border-radius: 11px;
   background: rgba(224, 176, 110, 0.12);
 }
+.reward-edit,
 .reward-delete {
   width: 25px;
   height: 25px;
@@ -3839,6 +3844,13 @@ h2 {
   color: #66738f;
   border-radius: 7px;
   background: transparent;
+}
+.reward-edit {
+  color: #8f9cff;
+}
+.reward-edit:hover {
+  color: #d2d6ff;
+  background: rgba(143, 156, 255, 0.1);
 }
 .reward-delete:hover {
   color: #e99baa;
@@ -4216,7 +4228,7 @@ h2 {
   border-radius: inherit;
   background: linear-gradient(90deg, #58c99e, #9fe4d3);
   will-change: width;
-  transition: width 0.65s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: width 1.1s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .enemy-unit .battle-hp-track span {
   background: linear-gradient(90deg, #d36c77, #f2a0aa);
