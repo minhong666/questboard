@@ -114,6 +114,32 @@ button:disabled {
   color: #7784a5;
   font-weight: 700;
 }
+.sidebar-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  margin-right: -4px;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 124, 255, 0.45) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: rgba(139, 124, 255, 0.45);
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(176, 168, 255, 0.72);
+}
 .sidebar-section-label {
   padding: 0 13px 10px;
   font-size: 10px;
