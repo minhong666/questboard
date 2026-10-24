@@ -4078,113 +4078,6 @@ h2 {
   gap: 15px;
   margin-top: 24px;
 }
-.battle-visual {
-  position: relative;
-  display: grid;
-  min-height: 126px;
-  place-items: center;
-  margin: -4px -3px 12px;
-  overflow: visible;
-  border-radius: 15px;
-  background: radial-gradient(circle at 50% 65%, rgba(91, 105, 185, 0.22), transparent 62%);
-}
-.battle-visual-enemy {
-  background: radial-gradient(circle at 50% 65%, rgba(191, 79, 103, 0.2), transparent 62%);
-}
-.battle-hero-aura,
-.battle-monster-aura {
-  position: absolute;
-  width: 82px;
-  height: 82px;
-  border: 1px solid rgba(145, 130, 255, 0.4);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 121, 255, 0.27), transparent 68%);
-  box-shadow: 0 0 28px rgba(139, 121, 255, 0.32);
-  animation: battle-aura-pulse 2.2s ease-in-out infinite;
-}
-.battle-monster-aura {
-  border-color: rgba(232, 119, 132, 0.48);
-  background: radial-gradient(circle, rgba(213, 82, 104, 0.27), transparent 68%);
-  box-shadow: 0 0 28px rgba(213, 82, 104, 0.32);
-}
-.battle-character-art,
-.battle-monster-art {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 74px;
-  height: 74px;
-  color: #d8d2ff;
-  border: 1px solid rgba(179, 168, 255, 0.5);
-  border-radius: 24px 24px 20px 20px;
-  background: linear-gradient(145deg, rgba(112, 101, 230, 0.52), rgba(45, 49, 104, 0.92));
-  box-shadow: 0 10px 22px rgba(4, 8, 22, 0.4), inset 0 0 18px rgba(198, 190, 255, 0.14);
-  animation: battle-idle-float 2.6s ease-in-out infinite;
-}
-.battle-hero-warrior .battle-character-art {
-  color: #ffdc9c;
-  border-radius: 18px 18px 28px 28px;
-  background: linear-gradient(145deg, rgba(184, 111, 74, 0.72), rgba(74, 49, 65, 0.96));
-}
-.battle-hero-archer .battle-character-art {
-  color: #b9f0c6;
-  border-radius: 34px 22px 26px 18px;
-  background: linear-gradient(145deg, rgba(61, 157, 121, 0.7), rgba(31, 73, 79, 0.96));
-}
-.battle-hero-mage .battle-character-art {
-  color: #c9bdff;
-  border-radius: 30px 30px 18px 18px;
-  background: linear-gradient(145deg, rgba(86, 101, 196, 0.76), rgba(44, 42, 102, 0.96));
-}
-.battle-hero-rogue .battle-character-art {
-  color: #ffc0dc;
-  border-radius: 25px 25px 15px 15px;
-  background: linear-gradient(145deg, rgba(155, 69, 133, 0.72), rgba(52, 34, 74, 0.96));
-}
-.battle-monster-art {
-  color: #ffd1d2;
-  border-radius: 45% 45% 35% 35%;
-  background: linear-gradient(145deg, rgba(175, 73, 91, 0.75), rgba(63, 30, 57, 0.96));
-  box-shadow: 0 10px 22px rgba(4, 8, 22, 0.4), inset 0 0 20px rgba(255, 168, 175, 0.13);
-}
-.battle-visual.is-attacking .battle-character-art {
-  animation: battle-hero-strike 0.48s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-}
-.battle-visual-enemy:not(.is-defeated) .battle-monster-art {
-  animation: battle-idle-float 2.8s ease-in-out infinite reverse;
-}
-.battle-visual.is-defeated .battle-monster-art,
-.battle-unit.is-defeated .battle-character-art {
-  animation: battle-defeated 0.7s ease-out both;
-}
-.battle-float {
-  position: absolute;
-  z-index: 4;
-  top: 15px;
-  color: #ff9da5;
-  font-size: 22px;
-  font-weight: 950;
-  line-height: 1;
-  pointer-events: none;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
-  animation: battle-float-up 0.9s cubic-bezier(0.18, 0.75, 0.3, 1) both;
-}
-.battle-float-damage.is-critical {
-  color: #ffd27d;
-  font-size: 27px;
-}
-.battle-float-heal {
-  top: 43px;
-  color: #86e4b9;
-  font-size: 15px;
-  animation-delay: 0.12s;
-}
-.battle-float-dodge {
-  top: 22px;
-  color: #c3caff;
-  font-size: 16px;
-}
 .battle-vs {
   display: grid;
   justify-items: center;
@@ -4195,27 +4088,6 @@ h2 {
   width: 1px;
   height: 36px;
   background: linear-gradient(transparent, rgba(213, 189, 132, 0.65), transparent);
-}
-@keyframes battle-aura-pulse {
-  0%, 100% { transform: scale(0.94); opacity: 0.7; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-@keyframes battle-idle-float {
-  0%, 100% { transform: translateY(2px) rotate(-1deg); }
-  50% { transform: translateY(-5px) rotate(1deg); }
-}
-@keyframes battle-hero-strike {
-  0% { transform: translateX(0) rotate(0); }
-  38% { transform: translateX(24px) rotate(7deg) scale(1.06); }
-  100% { transform: translateX(0) rotate(0); }
-}
-@keyframes battle-defeated {
-  to { transform: translateY(20px) rotate(14deg) scale(0.76); opacity: 0.15; filter: grayscale(1); }
-}
-@keyframes battle-float-up {
-  0% { transform: translateY(8px) scale(0.7); opacity: 0; }
-  18% { transform: translateY(0) scale(1.08); opacity: 1; }
-  100% { transform: translateY(-45px) scale(0.92); opacity: 0; }
 }
 .battle-unit {
   padding: 15px;
@@ -6869,27 +6741,6 @@ h2 {
 .specialization-identity-assassin .specialization-identity-art { color: #ffaccf; border-color: rgba(238, 135, 202, .45); background: rgba(157, 69, 133, .16); }
 .specialization-option-shadowdancer .specialization-option-icon,
 .specialization-identity-shadowdancer .specialization-identity-art { color: #d5c5ff; border-color: rgba(164, 137, 255, .45); background: rgba(95, 74, 173, .16); }
-.battle-specialization-badge {
-  position: absolute;
-  z-index: 3;
-  bottom: 3px;
-  padding: 4px 7px;
-  color: #eeeaff;
-  border: 1px solid rgba(176, 168, 255, .35);
-  border-radius: 999px;
-  background: rgba(20, 24, 53, .84);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .04em;
-}
-.battle-specialization-guardian .battle-character-art { color: #a9d7ff; border-color: rgba(119, 190, 255, .55); background: linear-gradient(145deg, rgba(74, 137, 207, .78), rgba(32, 57, 93, .96)); }
-.battle-specialization-berserker .battle-character-art { color: #ffb178; border-color: rgba(255, 139, 82, .55); background: linear-gradient(145deg, rgba(180, 76, 55, .78), rgba(74, 33, 43, .96)); }
-.battle-specialization-ranger .battle-character-art { color: #9be4b6; border-color: rgba(105, 224, 170, .55); background: linear-gradient(145deg, rgba(56, 168, 116, .78), rgba(27, 75, 67, .96)); }
-.battle-specialization-sniper .battle-character-art { color: #a9d8ff; border-color: rgba(106, 180, 255, .55); background: linear-gradient(145deg, rgba(51, 111, 180, .78), rgba(29, 50, 81, .96)); }
-.battle-specialization-elementalist .battle-character-art { color: #f4c7ff; border-color: rgba(219, 139, 255, .55); background: linear-gradient(145deg, rgba(133, 77, 180, .78), rgba(59, 34, 82, .96)); }
-.battle-specialization-frostguard .battle-character-art { color: #9be7ff; border-color: rgba(106, 211, 255, .55); background: linear-gradient(145deg, rgba(45, 130, 180, .78), rgba(25, 59, 84, .96)); }
-.battle-specialization-assassin .battle-character-art { color: #ffaccf; border-color: rgba(238, 135, 202, .55); background: linear-gradient(145deg, rgba(157, 69, 133, .78), rgba(64, 30, 70, .96)); }
-.battle-specialization-shadowdancer .battle-character-art { color: #d5c5ff; border-color: rgba(164, 137, 255, .55); background: linear-gradient(145deg, rgba(95, 74, 173, .78), rgba(42, 34, 78, .96)); }
 @media (max-width: 520px) {
   .specialization-identity { align-items: flex-start; }
   .specialization-identity-skills { margin-left: auto; }
