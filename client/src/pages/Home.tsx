@@ -8107,7 +8107,13 @@ export default function Home() {
               {undoAction.label}
             </button>
           ) : null}
-          <button aria-label="關閉提示" onClick={() => setToast(null)}>
+          <button
+            aria-label="關閉提示"
+            onClick={() => {
+              clearUndoAction();
+              setToast(null);
+            }}
+          >
             <X size={15} />
           </button>
         </div>
