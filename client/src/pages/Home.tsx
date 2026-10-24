@@ -2754,7 +2754,6 @@ export default function Home() {
       allAvailableMonsters.find(monster => monster.id === battle.monsterId) ??
       null)
     : null;
-  const BattleMonsterIcon = activeBattleMonster?.icon ?? Skull;
   const skillPreviewMonster =
     activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
   const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
@@ -7927,24 +7926,6 @@ export default function Home() {
             </div>
             <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
               <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
-                <div className={`battle-visual battle-visual-player battle-hero-${state.jobClass} battle-specialization-${currentSpecializationVisual.colorClass} ${battleFx?.action === "attack" || battleFx?.action === "skill" ? "is-attacking" : ""}`}>
-                  <div className="battle-hero-aura" />
-                  <div className="battle-character-art">
-                    {getTaskIcon(classDefinition.icon, 48)}
-                  </div>
-                  <span className="battle-specialization-badge">
-                    {specializationSelected ? currentSpecialization.name : "尚未轉職"}
-                  </span>
-                  {battleFx?.playerDamage ? (
-                    <span className="battle-float battle-float-damage">−{battleFx.playerDamage}</span>
-                  ) : null}
-                  {battleFx?.healing ? (
-                    <span className="battle-float battle-float-heal">+{battleFx.healing}</span>
-                  ) : null}
-                  {battleFx?.playerDodged ? (
-                    <span className="battle-float battle-float-dodge">閃避</span>
-                  ) : null}
-                </div>
                 <span className="battle-unit-label">
                   {state.userName || "冒險者"} · LV. {player.level}
                 </span>
@@ -7960,20 +7941,6 @@ export default function Home() {
               </div>
               <div className="battle-vs"><span>VS</span><i /></div>
               <div className={`battle-unit enemy-unit ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
-                <div className={`battle-visual battle-visual-enemy monster-tone-${activeBattleMonster.tone} ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
-                  <div className="battle-monster-aura" />
-                  <div className="battle-monster-art">
-                    <BattleMonsterIcon size={50} strokeWidth={1.8} />
-                  </div>
-                  {battleFx?.monsterDamage ? (
-                    <span className={`battle-float battle-float-damage ${battleFx.critical ? "is-critical" : ""}`}>
-                      −{battleFx.monsterDamage}{battleFx.critical ? "!" : ""}
-                    </span>
-                  ) : null}
-                  {battleFx?.monsterDodged ? (
-                    <span className="battle-float battle-float-dodge">閃避</span>
-                  ) : null}
-                </div>
                 <span className="battle-unit-label">
                   {activeBattleMonster.name} · LV. {activeBattleMonster.level}
                 </span>
