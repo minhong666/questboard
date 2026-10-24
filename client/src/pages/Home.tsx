@@ -8040,7 +8040,7 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
+            <div className="battle-arena">
               <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
                 <span className="battle-unit-label">
                   {state.userName || "冒險者"} · LV. {player.level}
