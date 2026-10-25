@@ -7760,9 +7760,9 @@ export default function Home() {
                   </div>
                   <strong className="timer-mobile-live-clock">
                     {formatTimerDuration(
-                      getTimerElapsedSeconds(
-                        runningTimerActivity.totalSeconds,
-                        state.runningTimer.startedAt,
+                      getTimerTodaySeconds(
+                        runningTimerActivity,
+                        state.runningTimer,
                         currentTime
                       )
                     )}
@@ -7774,10 +7774,6 @@ export default function Home() {
                 <div className="timer-summary-card">
                   <span>今日總追蹤時間 · 00:00 歸零</span>
                   <strong>{formatTimerDuration(totalTimerSeconds)}</strong>
-                </div>
-                <div className="timer-summary-card">
-                  <span>角色目前總 XP</span>
-                  <strong>{state.totalXp}</strong>
                 </div>
                 <div className="timer-summary-card">
                   <span>歷來計時 XP</span>
