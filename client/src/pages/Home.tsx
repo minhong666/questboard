@@ -1122,14 +1122,10 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     ) as MonsterRequirements,
     physicalResistancePercent: boss.physicalResistancePercent,
     magicResistancePercent: boss.magicResistancePercent,
-    dodgeIgnorePercent:
-      boss.dodgeIgnorePercent === undefined ? undefined : boss.dodgeIgnorePercent * 3,
-    lifestealPercent:
-      boss.lifestealPercent === undefined ? undefined : boss.lifestealPercent * 3,
-    explosionDamage:
-      boss.explosionDamage === undefined ? undefined : boss.explosionDamage * 3,
-    reflectDamage:
-      boss.reflectDamage === undefined ? undefined : boss.reflectDamage * 3,
+    dodgeIgnorePercent: boss.dodgeIgnorePercent,
+    lifestealPercent: boss.lifestealPercent,
+    explosionDamage: boss.explosionDamage,
+    reflectDamage: boss.reflectDamage,
   };
 }
 
