@@ -226,6 +226,8 @@ type BattleStatus = {
   element: SkillStatusEffect["element"];
   turnsRemaining: number;
   damagePerTurn: number;
+  breakDamageThreshold?: number;
+  breakDamage?: number;
 };
 type BattleFx = {
   id: number;
@@ -260,6 +262,8 @@ function applyBattleStatusEffects(
         element: effect.element,
         turnsRemaining: effect.durationTurns,
         damagePerTurn,
+        breakDamageThreshold: effect.breakDamageThreshold,
+        breakDamage: effect.breakDamage,
       });
     }
   }
@@ -269,10 +273,14 @@ function applyBattleStatusEffects(
 function tickBattleStatuses(statuses: BattleStatus[]) {
   let damage = 0;
   let frozen = false;
+  let controlLabel: "冰凍" | "石化" | null = null;
   const labels: string[] = [];
   const nextStatuses = statuses
     .map(status => {
-      if (status.kind === "冰凍") frozen = true;
+      if (status.kind === "冰凍" || status.kind === "石化") {
+        frozen = true;
+        controlLabel = status.kind;
+      }
       if (status.damagePerTurn > 0) {
         damage += status.damagePerTurn;
         labels.push(`${status.element}·${status.kind}造成 ${status.damagePerTurn} 傷害`);
@@ -282,7 +290,7 @@ function tickBattleStatuses(statuses: BattleStatus[]) {
       return { ...status, turnsRemaining: status.turnsRemaining - 1 };
     })
     .filter(status => status.turnsRemaining > 0);
-  return { damage, frozen, labels, statuses: nextStatuses };
+  return { damage, frozen, controlLabel, labels, statuses: nextStatuses };
 }
 
 type Task = {
@@ -1076,6 +1084,40 @@ const bosses: Monster[] = [
     isBoss: true,
   },
 ];
+
+function tripleRegionalBossStats(boss: Monster): Monster {
+  return {
+    ...boss,
+    health: boss.health * 3,
+    reward: boss.reward * 3,
+    damage: boss.damage * 3,
+    defense: boss.defense * 3,
+    intelligence: boss.intelligence === undefined ? undefined : boss.intelligence * 3,
+    critRate: boss.critRate * 3,
+    critDamage: boss.critDamage * 3,
+    dodgeRate: boss.dodgeRate * 3,
+    requirements: Object.fromEntries(
+      Object.entries(boss.requirements).map(([key, value]) => [key, (value ?? 0) * 3])
+    ) as MonsterRequirements,
+    physicalResistancePercent:
+      boss.physicalResistancePercent === undefined
+        ? undefined
+        : boss.physicalResistancePercent * 3,
+    magicResistancePercent:
+      boss.magicResistancePercent === undefined
+        ? undefined
+        : boss.magicResistancePercent * 3,
+    dodgeIgnorePercent:
+      boss.dodgeIgnorePercent === undefined ? undefined : boss.dodgeIgnorePercent * 3,
+    lifestealPercent:
+      boss.lifestealPercent === undefined ? undefined : boss.lifestealPercent * 3,
+    explosionDamage:
+      boss.explosionDamage === undefined ? undefined : boss.explosionDamage * 3,
+    reflectDamage:
+      boss.reflectDamage === undefined ? undefined : boss.reflectDamage * 3,
+  };
+}
+
 const defaultAbilities: CharacterAbilities = {
   health: 100,
   strength: 5,
@@ -2280,7 +2322,7 @@ export default function Home() {
   const activeBosses = useMemo(
     () =>
       bosses.map(boss => ({
-        ...boss,
+        ...tripleRegionalBossStats(boss),
         id: `${boss.id}-${weeklyBossRefreshKey}`,
       })),
     [weeklyBossRefreshKey]
@@ -4045,9 +4087,23 @@ export default function Home() {
         : [],
       damageDealt
     );
-    const statusTick = tickBattleStatuses(nextMonsterStatuses);
-    const statusDamage = Math.min(statusTick.damage, Math.max(0, battle.monsterHealth - damageDealt));
-    const statusLogs = statusTick.labels.length > 0 ? `；${statusTick.labels.join("；")}` : "";
+    const petrifyBroken = damageDealt > 200 && nextMonsterStatuses.some(
+      status => status.kind === "石化" && status.breakDamageThreshold !== undefined
+    );
+    const statusesBeforeTick = petrifyBroken
+      ? nextMonsterStatuses.filter(status => status.kind !== "石化")
+      : nextMonsterStatuses;
+    const statusTick = tickBattleStatuses(statusesBeforeTick);
+    const petrifyBreakDamage = petrifyBroken ? 25 : 0;
+    const statusDamage = Math.min(
+      statusTick.damage + petrifyBreakDamage,
+      Math.max(0, battle.monsterHealth - damageDealt)
+    );
+    const statusLabels = [
+      ...statusTick.labels,
+      ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
+    ];
+    const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
     const lifestealHealing = damageDealt > 0
       ? Math.floor(damageDealt * (monster.lifestealPercent ?? 0) / 100)
       : 0;
@@ -4241,7 +4297,7 @@ export default function Home() {
     const nextLogs = [
       ...logs,
       statusTick.frozen
-        ? `${monster.name}被冰凍，無法反擊！`
+        ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
         : `${monster.name}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
@@ -8626,8 +8682,8 @@ export default function Home() {
                     {status.element}·{status.kind} · {status.turnsRemaining} 回合
                     {status.damagePerTurn > 0
                       ? ` · 每回合 ${status.damagePerTurn} 傷害`
-                      : status.kind === "冰凍"
-                        ? " · 跳過反擊"
+                      : status.kind === "冰凍" || status.kind === "石化"
+                        ? " · 無法反擊"
                         : " · 持續中"}
                   </span>
                 ))}
@@ -8731,8 +8787,8 @@ export default function Home() {
                                     ? ` · 每回合 ${skill.statusEffect.damagePerTurn} 傷害`
                                     : skill.statusEffect.damagePercentOfSkill
                                       ? ` · 每回合該技能 ${skill.statusEffect.damagePercentOfSkill}% 傷害`
-                                      : skill.statusEffect.kind === "冰凍"
-                                        ? " · 跳過反擊"
+                                        : skill.statusEffect.kind === "冰凍" || skill.statusEffect.kind === "石化"
+                                        ? " · 無法反擊"
                                         : " · 持續中"}
                                 </small>
                               )}

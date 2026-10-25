@@ -45,6 +45,30 @@ describe("class-specific special skills", () => {
     expect(getNextSkillUnlockThreshold("mage", 500, 50)).toBe(75);
   });
 
+  it("uses the requested mage fireball and meteor damage rules", () => {
+    const skills = getAllSpecialSkills("mage");
+    expect(skills[0]).toMatchObject({
+      name: "火球術",
+      damageMultiplier: 1.5,
+      cooldownTurns: 3,
+    });
+    expect(skills[3]).toMatchObject({
+      name: "隕星術",
+      damageMultiplier: 3,
+      cooldownTurns: 5,
+      statusEffect: {
+        kind: "石化",
+        element: "奧術",
+        chance: 1,
+        durationTurns: 2,
+        damagePerTurn: 5,
+        breakDamageThreshold: 200,
+        breakDamage: 25,
+      },
+    });
+    expect(skills[3].description).toContain("石化");
+  });
+
   it("unlocks archer skills at 5%, 10%, 15%, and 20% critical rate", () => {
     expect(getUnlockedSpecialSkills("archer", 500, 500, 4.9)).toEqual([]);
     expect(getNextSkillUnlockThreshold("archer", 500, 500, 4.9)).toBe(5);
