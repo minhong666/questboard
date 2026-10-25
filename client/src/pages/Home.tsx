@@ -1066,21 +1066,42 @@ const bosses: Monster[] = [
     id: "boss-final",
     name: "最終魔王",
     description: "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
-    level: 150,
-    health: 2000,
-    reward: 3000,
-    damage: 350,
-    defense: 350,
-    intelligence: 400,
-    critRate: 50,
-    critDamage: 300,
+    level: 200,
+    health: 3000,
+    reward: 4500,
+    damage: 525,
+    defense: 525,
+    intelligence: 600,
+    critRate: 75,
+    critDamage: 450,
     dodgeRate: 0,
-    physicalResistancePercent: 30,
-    magicResistancePercent: 30,
+    physicalResistancePercent: 45,
+    magicResistancePercent: 45,
     risk: "終焉風險",
-    requirements: { health: 1200, strength: 180, defense: 180, intelligence: 180 },
+    requirements: { health: 1800, strength: 270, defense: 270, intelligence: 270 },
     icon: Skull,
     tone: "crimson",
+    isBoss: true,
+  },
+  {
+    id: "boss-vampire-lord",
+    name: "吸血鬼領主",
+    description: "以古老血契支配夜幕的區域魔王，能從每次攻擊中奪回生命。",
+    level: 125,
+    health: 3500,
+    reward: 2500,
+    damage: 200,
+    defense: 120,
+    critRate: 30,
+    critDamage: 150,
+    dodgeRate: 35,
+    lifestealPercent: 50,
+    magicResistancePercent: 25,
+    physicalResistancePercent: -10,
+    risk: "極高風險",
+    requirements: {},
+    icon: Skull,
+    tone: "violet",
     isBoss: true,
   },
 ];
@@ -6721,7 +6742,7 @@ export default function Home() {
                       nextWeeklyBossRefreshAt - currentTime
                     )}{" "}
                     · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 區域魔王最低
-                    50 級，最終魔王需達 150 級。
+                    50 級，最終魔王需達 200 級。
                   </p>
                 </div>
                 <div className="boss-warning">
