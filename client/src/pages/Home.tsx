@@ -3860,12 +3860,6 @@ export default function Home() {
       showToast(`${monster.name} 已被擊倒，金幣獎勵已領取`);
       return;
     }
-    const levelForGate =
-      monster.levelGate === "soul" ? soulMemory.level : player.level;
-    if (monster.isBoss && levelForGate < monster.level) {
-      showToast(`需要達到 LV. ${monster.level} 才能挑戰${monster.name}`);
-      return;
-    }
     setBattle({
       monsterId: monster.id,
       monsterSnapshot: monster,
@@ -5410,7 +5404,6 @@ export default function Home() {
   const renderSoulTrialCard = (monster: Monster) => {
     const defeated = defeatedMonsterIds.includes(monster.id);
     const Icon = monster.icon;
-    const levelLocked = soulMemory.level < monster.level;
     return (
       <div
         className={`monster-card panel-card monster-${monster.tone} ${monster.isBoss ? "boss-card" : ""} ${defeated ? "is-defeated" : ""}`}
@@ -5437,9 +5430,7 @@ export default function Home() {
           <span>
             {soulTrialCombatLocked
               ? `靈魂恢復中 · ${formatCooldown(soulTrialCooldownRemaining)}`
-              : levelLocked
-                ? `需要靈魂 LV. ${monster.level}`
-                : `戰鬥風險：${monster.risk}`}
+              : `戰鬥風險：${monster.risk}`}
           </span>
           <span>生命 -{monster.damage}</span>
         </div>
@@ -5463,16 +5454,14 @@ export default function Home() {
           </span>
           <button
             className="monster-attack-button"
-            disabled={defeated || levelLocked || soulTrialCombatLocked}
+            disabled={defeated || soulTrialCombatLocked}
             onClick={() => startBattle(monster)}
           >
             {defeated
               ? "已擊倒"
               : soulTrialCombatLocked
                 ? "靈魂恢復中"
-                : levelLocked
-                  ? "靈魂等級不足"
-                  : "開始戰鬥"}
+                : "開始戰鬥"}
             <ChevronRight size={14} />
           </button>
         </div>
@@ -6526,7 +6515,7 @@ export default function Home() {
                   </div>
                   <div className="boss-warning">
                     <span>挑戰條件</span>
-                    <strong>需要達到對應靈魂等級</strong>
+                    <strong>不設等級限制，能力與風險照常生效</strong>
                   </div>
                 </div>
                 <div className="monster-grid boss-grid">
@@ -6664,8 +6653,7 @@ export default function Home() {
                     {formatRefreshCountdown(
                       nextWeeklyBossRefreshAt - currentTime
                     )}{" "}
-                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 區域魔王最低
-                    50 級，最終魔王需達 150 級。
+                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 可挑戰各等級魔王，戰鬥風險隨等級提高。
                   </p>
                 </div>
                 <div className="boss-warning">
@@ -6677,7 +6665,6 @@ export default function Home() {
                 {activeBosses.map(boss => {
                   const defeated = defeatedMonsterIds.includes(boss.id);
                   const Icon = boss.icon;
-                  const levelLocked = player.level < boss.level;
                   const mechanicLabels = getMonsterMechanicLabels(boss);
                   return (
                     <div
@@ -6706,9 +6693,7 @@ export default function Home() {
                         <span>
                           {combatLocked
                             ? `恢復中 · ${formatCooldown(combatCooldownRemaining)}`
-                            : levelLocked
-                              ? `需要 LV. ${boss.level}`
-                              : `戰鬥風險：${boss.risk}`}
+                            : `戰鬥風險：${boss.risk}`}
                         </span>
                         <span>生命 -{boss.damage}</span>
                       </div>
@@ -6735,16 +6720,14 @@ export default function Home() {
                         </span>
                         <button
                           className="monster-attack-button"
-                          disabled={defeated || levelLocked || combatLocked}
+                          disabled={defeated || combatLocked}
                           onClick={() => startBattle(boss)}
                         >
                           {defeated
                             ? "已擊倒"
                             : combatLocked
                               ? "恢復中"
-                              : levelLocked
-                                ? "等級不足"
-                                : "開始戰鬥"}
+                              : "開始戰鬥"}
                           <ChevronRight size={14} />
                         </button>
                       </div>
