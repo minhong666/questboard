@@ -152,6 +152,61 @@ describe("activity timer helpers", () => {
     }
   });
 
+  it("preserves pomodoro phases and excludes break time from active XP", () => {
+    const now = Date.UTC(2026, 9, 20, 12, 0, 0);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const normalized = normalizeTimerSaveState(
+        [
+          {
+            id: "pomodoro",
+            name: "深度工作",
+            sessions: [
+              {
+                id: "focus-session",
+                startedAt: now - 180_000,
+                endedAt: now,
+                durationSeconds: 60,
+                xpEarned: 1,
+                rewardChecks: 1,
+                abilityPointsEarned: 0,
+              },
+            ],
+          },
+        ],
+        {
+          activityId: "pomodoro",
+          startedAt: now - 90_000,
+          xpEarned: 1,
+          rewardChecks: 1,
+          abilityPointsEarned: 0,
+          pomodoro: {
+            phase: "shortBreak",
+            phaseStartedAt: now - 30_000,
+            phaseDurationSeconds: 300,
+            completedRounds: 1,
+            focusSecondsAccumulated: 60,
+          },
+        }
+      );
+
+      expect(normalized.activities[0]).toMatchObject({
+        totalSeconds: 60,
+        xpEarned: 2,
+      });
+      expect(normalized.runningTimer).toMatchObject({
+        xpEarned: 1,
+        pomodoro: {
+          phase: "shortBreak",
+          completedRounds: 1,
+          focusSecondsAccumulated: 60,
+        },
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("migrates legacy aggregate-only activities into one preserved history session", () => {
     const now = Date.UTC(2026, 9, 20, 12, 0, 0);
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
