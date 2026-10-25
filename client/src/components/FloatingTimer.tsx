@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 import {
   formatTimerDuration,
-  getTimerElapsedSeconds,
   type RunningTimer,
   type TimerActivity,
 } from "../lib/activity-timers";
+import { getTimerTodaySeconds } from "../lib/timer-daily";
 
 type FloatingTimerProps = {
   activity: TimerActivity;
@@ -26,16 +26,6 @@ function getPhaseLabel(phase: NonNullable<RunningTimer["pomodoro"]>["phase"]) {
   return phase === "focus" ? "專注" : phase === "shortBreak" ? "短休息" : "長休息";
 }
 
-function getPhaseElapsedSeconds(
-  phase: NonNullable<RunningTimer["pomodoro"]>,
-  now: number
-) {
-  return Math.min(
-    phase.phaseDurationSeconds,
-    Math.max(0, Math.floor((now - phase.phaseStartedAt) / 1000))
-  );
-}
-
 export function FloatingTimer({
   activity,
   runningTimer,
@@ -46,9 +36,7 @@ export function FloatingTimer({
   onStop,
 }: FloatingTimerProps) {
   const pomodoro = runningTimer.pomodoro;
-  const elapsedSeconds = pomodoro
-    ? getPhaseElapsedSeconds(pomodoro, currentTime)
-    : getTimerElapsedSeconds(activity.totalSeconds, runningTimer.startedAt, currentTime);
+  const elapsedSeconds = getTimerTodaySeconds(activity, runningTimer, currentTime);
   const phaseLabel = pomodoro ? getPhaseLabel(pomodoro.phase) : "計時中";
   const isBreak = pomodoro ? pomodoro.phase !== "focus" : false;
 
@@ -92,7 +80,7 @@ export function FloatingTimer({
             </div>
           </div>
           <div className="floating-timer-detail-clock">
-            <span>{isBreak ? "休息已經過" : "專注已經過"}</span>
+            <span>今天已計時</span>
             <strong>{formatTimerDuration(elapsedSeconds)}</strong>
           </div>
           <div className="floating-timer-actions">
