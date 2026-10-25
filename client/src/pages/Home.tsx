@@ -1072,8 +1072,8 @@ const bosses: Monster[] = [
     damage: 525,
     defense: 525,
     intelligence: 600,
-    critRate: 75,
-    critDamage: 450,
+    critRate: 50,
+    critDamage: 300,
     dodgeRate: 0,
     physicalResistancePercent: 45,
     magicResistancePercent: 45,
@@ -1114,9 +1114,9 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     damage: boss.damage * 3,
     defense: boss.defense * 3,
     intelligence: boss.intelligence === undefined ? undefined : boss.intelligence * 3,
-    critRate: boss.critRate * 3,
-    critDamage: boss.critDamage * 3,
-    dodgeRate: boss.dodgeRate * 3,
+    critRate: boss.critRate,
+    critDamage: boss.critDamage,
+    dodgeRate: boss.dodgeRate,
     requirements: Object.fromEntries(
       Object.entries(boss.requirements).map(([key, value]) => [key, (value ?? 0) * 3])
     ) as MonsterRequirements,
