@@ -96,6 +96,7 @@ import {
 } from "../lib/activity-timer-lock";
 import { getWarriorTotalHealthGrowth } from "../lib/level-growth";
 import { getPlayerLevelStats, getXpForLevel } from "../lib/leveling";
+import { FloatingTimer } from "../components/FloatingTimer";
 import {
   calculateSpecialSkillDamage,
   getAllSpecialSkills,
@@ -2131,6 +2132,7 @@ export default function Home() {
   const [profileDraft, setProfileDraft] = useState("");
   const [timerNameDraft, setTimerNameDraft] = useState("");
   const [timerLockOwned, setTimerLockOwned] = useState(false);
+  const [floatingTimerExpanded, setFloatingTimerExpanded] = useState(false);
   const timerLeaseRef = useRef<ActivityTimerLockLease | null>(null);
   const timerLeaseRunIdRef = useRef<string | null>(null);
   const stateRef = useRef(state);
@@ -8287,6 +8289,21 @@ export default function Home() {
           </footer>
         </div>
       </main>
+
+      {state.runningTimer && runningTimerActivity && (
+        <FloatingTimer
+          activity={runningTimerActivity}
+          runningTimer={state.runningTimer}
+          currentTime={currentTime}
+          expanded={floatingTimerExpanded}
+          onToggleExpanded={() => setFloatingTimerExpanded(value => !value)}
+          onOpenTimerPage={() => {
+            navigateTo("timers");
+            setFloatingTimerExpanded(true);
+          }}
+          onStop={stopActivityTimer}
+        />
+      )}
 
       {setupOpen && (
         <div className="setup-backdrop">
