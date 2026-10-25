@@ -6,6 +6,7 @@ export type TimerSession = {
   xpEarned: number;
   rewardChecks: number;
   abilityPointsEarned: number;
+  pomodoroRoundsCompleted?: number;
 };
 
 export type TimerActivity = {
@@ -15,7 +16,17 @@ export type TimerActivity = {
   xpEarned: number;
   rewardChecks: number;
   abilityPointsEarned: number;
+  pomodoroRoundsCompleted?: number;
   sessions: TimerSession[];
+};
+
+export type PomodoroPhase = "focus" | "shortBreak" | "longBreak";
+export type PomodoroRuntime = {
+  phase: PomodoroPhase;
+  phaseStartedAt: number;
+  phaseDurationSeconds: number;
+  completedRounds: number;
+  focusSecondsAccumulated: number;
 };
 
 export type RunningTimer = {
@@ -24,6 +35,7 @@ export type RunningTimer = {
   xpEarned: number;
   rewardChecks: number;
   abilityPointsEarned: number;
+  pomodoro?: PomodoroRuntime;
 };
 
 export type TimerSaveState = {
@@ -80,7 +92,12 @@ function normalizeSession(
   if (durationMs > MAX_TIMER_SESSION_MS) return null;
 
   seenSessionIds.add(value.id);
-  const sessionMinutes = Math.floor(durationMs / 60_000);
+  const wallDurationSeconds = Math.floor(durationMs / 1000);
+  const durationSeconds = Math.min(
+    wallDurationSeconds,
+    nonnegativeInteger(value.durationSeconds ?? wallDurationSeconds)
+  );
+  const sessionMinutes = Math.floor(durationSeconds / 60);
   const rewardChecks = Math.min(
     sessionMinutes,
     nonnegativeInteger(value.rewardChecks)
@@ -89,7 +106,7 @@ function normalizeSession(
     id: value.id,
     startedAt,
     endedAt,
-    durationSeconds: Math.floor(durationMs / 1000),
+    durationSeconds,
     xpEarned: Math.min(
       sessionMinutes,
       nonnegativeInteger(value.xpEarned ?? rewardChecks)
@@ -99,6 +116,28 @@ function normalizeSession(
       rewardChecks,
       nonnegativeInteger(value.abilityPointsEarned)
     ),
+    pomodoroRoundsCompleted: nonnegativeInteger(value.pomodoroRoundsCompleted),
+  };
+}
+
+function normalizePomodoroRuntime(
+  value: unknown,
+  now: number
+): PomodoroRuntime | undefined {
+  if (!isRecord(value)) return undefined;
+  const phase = value.phase;
+  if (phase !== "focus" && phase !== "shortBreak" && phase !== "longBreak") {
+    return undefined;
+  }
+  const phaseStartedAt = normalizeTimestamp(value.phaseStartedAt, now);
+  const phaseDurationSeconds = nonnegativeInteger(value.phaseDurationSeconds);
+  if (phaseStartedAt === null || phaseDurationSeconds < 1) return undefined;
+  return {
+    phase,
+    phaseStartedAt,
+    phaseDurationSeconds,
+    completedRounds: nonnegativeInteger(value.completedRounds),
+    focusSecondsAccumulated: nonnegativeInteger(value.focusSecondsAccumulated),
   };
 }
 
@@ -194,6 +233,9 @@ export function normalizeTimerSaveState(
         xpEarned,
         rewardChecks,
         abilityPointsEarned,
+        pomodoroRoundsCompleted: safeSum(
+          sessions.map(session => session.pomodoroRoundsCompleted ?? 0)
+        ),
         sessions,
       };
     });
@@ -216,14 +258,27 @@ export function normalizeTimerSaveState(
       MAX_TIMER_RUN_SECONDS,
       Math.max(0, Math.floor((now - runningStartedAt) / 1000))
     );
+    const pomodoro = normalizePomodoroRuntime(runningValue.pomodoro, now);
+    const focusElapsedSeconds = pomodoro
+      ? Math.min(
+          MAX_TIMER_RUN_SECONDS,
+          pomodoro.focusSecondsAccumulated +
+            (pomodoro.phase === "focus"
+              ? Math.min(
+                  pomodoro.phaseDurationSeconds,
+                  Math.max(0, Math.floor((now - pomodoro.phaseStartedAt) / 1000))
+                )
+              : 0)
+        )
+      : elapsedSeconds;
     const maxRunChecks = Math.max(
       0,
-      getCompletedTimerMinutes(runningActivity.totalSeconds + elapsedSeconds) -
+      getCompletedTimerMinutes(runningActivity.totalSeconds + focusElapsedSeconds) -
         runningActivity.rewardChecks
     );
     const maxRunXp = Math.max(
       0,
-      getCompletedTimerMinutes(runningActivity.totalSeconds + elapsedSeconds) -
+      getCompletedTimerMinutes(runningActivity.totalSeconds + focusElapsedSeconds) -
         runningActivity.xpEarned
     );
     const rewardChecks = Math.min(
@@ -243,6 +298,7 @@ export function normalizeTimerSaveState(
         rewardChecks,
         nonnegativeInteger(runningValue.abilityPointsEarned)
       ),
+      pomodoro,
     };
   }
 

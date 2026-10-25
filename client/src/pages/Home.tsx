@@ -83,11 +83,13 @@ import {
   getTimerElapsedSeconds,
   normalizeTimerSaveState,
   rollAbilityPointOutcomes,
+  type PomodoroPhase,
+  type PomodoroRuntime,
   type RunningTimer,
   type TimerActivity,
   type TimerSession,
 } from "../lib/activity-timers";
-import { getTimerTodaySeconds } from "../lib/timer-daily";
+import { getTimerDayStart, getTimerTodaySeconds } from "../lib/timer-daily";
 import {
   acquireActivityTimerLock,
   type ActivityTimerLockLease,
@@ -345,6 +347,7 @@ type AppState = {
   specialization: SpecializationId;
   achievementClaimedIds: string[];
   dailyResetMinutes: number;
+  pomodoroSettings: PomodoroSettings;
   boardRefreshPeriodKey?: string;
   userName: string;
   jobClass: JobClass;
@@ -370,6 +373,15 @@ type RewardDraft = {
 type NotificationSettings = {
   enabled: boolean;
   dailyTaskReminder: boolean;
+};
+
+type PomodoroSettings = {
+  enabled: boolean;
+  focusMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  roundsBeforeLongBreak: number;
+  autoStartNextPhase: boolean;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -481,6 +493,108 @@ const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
 const HEALTH_RECOVERY_INTERVAL_MS =
   HEALTH_RECOVERY_INTERVAL_MINUTES * 60 * 1000;
 const HEALTH_RECOVERY_PERCENT = 0.08;
+const POMODORO_ROUND_XP = 25;
+const defaultPomodoroSettings: PomodoroSettings = {
+  enabled: false,
+  focusMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 15,
+  roundsBeforeLongBreak: 4,
+  autoStartNextPhase: true,
+};
+
+function normalizePomodoroSettings(value: unknown): PomodoroSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaultPomodoroSettings;
+  }
+  const candidate = value as Partial<PomodoroSettings>;
+  const integerInRange = (
+    input: unknown,
+    fallback: number,
+    min: number,
+    max: number
+  ) =>
+    typeof input === "number" && Number.isFinite(input)
+      ? Math.min(max, Math.max(min, Math.floor(input)))
+      : fallback;
+  return {
+    enabled: candidate.enabled === true,
+    focusMinutes: integerInRange(candidate.focusMinutes, 25, 1, 180),
+    shortBreakMinutes: integerInRange(candidate.shortBreakMinutes, 5, 1, 60),
+    longBreakMinutes: integerInRange(candidate.longBreakMinutes, 15, 1, 120),
+    roundsBeforeLongBreak: integerInRange(
+      candidate.roundsBeforeLongBreak,
+      4,
+      1,
+      12
+    ),
+    autoStartNextPhase: candidate.autoStartNextPhase !== false,
+  };
+}
+
+function pomodoroPhaseLabel(phase: PomodoroPhase) {
+  return phase === "focus"
+    ? "專注"
+    : phase === "shortBreak"
+      ? "短休息"
+      : "長休息";
+}
+
+function getPomodoroPhaseElapsed(runtime: PomodoroRuntime, now: number) {
+  return Math.min(
+    runtime.phaseDurationSeconds,
+    Math.max(0, Math.floor((now - runtime.phaseStartedAt) / 1000))
+  );
+}
+
+function advancePomodoroRuntime(
+  runtime: PomodoroRuntime,
+  settings: PomodoroSettings,
+  now: number
+): PomodoroRuntime {
+  if (runtime.phase === "focus") {
+    const completedRounds = runtime.completedRounds + 1;
+    const longBreak = completedRounds % settings.roundsBeforeLongBreak === 0;
+    return {
+      phase: longBreak ? "longBreak" : "shortBreak",
+      phaseStartedAt: now,
+      phaseDurationSeconds:
+        (longBreak ? settings.longBreakMinutes : settings.shortBreakMinutes) * 60,
+      completedRounds,
+      focusSecondsAccumulated:
+        runtime.focusSecondsAccumulated + runtime.phaseDurationSeconds,
+    };
+  }
+  return {
+    phase: "focus",
+    phaseStartedAt: now,
+    phaseDurationSeconds: settings.focusMinutes * 60,
+    completedRounds: runtime.completedRounds,
+    focusSecondsAccumulated: runtime.focusSecondsAccumulated,
+  };
+}
+
+function getTodayFocusSeconds(
+  activity: TimerActivity,
+  running: RunningTimer | null,
+  now: number
+) {
+  const dayStart = getTimerDayStart(now);
+  const stoppedSeconds = activity.sessions.reduce(
+    (total, session) =>
+      session.startedAt >= dayStart ? total + session.durationSeconds : total,
+    0
+  );
+  if (running?.activityId !== activity.id) return stoppedSeconds;
+  if (!running.pomodoro) return getTimerTodaySeconds(activity, running, now);
+  const runtime = running.pomodoro;
+  const focusBeforeToday = running.startedAt >= dayStart
+    ? runtime.focusSecondsAccumulated
+    : 0;
+  const currentFocus =
+    runtime.phase === "focus" ? getPomodoroPhaseElapsed(runtime, now) : 0;
+  return stoppedSeconds + focusBeforeToday + currentFocus;
+}
 
 function normalizeAchievementIds(value: unknown): string[] {
   return Array.isArray(value)
@@ -1282,6 +1396,7 @@ const initialState: AppState = {
   specialization: "warrior-guardian",
   achievementClaimedIds: [],
   dailyResetMinutes: 240,
+  pomodoroSettings: defaultPomodoroSettings,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
   userName: "Mira Chen",
   jobClass: "warrior",
@@ -1512,6 +1627,7 @@ function loadState(): AppState {
         ? parsed.achievementClaimedIds.filter((id): id is string => typeof id === "string")
         : [],
       dailyResetMinutes,
+      pomodoroSettings: normalizePomodoroSettings(parsed.pomodoroSettings),
       boardRefreshPeriodKey:
         typeof parsed.boardRefreshPeriodKey === "string"
           ? parsed.boardRefreshPeriodKey
@@ -2102,9 +2218,22 @@ export default function Home() {
   );
   const totalTimerSeconds = state.timerActivities.reduce(
     (total, activity) =>
-      total + getTimerTodaySeconds(activity, state.runningTimer, currentTime),
+      total + getTodayFocusSeconds(activity, state.runningTimer, currentTime),
     0
   );
+  const todayTimerDayStart = getTimerDayStart(currentTime);
+  const todayPomodoroRounds = state.timerActivities.reduce(
+    (total, activity) =>
+      total +
+      activity.sessions.reduce(
+        (sessionTotal, session) =>
+          session.startedAt >= todayTimerDayStart
+            ? sessionTotal + (session.pomodoroRoundsCompleted ?? 0)
+            : sessionTotal,
+        0
+      ),
+    0
+  ) + (state.runningTimer?.pomodoro?.completedRounds ?? 0);
   const totalTimerAbilityPoints = state.timerActivities.reduce(
     (total, activity) => total + activity.abilityPointsEarned,
     0
@@ -3064,11 +3193,15 @@ export default function Home() {
       item => item.id === running.activityId
     );
     if (!activity) return;
-    const elapsedTotal = getTimerElapsedSeconds(
-      activity.totalSeconds,
-      running.startedAt,
-      currentTime
-    );
+    const pomodoro = running.pomodoro;
+    const phaseElapsed = pomodoro
+      ? getPomodoroPhaseElapsed(pomodoro, currentTime)
+      : 0;
+    const elapsedTotal = pomodoro
+      ? activity.totalSeconds +
+        pomodoro.focusSecondsAccumulated +
+        (pomodoro.phase === "focus" ? phaseElapsed : 0)
+      : getTimerElapsedSeconds(activity.totalSeconds, running.startedAt, currentTime);
     const targetCompletedMinutes = getCompletedTimerMinutes(elapsedTotal);
     const pendingXp = Math.max(
       0,
@@ -3078,7 +3211,13 @@ export default function Home() {
       0,
       targetCompletedMinutes - activity.rewardChecks
     );
-    if (pendingXp === 0 && pendingRewardChecks === 0) return;
+    const phaseComplete = Boolean(
+      pomodoro && phaseElapsed >= pomodoro.phaseDurationSeconds
+    );
+    const shouldAdvancePhase = Boolean(
+      pomodoro && phaseComplete && state.pomodoroSettings.autoStartNextPhase
+    );
+    if (pendingXp === 0 && pendingRewardChecks === 0 && !shouldAdvancePhase) return;
     const rewardOutcomes = rollAbilityPointOutcomes(pendingRewardChecks);
     const awardedPoints = rewardOutcomes.filter(Boolean).length;
 
@@ -3097,11 +3236,19 @@ export default function Home() {
       ) {
         return previous;
       }
-      const latestElapsedTotal = getTimerElapsedSeconds(
-        previousActivity.totalSeconds,
-        previousRunning.startedAt,
-        currentTime
-      );
+      const latestPomodoro = previousRunning.pomodoro;
+      const latestPhaseElapsed = latestPomodoro
+        ? getPomodoroPhaseElapsed(latestPomodoro, currentTime)
+        : 0;
+      const latestElapsedTotal = latestPomodoro
+        ? previousActivity.totalSeconds +
+          latestPomodoro.focusSecondsAccumulated +
+          (latestPomodoro.phase === "focus" ? latestPhaseElapsed : 0)
+        : getTimerElapsedSeconds(
+            previousActivity.totalSeconds,
+            previousRunning.startedAt,
+            currentTime
+          );
       const latestPendingChecks = Math.max(
         0,
         getCompletedTimerMinutes(latestElapsedTotal) -
@@ -3112,13 +3259,36 @@ export default function Home() {
         getCompletedTimerMinutes(latestElapsedTotal) -
           previousActivity.xpEarned
       );
+      const latestPhaseComplete = Boolean(
+        latestPomodoro && latestPhaseElapsed >= latestPomodoro.phaseDurationSeconds
+      );
+      const latestShouldAdvance = Boolean(
+        latestPomodoro &&
+        latestPhaseComplete &&
+        previous.pomodoroSettings.autoStartNextPhase
+      );
       if (
         latestPendingChecks !== pendingRewardChecks ||
-        latestPendingXp !== pendingXp
+        latestPendingXp !== pendingXp ||
+        latestShouldAdvance !== shouldAdvancePhase
       )
         return previous;
 
-      const nextState = applyExperienceToState(previous, pendingXp);
+      const latestRoundCompleted = Boolean(
+        latestPomodoro && latestPomodoro.phase === "focus" && latestPhaseComplete
+      );
+      const nextState = applyExperienceToState(
+        previous,
+        pendingXp + (latestRoundCompleted ? POMODORO_ROUND_XP : 0)
+      );
+      const nextPomodoro =
+        latestPomodoro && latestShouldAdvance
+          ? advancePomodoroRuntime(
+              latestPomodoro,
+              previous.pomodoroSettings,
+              currentTime
+            )
+          : latestPomodoro;
 
       return {
         ...nextState,
@@ -3131,6 +3301,9 @@ export default function Home() {
                 rewardChecks: item.rewardChecks + pendingRewardChecks,
                 abilityPointsEarned:
                   item.abilityPointsEarned + awardedPoints,
+                pomodoroRoundsCompleted:
+                  (item.pomodoroRoundsCompleted ?? 0) +
+                  (latestRoundCompleted ? 1 : 0),
               }
             : item
         ),
@@ -3141,6 +3314,7 @@ export default function Home() {
             previousRunning.rewardChecks + pendingRewardChecks,
           abilityPointsEarned:
             previousRunning.abilityPointsEarned + awardedPoints,
+          pomodoro: nextPomodoro,
         },
       };
     });
@@ -3157,12 +3331,13 @@ export default function Home() {
       return;
     }
 
-    const elapsedSeconds = getTimerElapsedSeconds(
-      activity.totalSeconds,
-      running.startedAt,
-      currentTime
-    );
-    document.title = `${formatTimerDuration(elapsedSeconds)} · ${activity.name} · QuestBoard`;
+    const elapsedSeconds = running.pomodoro
+      ? getPomodoroPhaseElapsed(running.pomodoro, currentTime)
+      : getTimerElapsedSeconds(activity.totalSeconds, running.startedAt, currentTime);
+    const phaseLabel = running.pomodoro
+      ? `${pomodoroPhaseLabel(running.pomodoro.phase)} `
+      : "";
+    document.title = `${phaseLabel}${formatTimerDuration(elapsedSeconds)} · ${activity.name} · QuestBoard`;
   }, [currentTime, state.runningTimer, state.timerActivities]);
 
   useEffect(() => {
@@ -3620,6 +3795,11 @@ export default function Home() {
     setBattleFx({ ...effect, id: battleFxIdRef.current });
   };
   const startBattle = (monster: Monster) => {
+    if (state.runningTimer?.pomodoro?.phase !== undefined &&
+        state.runningTimer.pomodoro.phase !== "focus") {
+      showToast("番茄鐘休息期間不能開始戰鬥，先回到專注階段吧");
+      return;
+    }
     const isSoulTrialMonster = monster.id.startsWith("soul-trial-");
     const cooldownUntil = isSoulTrialMonster
       ? state.soulTrialCooldownUntil
@@ -4767,6 +4947,82 @@ export default function Home() {
     showToast(`已建立「${activity.name}」計時器`);
   };
 
+  const updatePomodoroSettings = (patch: Partial<PomodoroSettings>) => {
+    if (stateRef.current.runningTimer) {
+      showToast("請先停止目前的計時器，再修改番茄鐘設定");
+      return;
+    }
+    setState(previous => ({
+      ...previous,
+      pomodoroSettings: normalizePomodoroSettings({
+        ...previous.pomodoroSettings,
+        ...patch,
+      }),
+    }));
+  };
+
+  const selectPomodoroPreset = (preset: "25-5" | "50-10" | "custom") => {
+    if (preset === "25-5") {
+      updatePomodoroSettings({ focusMinutes: 25, shortBreakMinutes: 5 });
+    } else if (preset === "50-10") {
+      updatePomodoroSettings({ focusMinutes: 50, shortBreakMinutes: 10 });
+    }
+  };
+
+  const advancePomodoroPhase = () => {
+    const running = stateRef.current.runningTimer;
+    if (!running?.pomodoro || !timerLockOwned) return;
+    const runtime = running.pomodoro;
+    if (getPomodoroPhaseElapsed(runtime, Date.now()) < runtime.phaseDurationSeconds) {
+      showToast(`目前${pomodoroPhaseLabel(runtime.phase)}尚未結束`);
+      return;
+    }
+    const roundCompleted = runtime.phase === "focus";
+    const nextPhase = advancePomodoroRuntime(
+      runtime,
+      stateRef.current.pomodoroSettings,
+      Date.now()
+    ).phase;
+    setState(previous => {
+      const current = previous.runningTimer;
+      if (!current?.pomodoro || current.startedAt !== running.startedAt) {
+        return previous;
+      }
+      const nextState = applyExperienceToState(
+        previous,
+        roundCompleted ? POMODORO_ROUND_XP : 0
+      );
+      return {
+        ...nextState,
+        timerActivities: nextState.timerActivities.map(activity =>
+          activity.id === current.activityId
+            ? {
+                ...activity,
+                pomodoroRoundsCompleted:
+                  (activity.pomodoroRoundsCompleted ?? 0) +
+                  (roundCompleted ? 1 : 0),
+              }
+            : activity
+        ),
+        runningTimer: {
+          ...current,
+          xpEarned:
+            current.xpEarned + (roundCompleted ? POMODORO_ROUND_XP : 0),
+          pomodoro: advancePomodoroRuntime(
+            current.pomodoro,
+            previous.pomodoroSettings,
+            Date.now()
+          ),
+        },
+      };
+    });
+    showToast(
+      roundCompleted
+        ? `完成第 ${runtime.completedRounds + 1} 輪，獲得 +${POMODORO_ROUND_XP} XP`
+        : `已進入${pomodoroPhaseLabel(nextPhase)}階段`
+    );
+  };
+
   const startActivityTimer = async (activityId: string) => {
     if (stateRef.current.runningTimer) {
       showToast("請先停止目前的計時器，再開始其他事務");
@@ -4827,6 +5083,7 @@ export default function Home() {
       return;
     }
     const startedAt = Date.now();
+    const pomodoroSettings = stateRef.current.pomodoroSettings;
     lockId = `${activityId}:${startedAt}`;
     timerLeaseRef.current = lease;
     timerLeaseRunIdRef.current = lockId;
@@ -4843,6 +5100,15 @@ export default function Home() {
           xpEarned: 0,
           rewardChecks: 0,
           abilityPointsEarned: 0,
+          pomodoro: pomodoroSettings.enabled
+            ? {
+                phase: "focus",
+                phaseStartedAt: startedAt,
+                phaseDurationSeconds: pomodoroSettings.focusMinutes * 60,
+                completedRounds: 0,
+                focusSecondsAccumulated: 0,
+              }
+            : undefined,
         },
       };
     });
@@ -4866,11 +5132,12 @@ export default function Home() {
     );
     if (!activity) return;
     const endedAt = Date.now();
-    const elapsedSeconds = getTimerElapsedSeconds(
-      0,
-      running.startedAt,
-      endedAt
-    );
+    const elapsedSeconds = running.pomodoro
+      ? running.pomodoro.focusSecondsAccumulated +
+        (running.pomodoro.phase === "focus"
+          ? getPomodoroPhaseElapsed(running.pomodoro, endedAt)
+          : 0)
+      : getTimerElapsedSeconds(0, running.startedAt, endedAt);
     const targetChecks = getCompletedTimerMinutes(
       activity.totalSeconds + elapsedSeconds
     );
@@ -4891,11 +5158,12 @@ export default function Home() {
       ) {
         return previous;
       }
-      const finalElapsedSeconds = getTimerElapsedSeconds(
-        0,
-        previousRunning.startedAt,
-        endedAt
-      );
+      const finalElapsedSeconds = previousRunning.pomodoro
+        ? previousRunning.pomodoro.focusSecondsAccumulated +
+          (previousRunning.pomodoro.phase === "focus"
+            ? getPomodoroPhaseElapsed(previousRunning.pomodoro, endedAt)
+            : 0)
+        : getTimerElapsedSeconds(0, previousRunning.startedAt, endedAt);
       const finalTargetChecks = getCompletedTimerMinutes(
         previousActivity.totalSeconds + finalElapsedSeconds
       );
@@ -4924,6 +5192,8 @@ export default function Home() {
         rewardChecks: previousRunning.rewardChecks + finalPendingChecks,
         abilityPointsEarned:
           previousRunning.abilityPointsEarned + pointsAwarded,
+        pomodoroRoundsCompleted:
+          previousRunning.pomodoro?.completedRounds ?? 0,
       };
 
       return {
@@ -4938,6 +5208,7 @@ export default function Home() {
                 rewardChecks: item.rewardChecks + finalPendingChecks,
                 abilityPointsEarned:
                   item.abilityPointsEarned + pointsAwarded,
+                pomodoroRoundsCompleted: item.pomodoroRoundsCompleted ?? 0,
                 sessions: [...item.sessions, session],
               }
             : item
@@ -7647,31 +7918,139 @@ export default function Home() {
                 </p>
               </div>
 
+              <section className="pomodoro-settings panel-card">
+                <div className="pomodoro-settings-heading">
+                  <div>
+                    <span className="mini-kicker">POMODORO MODE</span>
+                    <h3>番茄鐘進階模式</h3>
+                    <p>完成一輪專注可獲得 +{POMODORO_ROUND_XP} XP；休息階段會暫停一般計時獎勵並禁止開始戰鬥。</p>
+                  </div>
+                  <label className="pomodoro-toggle">
+                    <input
+                      type="checkbox"
+                      checked={state.pomodoroSettings.enabled}
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => updatePomodoroSettings({ enabled: event.target.checked })}
+                    />
+                    <span>啟用</span>
+                  </label>
+                </div>
+                <div className="pomodoro-controls">
+                  <label>
+                    <span>專注／短休息</span>
+                    <select
+                      value={
+                        state.pomodoroSettings.focusMinutes === 25 && state.pomodoroSettings.shortBreakMinutes === 5
+                          ? "25-5"
+                          : state.pomodoroSettings.focusMinutes === 50 && state.pomodoroSettings.shortBreakMinutes === 10
+                            ? "50-10"
+                            : "custom"
+                      }
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => selectPomodoroPreset(event.target.value as "25-5" | "50-10" | "custom")}
+                    >
+                      <option value="25-5">25／5</option>
+                      <option value="50-10">50／10</option>
+                      <option value="custom">自訂週期</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>專注分鐘</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={state.pomodoroSettings.focusMinutes}
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => updatePomodoroSettings({ focusMinutes: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    <span>短休息分鐘</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={state.pomodoroSettings.shortBreakMinutes}
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => updatePomodoroSettings({ shortBreakMinutes: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    <span>長休息分鐘</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={state.pomodoroSettings.longBreakMinutes}
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => updatePomodoroSettings({ longBreakMinutes: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    <span>幾輪後長休息</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={state.pomodoroSettings.roundsBeforeLongBreak}
+                      disabled={Boolean(state.runningTimer)}
+                      onChange={event => updatePomodoroSettings({ roundsBeforeLongBreak: Number(event.target.value) })}
+                    />
+                  </label>
+                </div>
+                <label className="pomodoro-auto-start">
+                  <input
+                    type="checkbox"
+                    checked={state.pomodoroSettings.autoStartNextPhase}
+                    disabled={Boolean(state.runningTimer)}
+                    onChange={event => updatePomodoroSettings({ autoStartNextPhase: event.target.checked })}
+                  />
+                  <span>階段結束後自動開始下一階段</span>
+                </label>
+              </section>
+
               {state.runningTimer && runningTimerActivity && (
                 <div className="timer-mobile-live panel-card">
                   <div className="timer-mobile-live-copy">
-                    <span><span className="timer-live-dot" /> 手機即時計時</span>
+                    <span>
+                      <span className="timer-live-dot" /> 手機即時計時
+                      {state.runningTimer.pomodoro &&
+                        ` · ${pomodoroPhaseLabel(state.runningTimer.pomodoro.phase)}`}
+                    </span>
                     <strong>{runningTimerActivity.name}</strong>
                     <small>
-                      網頁內即時更新 · 支援的裝置會保持螢幕喚醒
+                      {state.runningTimer.pomodoro
+                        ? state.runningTimer.pomodoro.phase === "focus"
+                          ? `完成一輪獲得 +${POMODORO_ROUND_XP} XP · 支援的裝置會保持螢幕喚醒`
+                          : "休息期間禁止開始戰鬥 · 支援的裝置會保持螢幕喚醒"
+                        : "網頁內即時更新 · 支援的裝置會保持螢幕喚醒"}
                     </small>
                   </div>
                   <strong className="timer-mobile-live-clock">
-                    {formatTimerDuration(
-                      getTimerElapsedSeconds(
-                        runningTimerActivity.totalSeconds,
-                        state.runningTimer.startedAt,
-                        currentTime
-                      )
-                    )}
+                    {state.runningTimer.pomodoro
+                      ? formatTimerDuration(
+                          getPomodoroPhaseElapsed(state.runningTimer.pomodoro, currentTime)
+                        )
+                      : formatTimerDuration(
+                          getTimerElapsedSeconds(
+                            runningTimerActivity.totalSeconds,
+                            state.runningTimer.startedAt,
+                            currentTime
+                          )
+                        )}
                   </strong>
                 </div>
               )}
 
               <div className="timer-summary-grid">
                 <div className="timer-summary-card">
-                  <span>今日總追蹤時間 · 00:00 歸零</span>
+                  <span>今日專注時間 · 00:00 歸零</span>
                   <strong>{formatTimerDuration(totalTimerSeconds)}</strong>
+                </div>
+                <div className="timer-summary-card">
+                  <span>今日完成番茄鐘輪次</span>
+                  <strong>{todayPomodoroRounds} 輪</strong>
                 </div>
                 <div className="timer-summary-card">
                   <span>角色目前總 XP</span>
@@ -7789,14 +8168,44 @@ export default function Home() {
 
                         {isRunning && state.runningTimer && (
                           <div className="timer-live-reward">
-                            <span>
-                              本段已完成 {state.runningTimer.xpEarned} 個完整分鐘
-                            </span>
-                            <strong>
-                              {timerLockOwned
-                                ? `本段 +${state.runningTimer.xpEarned} XP · +${state.runningTimer.abilityPointsEarned} 能力點`
-                                : "由持鎖分頁結算 XP 與能力點"}
-                            </strong>
+                            {state.runningTimer.pomodoro ? (
+                              <>
+                                <span>
+                                  {pomodoroPhaseLabel(state.runningTimer.pomodoro.phase)}階段 ·
+                                  已完成 {state.runningTimer.pomodoro.completedRounds} 輪
+                                </span>
+                                <strong>
+                                  本段 +{state.runningTimer.xpEarned} XP ·
+                                  {state.runningTimer.pomodoro.phase === "focus"
+                                    ? `完成後獲得 +${POMODORO_ROUND_XP} XP`
+                                    : "休息中不可開始戰鬥"}
+                                </strong>
+                                {!state.pomodoroSettings.autoStartNextPhase &&
+                                  getPomodoroPhaseElapsed(
+                                    state.runningTimer.pomodoro,
+                                    currentTime
+                                  ) >= state.runningTimer.pomodoro.phaseDurationSeconds && (
+                                    <button
+                                      type="button"
+                                      className="timer-phase-button"
+                                      onClick={advancePomodoroPhase}
+                                    >
+                                      進入下一階段
+                                    </button>
+                                  )}
+                              </>
+                            ) : (
+                              <>
+                                <span>
+                                  本段已完成 {state.runningTimer.xpEarned} 個完整分鐘
+                                </span>
+                                <strong>
+                                  {timerLockOwned
+                                    ? `本段 +${state.runningTimer.xpEarned} XP · +${state.runningTimer.abilityPointsEarned} 能力點`
+                                    : "由持鎖分頁結算 XP 與能力點"}
+                                </strong>
+                              </>
+                            )}
                           </div>
                         )}
 
