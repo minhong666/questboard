@@ -1068,15 +1068,15 @@ const bosses: Monster[] = [
     description: "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
     level: 200,
     health: 3000,
-    reward: 4500,
+    reward: 3000,
     damage: 525,
     defense: 525,
     intelligence: 600,
     critRate: 50,
     critDamage: 300,
     dodgeRate: 0,
-    physicalResistancePercent: 45,
-    magicResistancePercent: 45,
+    physicalResistancePercent: 30,
+    magicResistancePercent: 30,
     risk: "終焉風險",
     requirements: { health: 1800, strength: 270, defense: 270, intelligence: 270 },
     icon: Skull,
@@ -1110,7 +1110,7 @@ function tripleRegionalBossStats(boss: Monster): Monster {
   return {
     ...boss,
     health: boss.health * 3,
-    reward: boss.reward * 3,
+    reward: boss.reward * 2,
     damage: boss.damage * 3,
     defense: boss.defense * 3,
     intelligence: boss.intelligence === undefined ? undefined : boss.intelligence * 3,
@@ -1120,14 +1120,8 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     requirements: Object.fromEntries(
       Object.entries(boss.requirements).map(([key, value]) => [key, (value ?? 0) * 3])
     ) as MonsterRequirements,
-    physicalResistancePercent:
-      boss.physicalResistancePercent === undefined
-        ? undefined
-        : boss.physicalResistancePercent * 3,
-    magicResistancePercent:
-      boss.magicResistancePercent === undefined
-        ? undefined
-        : boss.magicResistancePercent * 3,
+    physicalResistancePercent: boss.physicalResistancePercent,
+    magicResistancePercent: boss.magicResistancePercent,
     dodgeIgnorePercent:
       boss.dodgeIgnorePercent === undefined ? undefined : boss.dodgeIgnorePercent * 3,
     lifestealPercent:
