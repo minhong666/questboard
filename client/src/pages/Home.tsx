@@ -2148,6 +2148,11 @@ export default function Home() {
     );
   };
   const [toast, setToast] = useState<string | null>(null);
+  const [undoAction, setUndoAction] = useState<{
+    label: string;
+    restore: () => void;
+  } | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const wakeLockRef = useRef<ScreenWakeLock | null>(null);
@@ -3089,6 +3094,23 @@ export default function Home() {
   }, [toast]);
 
   useEffect(() => {
+    if (!undoAction) return;
+    if (undoTimeoutRef.current !== null) {
+      window.clearTimeout(undoTimeoutRef.current);
+    }
+    undoTimeoutRef.current = window.setTimeout(() => {
+      setUndoAction(null);
+      undoTimeoutRef.current = null;
+    }, 5000);
+    return () => {
+      if (undoTimeoutRef.current !== null) {
+        window.clearTimeout(undoTimeoutRef.current);
+        undoTimeoutRef.current = null;
+      }
+    };
+  }, [undoAction]);
+
+  useEffect(() => {
     const updateClock = () => setCurrentTime(Date.now());
     const interval = window.setInterval(updateClock, 1000);
     window.addEventListener("focus", updateClock);
@@ -3535,6 +3557,17 @@ export default function Home() {
   }, [allAvailableMonsters]);
 
   const showToast = (message: string) => setToast(message);
+  const showUndoToast = (message: string, restore: () => void) => {
+    setToast(message);
+    setUndoAction({ label: "復原", restore });
+  };
+  const clearUndoAction = () => {
+    setUndoAction(null);
+    if (undoTimeoutRef.current !== null) {
+      window.clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
+    }
+  };
 
   const clearTaskFilters = () => {
     setTaskCategoryFilter("all");
@@ -3657,6 +3690,8 @@ export default function Home() {
       : equippedItems.find(
           equipped => equipped.slot === item.slot && equipped.id !== item.id
         );
+    const previousEquippedItemIds = equippedItemIds;
+    const previousCurrentHealth = state.currentHealth;
     setState(previous => {
       const nextEquippedItemIds = toggleEquippedItemIds(
         previous.inventory,
@@ -3685,6 +3720,15 @@ export default function Home() {
           ? `已以${item.name}替換${replacedItem.name}`
           : `已裝備${item.name}`
     );
+    showUndoToast("裝備變更已套用", () => {
+      setState(previous => ({
+        ...previous,
+        equippedItemIds: previousEquippedItemIds,
+        currentHealth: previousCurrentHealth,
+      }));
+      clearUndoAction();
+      showToast("裝備變更已復原");
+    });
   };
 
   const sellTreasure = (item: TreasureItem) => {
@@ -4628,11 +4672,16 @@ export default function Home() {
   };
 
   const deleteTask = (task: Task) => {
+    const previousTasks = state.tasks;
     setState(previous => ({
       ...previous,
       tasks: previous.tasks.filter(item => item.id !== task.id),
     }));
-    showToast("任務已移出冒險盤");
+    showUndoToast("任務已移出冒險盤", () => {
+      setState(previous => ({ ...previous, tasks: previousTasks }));
+      clearUndoAction();
+      showToast("任務已復原");
+    });
   };
 
   const shuffleBoardTasks = () => {
@@ -4680,6 +4729,7 @@ export default function Home() {
   };
 
   const toggleTask = (task: Task) => {
+    const previousState = state;
     const nextCompleted = !task.completed;
     const earnedXp = Math.max(
       1,
@@ -4823,6 +4873,14 @@ export default function Home() {
           levelGrowth.abilities.health,
       };
     });
+    showUndoToast(
+      nextCompleted ? "任務已完成" : "任務完成狀態已取消",
+      () => {
+        setState(() => previousState);
+        clearUndoAction();
+        showToast("任務狀態已復原");
+      }
+    );
     if (nextCompleted) {
       const afterCompletion = state.tasks.map(item =>
         item.id === task.id ? { ...item, completed: true } : item
@@ -4861,6 +4919,16 @@ export default function Home() {
     setModal({ kind: "reward" });
   };
 
+  const openEditReward = (reward: Reward) => {
+    setRewardDraft({
+      title: reward.title,
+      description: reward.description,
+      cost: String(reward.cost),
+      icon: reward.icon,
+    });
+    setModal({ kind: "reward", rewardId: reward.id });
+  };
+
   const saveReward = () => {
     const title = rewardDraft.title.trim();
     const cost = Number.parseInt(rewardDraft.cost, 10);
@@ -4868,23 +4936,42 @@ export default function Home() {
       showToast("獎勵名稱與金幣需求都要填寫");
       return;
     }
-    setState(previous => ({
-      ...previous,
-      rewards: [
-        ...previous.rewards,
-        {
-          id: `reward-${Date.now()}`,
-          title,
-          description:
-            rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
-          cost,
-          icon: rewardDraft.icon,
-          custom: true,
-        },
-      ],
-    }));
+    setState(previous => {
+      if (modal?.kind === "reward" && modal.rewardId) {
+        return {
+          ...previous,
+          rewards: previous.rewards.map(reward =>
+            reward.id === modal.rewardId
+              ? {
+                  ...reward,
+                  title,
+                  description:
+                    rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
+                  cost,
+                  icon: rewardDraft.icon,
+                }
+              : reward
+          ),
+        };
+      }
+      return {
+        ...previous,
+        rewards: [
+          ...previous.rewards,
+          {
+            id: `reward-${Date.now()}`,
+            title,
+            description:
+              rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
+            cost,
+            icon: rewardDraft.icon,
+            custom: true,
+          },
+        ],
+      };
+    });
     setModal(null);
-    showToast("自訂獎勵已放入寶庫");
+    showToast(modal?.kind === "reward" && modal.rewardId ? "獎勵設定已更新" : "自訂獎勵已放入寶庫");
   };
 
   const redeemReward = (reward: Reward) => {
@@ -4911,11 +4998,19 @@ export default function Home() {
   };
 
   const deleteReward = (reward: Reward) => {
+    if (!window.confirm(`確定要刪除「${reward.title}」嗎？\n目前價格：${reward.cost} 金幣\n既有兌換歷史會保留。`)) {
+      return;
+    }
+    const previousRewards = state.rewards;
     setState(previous => ({
       ...previous,
       rewards: previous.rewards.filter(item => item.id !== reward.id),
     }));
-    showToast("自訂獎勵已刪除");
+    showUndoToast(`已刪除「${reward.title}」`, () => {
+      setState(previous => ({ ...previous, rewards: previousRewards }));
+      clearUndoAction();
+      showToast("獎勵已復原");
+    });
   };
 
   const addTimerActivity = () => {
@@ -7810,7 +7905,14 @@ export default function Home() {
                         <div className="reward-icon">
                           <Gift size={21} />
                         </div>
-                        {reward.custom && (
+                        <div className="reward-card-actions">
+                          <button
+                            className="reward-edit"
+                            aria-label={`編輯${reward.title}`}
+                            onClick={() => openEditReward(reward)}
+                          >
+                            <Pencil size={14} />
+                          </button>
                           <button
                             className="reward-delete"
                             aria-label={`刪除${reward.title}`}
@@ -7818,7 +7920,7 @@ export default function Home() {
                           >
                             <Trash2 size={14} />
                           </button>
-                        )}
+                        </div>
                       </div>
                       <h3>{reward.title}</h3>
                       <p>{reward.description}</p>
@@ -8035,9 +8137,9 @@ export default function Home() {
                           getPomodoroPhaseElapsed(state.runningTimer.pomodoro, currentTime)
                         )
                       : formatTimerDuration(
-                          getTimerElapsedSeconds(
-                            runningTimerActivity.totalSeconds,
-                            state.runningTimer.startedAt,
+                          getTimerTodaySeconds(
+                            runningTimerActivity,
+                            state.runningTimer,
                             currentTime
                           )
                         )}
@@ -8422,7 +8524,22 @@ export default function Home() {
             <Sparkles size={16} />
           </div>
           <span>{toast}</span>
-          <button aria-label="關閉提示" onClick={() => setToast(null)}>
+          {undoAction ? (
+            <button
+              type="button"
+              className="toast-undo-button"
+              onClick={() => undoAction.restore()}
+            >
+              {undoAction.label}
+            </button>
+          ) : null}
+          <button
+            aria-label="關閉提示"
+            onClick={() => {
+              clearUndoAction();
+              setToast(null);
+            }}
+          >
             <X size={15} />
           </button>
         </div>
@@ -8466,7 +8583,7 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <div className="battle-arena" key={battleFx?.id ?? "battle-idle"}>
+            <div className="battle-arena">
               <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
                 <span className="battle-unit-label">
                   {state.userName || "冒險者"} · LV. {player.level}
@@ -8838,7 +8955,9 @@ export default function Home() {
                           ? "MOBILE APP"
                         : modal.kind === "saves"
                           ? "SAVE PROFILES"
-                          : "NEW REWARD"}
+                          : modal.kind === "reward" && modal.rewardId
+                            ? "EDIT REWARD"
+                            : "NEW REWARD"}
                 </span>
                 <h2>
                   {modal.kind === "task"
@@ -8853,7 +8972,9 @@ export default function Home() {
                           ? "手機 App 與通知"
                         : modal.kind === "saves"
                           ? "冒險存檔"
-                          : "建立自訂獎勵"}
+                          : modal.kind === "reward" && modal.rewardId
+                            ? "編輯獎勵"
+                            : "建立自訂獎勵"}
                 </h2>
               </div>
               <button
@@ -9238,7 +9359,7 @@ export default function Home() {
                   className="primary-button modal-submit"
                   onClick={saveReward}
                 >
-                  放入獎勵寶庫 <ChevronRight size={16} />
+                  {modal.kind === "reward" && modal.rewardId ? "保存獎勵設定" : "放入獎勵寶庫"} <ChevronRight size={16} />
                 </button>
               </div>
             )}
