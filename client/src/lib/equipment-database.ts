@@ -269,9 +269,70 @@ const weaponFamilyIndex: Record<string, number> = {
   "創世法杖": 4,
 };
 
+const storyMotifs = [
+  { keywords: ["曙光", "晨星", "日輪", "太陽"], motif: "初升的晨光" },
+  { keywords: ["影", "暗", "夜", "虛空", "幽靈"], motif: "無聲的暗影" },
+  { keywords: ["星", "宇宙", "天穹", "星辰", "銀河"], motif: "遙遠的星辰" },
+  { keywords: ["龍", "巨龍", "蒼龍"], motif: "沉睡的龍息" },
+  { keywords: ["風", "疾風", "幻風", "雷", "風暴"], motif: "穿谷而過的疾風" },
+  { keywords: ["火", "炎", "熔岩", "焚", "鳳凰"], motif: "不熄的餘燼" },
+  { keywords: ["冰", "霜", "寒"], motif: "凜冽的霜意" },
+  { keywords: ["海", "深海", "潮", "水"], motif: "深海的回聲" },
+  { keywords: ["大地", "山", "泰坦", "巨神", "鐵壁"], motif: "大地深處的脈動" },
+  { keywords: ["魔法", "秘法", "元素", "法師", "真理"], motif: "流動的秘法" },
+] as const;
+
+const storyScenes = [
+  "邊境哨站", "古老工坊", "王城戰場", "山巔祭壇", "失落遺跡", "海岸燈塔",
+] as const;
+
+function getEquipmentStoryMotif(name: string) {
+  return storyMotifs.find(item => item.keywords.some(keyword => name.includes(keyword)))?.motif ?? "漫長旅途中的微光";
+}
+
+function getEquipmentStoryScene(name: string) {
+  const seed = [...name].reduce((total, char) => total + char.charCodeAt(0), 0);
+  return storyScenes[seed % storyScenes.length];
+}
+
+function buildEquipmentStory(template: EquipmentDatabaseTemplate) {
+  const { name, rarity, slot, weaponType, element } = template;
+  const motif = getEquipmentStoryMotif(name);
+  const scene = getEquipmentStoryScene(name);
+  const rarityLabel = `${rarity}階`;
+
+  if (slot === "武器") {
+    const weaponLabel = weaponType ?? "武器";
+    const elementStory = element ? `，${element}元素在其中靜靜流轉` : "";
+    const weaponAction = weaponType === "弓"
+      ? "弓弦一響，遠方的風便替它指出獵物"
+      : weaponType === "短刀"
+        ? "刀鋒貼著寂靜掠過，只留下無人察覺的寒光"
+        : weaponType === "法杖"
+          ? "杖端亮起微光，將沉睡的力量喚回人間"
+          : "出鞘的瞬間，古老的誓言隨刃光一同甦醒";
+    return `「${name}」在${scene}的鍛造火光中成形，以${motif}淬鍊出一柄${rarityLabel}的${weaponLabel}${elementStory}；${weaponAction}。`;
+  }
+
+  const equipmentAction = slot === "頭盔"
+    ? "守住視線與意志，讓持有者在混亂中仍能看清前路"
+    : slot === "胸甲"
+      ? "替持有者擋下迎面而來的衝擊，也替身後的人留下喘息之地"
+      : slot === "護腿"
+        ? "把每一步都化成穩定的力量，陪持有者走過危險地形"
+        : "將持有者的誓言收進微光裡，在最需要時回應那份信念";
+  return `「${name}」在${scene}的鍛造火光中成形，以${motif}淬鍊出${rarityLabel}的${slot}；${equipmentAction}。`;
+}
+
 const originalRpgEquipmentTemplates = [
-  ...LEGACY_EQUIPMENT_TEMPLATES,
-  ...generatedWeaponTemplates,
+  ...LEGACY_EQUIPMENT_TEMPLATES.map(template => ({
+    ...template,
+    description: buildEquipmentStory(template),
+  })),
+  ...generatedWeaponTemplates.map(template => ({
+    ...template,
+    description: buildEquipmentStory(template),
+  })),
 ];
 
 function getSetFamilyIndex(
