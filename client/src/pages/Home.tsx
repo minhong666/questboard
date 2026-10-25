@@ -135,6 +135,7 @@ import {
 } from "../lib/soul-trial";
 import {
   DAILY_MONSTER_CATALOG,
+  getSmallMonsterCritRateMultiplier,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
@@ -877,6 +878,7 @@ function generateDailyMonsters(
       const offset = dailyMonsterOffsets[index] ?? 0;
       const level = Math.max(1, playerLevel + offset);
       const statMultiplier = getSmallMonsterStatMultiplier(level);
+      const critRateMultiplier = getSmallMonsterCritRateMultiplier(level);
       const scaleStat = (value: number) => Math.round(value * statMultiplier);
       const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
       const monsterDefinition: MonsterMechanicDefinition = definition;
@@ -890,9 +892,9 @@ function generateDailyMonsters(
         reward,
         damage: scaleStat(10 + level * 3),
         defense: scaleStat(4 + Math.round(level * 0.8)),
-        critRate: Math.min(100, baseCritRate * statMultiplier),
+        critRate: Math.min(100, baseCritRate * critRateMultiplier),
         critDamage: scaleStat(140 + Math.min(60, level)),
-        dodgeRate: Math.min(100, baseDodgeRate * statMultiplier),
+        dodgeRate: baseDodgeRate,
         ...(monsterDefinition.explosionDamage !== undefined
           ? { explosionDamage: scaleStat(monsterDefinition.explosionDamage) }
           : {}),

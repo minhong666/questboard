@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DAILY_MONSTER_CATALOG,
+  getSmallMonsterCritRateMultiplier,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
@@ -55,5 +56,13 @@ describe("daily monster catalog", () => {
     expect(getSmallMonsterStatMultiplier(50)).toBe(2.5);
     expect(getSmallMonsterStatMultiplier(100)).toBe(3.75);
     expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
+  });
+
+  it("uses a separate crit-rate multiplier and never scales dodge rate", () => {
+    expect(getSmallMonsterCritRateMultiplier(1)).toBe(1);
+    expect(getSmallMonsterCritRateMultiplier(10)).toBe(1.2);
+    expect(getSmallMonsterCritRateMultiplier(20)).toBe(1.3);
+    expect(getSmallMonsterCritRateMultiplier(100)).toBe(2.1);
+    expect(getSmallMonsterCritRateMultiplier(150)).toBe(2.1);
   });
 });
