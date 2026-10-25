@@ -135,7 +135,9 @@ import {
 } from "../lib/soul-trial";
 import {
   DAILY_MONSTER_CATALOG,
+  getSmallMonsterCritRateMultiplier,
   getMonsterMechanicLabels,
+  getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
@@ -881,32 +883,43 @@ function generateDailyMonsters(
 ): Monster[] {
   return selectDailyMonsterDefinitions(dateKey, 6).map(
     ({ definition, catalogIndex }, index) => {
-    const offset = dailyMonsterOffsets[index] ?? 0;
-    const level = Math.max(1, playerLevel + offset);
-    const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
-    const monsterDefinition: MonsterMechanicDefinition = definition;
-    return {
-      id: `daily-${dateKey}-${catalogIndex}-${level}`,
-      ...monsterDefinition,
-      level,
-      health: 60 + level * 30,
-      reward,
-      damage: 10 + level * 3,
-      defense: 4 + Math.round(level * 0.8),
-      critRate: Math.min(25, 4 + level * 0.35),
-      critDamage: 140 + Math.min(60, level),
-      dodgeRate: Math.min(28, 5 + level * 0.35),
-      risk:
-        level <= playerLevel - 5
+      const offset = dailyMonsterOffsets[index] ?? 0;
+      const level = Math.max(1, playerLevel + offset);
+      const statMultiplier = getSmallMonsterStatMultiplier(level);
+      const critRateMultiplier = getSmallMonsterCritRateMultiplier(level);
+      const scaleStat = (value: number) => Math.round(value * statMultiplier);
+      const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
+      const monsterDefinition: MonsterMechanicDefinition = definition;
+      const baseCritRate = Math.min(25, 4 + level * 0.35);
+      const baseDodgeRate = Math.min(28, 5 + level * 0.35);
+      return {
+        id: `daily-${dateKey}-${catalogIndex}-${level}`,
+        ...monsterDefinition,
+        level,
+        health: scaleStat(60 + level * 30),
+        reward,
+        damage: scaleStat(10 + level * 3),
+        defense: scaleStat(4 + Math.round(level * 0.8)),
+        critRate: Math.min(100, baseCritRate * critRateMultiplier),
+        critDamage: scaleStat(140 + Math.min(60, level)),
+        dodgeRate: baseDodgeRate,
+        ...(monsterDefinition.explosionDamage !== undefined
+          ? { explosionDamage: scaleStat(monsterDefinition.explosionDamage) }
+          : {}),
+        ...(monsterDefinition.reflectDamage !== undefined
+          ? { reflectDamage: scaleStat(monsterDefinition.reflectDamage) }
+          : {}),
+        risk:
+          level <= playerLevel - 5
           ? "低風險"
           : level <= playerLevel + 3
             ? "中風險"
             : "高風險",
-      requirements: {
-        health: 100 + level * 8,
-        strength: Math.max(5, Math.round(level * 1.2)),
-        defense: Math.max(5, Math.round(level * 1.05)),
-      },
+        requirements: {
+          health: scaleStat(100 + level * 8),
+          strength: scaleStat(Math.max(5, Math.round(level * 1.2))),
+          defense: scaleStat(Math.max(5, Math.round(level * 1.05))),
+        },
       icon: Skull,
       tone: dailyMonsterTones[index % dailyMonsterTones.length],
     };
@@ -1239,7 +1252,7 @@ function getEffectiveHealthCap(
 }
 
 function getExperienceBonusPercent(intelligence: number) {
-  return Math.min(500, Math.round(intelligence * 10) / 10);
+  return Math.min(500, Math.max(0, intelligence));
 }
 function getAttackDamage(
   abilities: CharacterAbilities,
@@ -3707,7 +3720,7 @@ export default function Home() {
       showToast("法師的法術無法暴擊，暴擊率不可升級");
       return;
     }
-    const increment = key === "critRate" ? 0.3 : 1;
+    const increment = key === "critRate" ? 1 : key === "critDamage" ? 2.5 : 1;
     const nextValue =
       key === "critDamage"
         ? currentValue + increment
@@ -3911,12 +3924,6 @@ export default function Home() {
     }
     if (defeatedMonsterIds.includes(monster.id)) {
       showToast(`${monster.name} 已被擊倒，金幣獎勵已領取`);
-      return;
-    }
-    const levelForGate =
-      monster.levelGate === "soul" ? soulMemory.level : player.level;
-    if (monster.isBoss && levelForGate < monster.level) {
-      showToast(`需要達到 LV. ${monster.level} 才能挑戰${monster.name}`);
       return;
     }
     setBattle({
@@ -5477,7 +5484,6 @@ export default function Home() {
   const renderSoulTrialCard = (monster: Monster) => {
     const defeated = defeatedMonsterIds.includes(monster.id);
     const Icon = monster.icon;
-    const levelLocked = soulMemory.level < monster.level;
     return (
       <div
         className={`monster-card panel-card monster-${monster.tone} ${monster.isBoss ? "boss-card" : ""} ${defeated ? "is-defeated" : ""}`}
@@ -5504,9 +5510,7 @@ export default function Home() {
           <span>
             {soulTrialCombatLocked
               ? `靈魂恢復中 · ${formatCooldown(soulTrialCooldownRemaining)}`
-              : levelLocked
-                ? `需要靈魂 LV. ${monster.level}`
-                : `戰鬥風險：${monster.risk}`}
+              : `戰鬥風險：${monster.risk}`}
           </span>
           <span>生命 -{monster.damage}</span>
         </div>
@@ -5530,16 +5534,14 @@ export default function Home() {
           </span>
           <button
             className="monster-attack-button"
-            disabled={defeated || levelLocked || soulTrialCombatLocked}
+            disabled={defeated || soulTrialCombatLocked}
             onClick={() => startBattle(monster)}
           >
             {defeated
               ? "已擊倒"
               : soulTrialCombatLocked
                 ? "靈魂恢復中"
-                : levelLocked
-                  ? "靈魂等級不足"
-                  : "開始戰鬥"}
+                : "開始戰鬥"}
             <ChevronRight size={14} />
           </button>
         </div>
@@ -6180,7 +6182,7 @@ export default function Home() {
                         ? "不可暴擊"
                         : `${effectiveCombatStats.critRate.toFixed(1)}%`}
                     </strong>
-                    <small>{isMage ? "法師固定無法暴擊" : "+0.3%／點"}</small>
+                    <small>{isMage ? "法師固定無法暴擊" : "+1%／點"}</small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={
@@ -6197,7 +6199,7 @@ export default function Home() {
                   <div className="combat-stat">
                     <span>暴擊傷害</span>
                     <strong>{effectiveCombatStats.critDamage}%</strong>
-                    <small>+1%／點</small>
+                    <small>+2.5%／點</small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={state.abilityPoints <= 0}
@@ -6258,7 +6260,7 @@ export default function Home() {
                       經驗獲取 +{experienceBonusPercent.toFixed(1)}%
                     </strong>
                   </div>
-                  <small>每 1 智力 +0.1% · 最高 +500%</small>
+                    <small>每 1 智力 +1% · 最高 +500%</small>
                 </div>
                 <div className="class-skill-panel">
                   <div className="class-skill-panel-heading">
@@ -6593,7 +6595,7 @@ export default function Home() {
                   </div>
                   <div className="boss-warning">
                     <span>挑戰條件</span>
-                    <strong>需要達到對應靈魂等級</strong>
+                    <strong>不設等級限制，能力與風險照常生效</strong>
                   </div>
                 </div>
                 <div className="monster-grid boss-grid">
@@ -6731,8 +6733,7 @@ export default function Home() {
                     {formatRefreshCountdown(
                       nextWeeklyBossRefreshAt - currentTime
                     )}{" "}
-                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 區域魔王最低
-                    50 級，最終魔王需達 200 級。
+                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 可挑戰各等級魔王，戰鬥風險隨等級提高。
                   </p>
                 </div>
                 <div className="boss-warning">
@@ -6744,7 +6745,6 @@ export default function Home() {
                 {activeBosses.map(boss => {
                   const defeated = defeatedMonsterIds.includes(boss.id);
                   const Icon = boss.icon;
-                  const levelLocked = player.level < boss.level;
                   const mechanicLabels = getMonsterMechanicLabels(boss);
                   return (
                     <div
@@ -6773,9 +6773,7 @@ export default function Home() {
                         <span>
                           {combatLocked
                             ? `恢復中 · ${formatCooldown(combatCooldownRemaining)}`
-                            : levelLocked
-                              ? `需要 LV. ${boss.level}`
-                              : `戰鬥風險：${boss.risk}`}
+                            : `戰鬥風險：${boss.risk}`}
                         </span>
                         <span>生命 -{boss.damage}</span>
                       </div>
@@ -6802,16 +6800,14 @@ export default function Home() {
                         </span>
                         <button
                           className="monster-attack-button"
-                          disabled={defeated || levelLocked || combatLocked}
+                          disabled={defeated || combatLocked}
                           onClick={() => startBattle(boss)}
                         >
                           {defeated
                             ? "已擊倒"
                             : combatLocked
                               ? "恢復中"
-                              : levelLocked
-                                ? "等級不足"
-                                : "開始戰鬥"}
+                              : "開始戰鬥"}
                           <ChevronRight size={14} />
                         </button>
                       </div>
