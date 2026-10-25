@@ -136,6 +136,7 @@ import {
 import {
   DAILY_MONSTER_CATALOG,
   getMonsterMechanicLabels,
+  getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
@@ -873,32 +874,42 @@ function generateDailyMonsters(
 ): Monster[] {
   return selectDailyMonsterDefinitions(dateKey, 6).map(
     ({ definition, catalogIndex }, index) => {
-    const offset = dailyMonsterOffsets[index] ?? 0;
-    const level = Math.max(1, playerLevel + offset);
-    const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
-    const monsterDefinition: MonsterMechanicDefinition = definition;
-    return {
-      id: `daily-${dateKey}-${catalogIndex}-${level}`,
-      ...monsterDefinition,
-      level,
-      health: 60 + level * 30,
-      reward,
-      damage: 10 + level * 3,
-      defense: 4 + Math.round(level * 0.8),
-      critRate: Math.min(25, 4 + level * 0.35),
-      critDamage: 140 + Math.min(60, level),
-      dodgeRate: Math.min(28, 5 + level * 0.35),
-      risk:
-        level <= playerLevel - 5
+      const offset = dailyMonsterOffsets[index] ?? 0;
+      const level = Math.max(1, playerLevel + offset);
+      const statMultiplier = getSmallMonsterStatMultiplier(level);
+      const scaleStat = (value: number) => Math.round(value * statMultiplier);
+      const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
+      const monsterDefinition: MonsterMechanicDefinition = definition;
+      const baseCritRate = Math.min(25, 4 + level * 0.35);
+      const baseDodgeRate = Math.min(28, 5 + level * 0.35);
+      return {
+        id: `daily-${dateKey}-${catalogIndex}-${level}`,
+        ...monsterDefinition,
+        level,
+        health: scaleStat(60 + level * 30),
+        reward,
+        damage: scaleStat(10 + level * 3),
+        defense: scaleStat(4 + Math.round(level * 0.8)),
+        critRate: Math.min(100, baseCritRate * statMultiplier),
+        critDamage: scaleStat(140 + Math.min(60, level)),
+        dodgeRate: Math.min(100, baseDodgeRate * statMultiplier),
+        ...(monsterDefinition.explosionDamage !== undefined
+          ? { explosionDamage: scaleStat(monsterDefinition.explosionDamage) }
+          : {}),
+        ...(monsterDefinition.reflectDamage !== undefined
+          ? { reflectDamage: scaleStat(monsterDefinition.reflectDamage) }
+          : {}),
+        risk:
+          level <= playerLevel - 5
           ? "低風險"
           : level <= playerLevel + 3
             ? "中風險"
             : "高風險",
-      requirements: {
-        health: 100 + level * 8,
-        strength: Math.max(5, Math.round(level * 1.2)),
-        defense: Math.max(5, Math.round(level * 1.05)),
-      },
+        requirements: {
+          health: scaleStat(100 + level * 8),
+          strength: scaleStat(Math.max(5, Math.round(level * 1.2))),
+          defense: scaleStat(Math.max(5, Math.round(level * 1.05))),
+        },
       icon: Skull,
       tone: dailyMonsterTones[index % dailyMonsterTones.length],
     };

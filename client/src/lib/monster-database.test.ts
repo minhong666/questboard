@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DAILY_MONSTER_CATALOG,
   getMonsterMechanicLabels,
+  getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
 } from "./monster-database";
 
@@ -45,5 +46,14 @@ describe("daily monster catalog", () => {
     expect(today.map(item => item.definition.name)).not.toEqual(
       nextDay.map(item => item.definition.name)
     );
+  });
+
+  it("scales small monster stats by level and caps the multiplier at level 100", () => {
+    expect(getSmallMonsterStatMultiplier(1)).toBe(1);
+    expect(getSmallMonsterStatMultiplier(10)).toBe(1.5);
+    expect(getSmallMonsterStatMultiplier(20)).toBe(1.75);
+    expect(getSmallMonsterStatMultiplier(50)).toBe(2.5);
+    expect(getSmallMonsterStatMultiplier(100)).toBe(3.75);
+    expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
   });
 });
