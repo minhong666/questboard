@@ -228,6 +228,8 @@ type BattleStatus = {
   element: SkillStatusEffect["element"];
   turnsRemaining: number;
   damagePerTurn: number;
+  breakDamageThreshold?: number;
+  breakDamage?: number;
 };
 type BattleFx = {
   id: number;
@@ -262,6 +264,8 @@ function applyBattleStatusEffects(
         element: effect.element,
         turnsRemaining: effect.durationTurns,
         damagePerTurn,
+        breakDamageThreshold: effect.breakDamageThreshold,
+        breakDamage: effect.breakDamage,
       });
     }
   }
@@ -271,10 +275,14 @@ function applyBattleStatusEffects(
 function tickBattleStatuses(statuses: BattleStatus[]) {
   let damage = 0;
   let frozen = false;
+  let controlLabel: "冰凍" | "石化" | null = null;
   const labels: string[] = [];
   const nextStatuses = statuses
     .map(status => {
-      if (status.kind === "冰凍") frozen = true;
+      if (status.kind === "冰凍" || status.kind === "石化") {
+        frozen = true;
+        controlLabel = status.kind;
+      }
       if (status.damagePerTurn > 0) {
         damage += status.damagePerTurn;
         labels.push(`${status.element}·${status.kind}造成 ${status.damagePerTurn} 傷害`);
@@ -284,7 +292,7 @@ function tickBattleStatuses(statuses: BattleStatus[]) {
       return { ...status, turnsRemaining: status.turnsRemaining - 1 };
     })
     .filter(status => status.turnsRemaining > 0);
-  return { damage, frozen, labels, statuses: nextStatuses };
+  return { damage, frozen, controlLabel, labels, statuses: nextStatuses };
 }
 
 type Task = {
@@ -1071,24 +1079,69 @@ const bosses: Monster[] = [
     id: "boss-final",
     name: "最終魔王",
     description: "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
-    level: 150,
-    health: 2000,
+    level: 200,
+    health: 3000,
     reward: 3000,
-    damage: 350,
-    defense: 350,
-    intelligence: 400,
+    damage: 525,
+    defense: 525,
+    intelligence: 600,
     critRate: 50,
     critDamage: 300,
     dodgeRate: 0,
     physicalResistancePercent: 30,
     magicResistancePercent: 30,
     risk: "終焉風險",
-    requirements: { health: 1200, strength: 180, defense: 180, intelligence: 180 },
+    requirements: { health: 1800, strength: 270, defense: 270, intelligence: 270 },
     icon: Skull,
     tone: "crimson",
     isBoss: true,
   },
+  {
+    id: "boss-vampire-lord",
+    name: "吸血鬼領主",
+    description: "以古老血契支配夜幕的區域魔王，能從每次攻擊中奪回生命。",
+    level: 125,
+    health: 3500,
+    reward: 2500,
+    damage: 200,
+    defense: 120,
+    critRate: 30,
+    critDamage: 150,
+    dodgeRate: 35,
+    lifestealPercent: 50,
+    magicResistancePercent: 25,
+    physicalResistancePercent: -10,
+    risk: "極高風險",
+    requirements: {},
+    icon: Skull,
+    tone: "violet",
+    isBoss: true,
+  },
 ];
+
+function tripleRegionalBossStats(boss: Monster): Monster {
+  return {
+    ...boss,
+    health: boss.health * 3,
+    reward: boss.reward * 2,
+    damage: boss.damage * 3,
+    defense: boss.defense * 3,
+    intelligence: boss.intelligence === undefined ? undefined : boss.intelligence * 3,
+    critRate: boss.critRate,
+    critDamage: boss.critDamage,
+    dodgeRate: boss.dodgeRate,
+    requirements: Object.fromEntries(
+      Object.entries(boss.requirements).map(([key, value]) => [key, (value ?? 0) * 3])
+    ) as MonsterRequirements,
+    physicalResistancePercent: boss.physicalResistancePercent,
+    magicResistancePercent: boss.magicResistancePercent,
+    dodgeIgnorePercent: boss.dodgeIgnorePercent,
+    lifestealPercent: boss.lifestealPercent,
+    explosionDamage: boss.explosionDamage,
+    reflectDamage: boss.reflectDamage,
+  };
+}
+
 const defaultAbilities: CharacterAbilities = {
   health: 100,
   strength: 5,
@@ -2293,7 +2346,7 @@ export default function Home() {
   const activeBosses = useMemo(
     () =>
       bosses.map(boss => ({
-        ...boss,
+        ...tripleRegionalBossStats(boss),
         id: `${boss.id}-${weeklyBossRefreshKey}`,
       })),
     [weeklyBossRefreshKey]
@@ -4052,9 +4105,23 @@ export default function Home() {
         : [],
       damageDealt
     );
-    const statusTick = tickBattleStatuses(nextMonsterStatuses);
-    const statusDamage = Math.min(statusTick.damage, Math.max(0, battle.monsterHealth - damageDealt));
-    const statusLogs = statusTick.labels.length > 0 ? `；${statusTick.labels.join("；")}` : "";
+    const petrifyBroken = damageDealt > 200 && nextMonsterStatuses.some(
+      status => status.kind === "石化" && status.breakDamageThreshold !== undefined
+    );
+    const statusesBeforeTick = petrifyBroken
+      ? nextMonsterStatuses.filter(status => status.kind !== "石化")
+      : nextMonsterStatuses;
+    const statusTick = tickBattleStatuses(statusesBeforeTick);
+    const petrifyBreakDamage = petrifyBroken ? 25 : 0;
+    const statusDamage = Math.min(
+      statusTick.damage + petrifyBreakDamage,
+      Math.max(0, battle.monsterHealth - damageDealt)
+    );
+    const statusLabels = [
+      ...statusTick.labels,
+      ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
+    ];
+    const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
     const lifestealHealing = damageDealt > 0
       ? Math.floor(damageDealt * (monster.lifestealPercent ?? 0) / 100)
       : 0;
@@ -4248,7 +4315,7 @@ export default function Home() {
     const nextLogs = [
       ...logs,
       statusTick.frozen
-        ? `${monster.name}被冰凍，無法反擊！`
+        ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
         : `${monster.name}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
@@ -8622,8 +8689,8 @@ export default function Home() {
                     {status.element}·{status.kind} · {status.turnsRemaining} 回合
                     {status.damagePerTurn > 0
                       ? ` · 每回合 ${status.damagePerTurn} 傷害`
-                      : status.kind === "冰凍"
-                        ? " · 跳過反擊"
+                      : status.kind === "冰凍" || status.kind === "石化"
+                        ? " · 無法反擊"
                         : " · 持續中"}
                   </span>
                 ))}
@@ -8727,8 +8794,8 @@ export default function Home() {
                                     ? ` · 每回合 ${skill.statusEffect.damagePerTurn} 傷害`
                                     : skill.statusEffect.damagePercentOfSkill
                                       ? ` · 每回合該技能 ${skill.statusEffect.damagePercentOfSkill}% 傷害`
-                                      : skill.statusEffect.kind === "冰凍"
-                                        ? " · 跳過反擊"
+                                        : skill.statusEffect.kind === "冰凍" || skill.statusEffect.kind === "石化"
+                                        ? " · 無法反擊"
                                         : " · 持續中"}
                                 </small>
                               )}

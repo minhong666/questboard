@@ -1,7 +1,7 @@
 export type SkillJobClass = "warrior" | "archer" | "mage" | "rogue";
 export type SpecialSkillDamageType = "物理" | "魔法";
 export type SpecialSkillEffectType = "damage" | "buff" | "passive";
-export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "災厄";
+export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "石化" | "災厄";
 export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
 export type SkillStatusEffect = {
   kind: SkillStatusKind;
@@ -10,6 +10,8 @@ export type SkillStatusEffect = {
   durationTurns: number;
   damagePerTurn: number;
   damagePercentOfSkill?: number;
+  breakDamageThreshold?: number;
+  breakDamage?: number;
 };
 
 export type SpecialCombatSkill = {
@@ -146,28 +148,42 @@ export function getUnlockedSpecialSkills(
     const isArcherPiercingShot = isArcher && index === 1;
     const isArcherRapidVolley = isArcher && index === 2;
     const isArcherDawnShot = isArcher && index === 3;
+    const isMageFireball = jobClass === "mage" && index === 0;
+    const isMageMeteor = jobClass === "mage" && index === 3;
     const cooldownTurns = isKnightHeart
       ? 5
       : isArcherPiercingShot || isArcherRapidVolley
         ? 4
-        : isArcherDawnShot
-          ? 5
+          : isArcherDawnShot || isMageMeteor
+            ? 5
           : isWarriorSlash
         ? 4
         : jobClass === "warrior" && index === 3
           ? 5
           : 3 + (index % 3);
     const statusEffect = jobClass === "mage"
-      ? index === 0
+      ? isMageFireball
         ? { kind: "燃燒" as const, element: "火焰" as const, chance: 1, durationTurns: 3, damagePerTurn: 8 + index * 2 }
         : index === 1
           ? { kind: "冰凍" as const, element: "冰霜" as const, chance: 0.7, durationTurns: 1, damagePerTurn: 0 }
           : index === 2
             ? { kind: "感電" as const, element: "雷電" as const, chance: 0.85, durationTurns: 2, damagePerTurn: 6 }
-            : { kind: "中毒" as const, element: "自然" as const, chance: 0.9, durationTurns: 4, damagePerTurn: 7 }
+            : isMageMeteor
+              ? {
+                  kind: "石化" as const,
+                  element: "奧術" as const,
+                  chance: 1,
+                  durationTurns: 2,
+                  damagePerTurn: 5,
+                  breakDamageThreshold: 200,
+                  breakDamage: 25,
+                }
+              : { kind: "中毒" as const, element: "自然" as const, chance: 0.9, durationTurns: 4, damagePerTurn: 7 }
       : undefined;
     const statusDescription = statusEffect
-      ? `元素效果：${statusEffect.element}${statusEffect.kind}（${Math.round(statusEffect.chance * 100)}% 機率，持續 ${statusEffect.durationTurns} 回合${statusEffect.damagePerTurn > 0 ? `，每回合 ${statusEffect.damagePerTurn} 傷害` : "，冰凍時跳過怪物反擊"}）`
+      ? statusEffect.kind === "石化"
+        ? "元素效果：石化（100% 對手無法行動，每回合受到5點石化傷害，持續2回合；若受到的一次性傷害>200，則提早解除石化並受到25點石化傷害）"
+        : `元素效果：${statusEffect.element}${statusEffect.kind}（${Math.round(statusEffect.chance * 100)}% 機率，持續 ${statusEffect.durationTurns} 回合${statusEffect.damagePerTurn > 0 ? `，每回合 ${statusEffect.damagePerTurn} 傷害` : "，冰凍時跳過怪物反擊"}）`
       : "";
     return {
       id: `${jobClass}-${requiredValue}`,
@@ -184,6 +200,10 @@ export function getUnlockedSpecialSkills(
             ? 1.65
             : isArcherDawnShot
               ? 3
+        : isMageFireball
+          ? 1.5
+          : isMageMeteor
+            ? 3
         : isRogue
         ? 2 + index * 0.3
         : isWarriorSlash
@@ -211,7 +231,7 @@ export function getUnlockedSpecialSkills(
           ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
           ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
-          : `${damageType}技能，造成 ${isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
+          : `${damageType}技能，造成 ${isMageFireball ? "1.50" : isMageMeteor ? "3.00" : isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
       cooldownTurns,
       durationTurns: isKnightHeart ? 3 : 0,
       damageBonusPercent: isKnightHeart ? 20 : 0,
