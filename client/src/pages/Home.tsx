@@ -3667,7 +3667,7 @@ export default function Home() {
       showToast("法師的法術無法暴擊，暴擊率不可升級");
       return;
     }
-    const increment = key === "critRate" ? 0.3 : 1;
+    const increment = key === "critRate" ? 1 : key === "critDamage" ? 2.5 : 1;
     const nextValue =
       key === "critDamage"
         ? currentValue + increment
@@ -6115,7 +6115,7 @@ export default function Home() {
                         ? "不可暴擊"
                         : `${effectiveCombatStats.critRate.toFixed(1)}%`}
                     </strong>
-                    <small>{isMage ? "法師固定無法暴擊" : "+0.3%／點"}</small>
+                    <small>{isMage ? "法師固定無法暴擊" : "+1%／點"}</small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={
@@ -6132,7 +6132,7 @@ export default function Home() {
                   <div className="combat-stat">
                     <span>暴擊傷害</span>
                     <strong>{effectiveCombatStats.critDamage}%</strong>
-                    <small>+1%／點</small>
+                    <small>+2.5%／點</small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={state.abilityPoints <= 0}
