@@ -4246,6 +4246,22 @@ h2 {
 .enemy-unit .battle-hp-track span {
   background: linear-gradient(90deg, #d36c77, #f2a0aa);
 }
+.battle-group-members {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+.battle-group-member {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+.battle-group-member .battle-hp-track {
+  width: 100%;
+  height: 5px;
+  margin-top: 0;
+}
 .battle-vs {
   color: #d5bd84;
   font-size: 12px;

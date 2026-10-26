@@ -142,6 +142,12 @@ import {
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
 import {
+  applyMonsterGroupDamage,
+  createMonsterGroupMembers,
+  getLivingMonsterGroupMembers,
+  type MonsterGroupMember,
+} from "../lib/monster-combat";
+import {
   addWeeklyStats,
   createWeeklyStats,
   isWeeklyReportTime,
@@ -192,12 +198,14 @@ type Monster = {
   lifestealPercent?: number;
   explosionDamage?: number;
   reflectDamage?: number;
+  encounterType?: "individual" | "swarm";
   isBoss?: boolean;
   levelGate?: "player" | "soul";
 };
 type BattleState = {
   monsterId: string;
   monsterSnapshot: Monster;
+  groupMembers?: MonsterGroupMember[];
   playerHealth: number;
   monsterHealth: number;
   turn: number;
@@ -2520,6 +2528,7 @@ export default function Home() {
       icon: Skull,
       isBoss: false,
       mechanicLabels: getMonsterMechanicLabels(monster),
+      encounterType: monster.encounterType,
       discovered: defeatedMonsterIds.some(
         id => id.startsWith("daily-") && id.includes(`-${index}-`)
       ),
@@ -2531,6 +2540,7 @@ export default function Home() {
       region: "區域魔王",
       icon: boss.icon,
       isBoss: true,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(boss),
       discovered: defeatedMonsterIds.some(
         id => id === boss.id || id.startsWith(`${boss.id}-`)
@@ -2543,6 +2553,7 @@ export default function Home() {
       region: "靈魂試煉",
       icon: monster.icon,
       isBoss: false,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(monster),
       discovered: defeatedMonsterIds.some(
         id => id.startsWith("soul-trial-") && id.includes(`-${index}-`)
@@ -2555,6 +2566,7 @@ export default function Home() {
       region: "靈魂試煉",
       icon: boss.icon,
       isBoss: true,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(boss),
       discovered: defeatedMonsterIds.some(
         id => id.startsWith(`soul-trial-boss-`) && id.endsWith(`-${boss.level}`)
@@ -3929,6 +3941,9 @@ export default function Home() {
     setBattle({
       monsterId: monster.id,
       monsterSnapshot: monster,
+      groupMembers: monster.encounterType === "swarm"
+        ? createMonsterGroupMembers(monster.id, monster.health)
+        : undefined,
       playerHealth: clampCurrentHealth(
         state.currentHealth,
         effectiveAbilities.health
@@ -4029,6 +4044,9 @@ export default function Home() {
       ? { ...activeBuff, turnsRemaining: activeBuff.turnsRemaining - 1 }
       : null;
     const monster = activeBattleMonster;
+    const livingGroupCount = battle.groupMembers
+      ? getLivingMonsterGroupMembers(battle.groupMembers).length
+      : 1;
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
       effectiveAbilities,
@@ -4117,6 +4135,16 @@ export default function Home() {
       statusTick.damage + petrifyBreakDamage,
       Math.max(0, battle.monsterHealth - damageDealt)
     );
+    const groupDamageResult = battle.groupMembers
+      ? applyMonsterGroupDamage(battle.groupMembers, damageDealt + statusDamage)
+      : undefined;
+    const nextGroupMembers = groupDamageResult?.members;
+    const remainingGroupCount = nextGroupMembers
+      ? getLivingMonsterGroupMembers(nextGroupMembers).length
+      : 0;
+    const groupDamageLog = nextGroupMembers
+      ? `；群聚分攤傷害，${remainingGroupCount} 隻仍在戰鬥`
+      : "";
     const statusLabels = [
       ...statusTick.labels,
       ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
@@ -4138,7 +4166,7 @@ export default function Home() {
     const monsterHealth = Math.max(0, battle.monsterHealth - damageDealt - statusDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}`}`,
+      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -4158,6 +4186,7 @@ export default function Home() {
       const nextBattle = {
         ...battle,
         monsterHealth: 0,
+        groupMembers: nextGroupMembers,
         playerHealth: Math.max(0, healedPlayerHealth - reactiveDamageOnDeath),
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
@@ -4285,9 +4314,7 @@ export default function Home() {
       : "";
     const incomingBaseDamage = statusTick.frozen
       ? 0
-      : failedRequirement
-        ? monster.damage * 2
-        : monster.damage;
+      : (failedRequirement ? monster.damage * 2 : monster.damage) * livingGroupCount;
     const reducedDamage = Math.max(
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
@@ -4339,6 +4366,7 @@ export default function Home() {
           ...battle,
           playerHealth: 0,
           monsterHealth,
+          groupMembers: nextGroupMembers,
           usedSkillIds,
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
@@ -4380,6 +4408,7 @@ export default function Home() {
         ...battle,
         playerHealth: 0,
         monsterHealth,
+        groupMembers: nextGroupMembers,
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
@@ -4426,6 +4455,7 @@ export default function Home() {
       ...battle,
       playerHealth,
       monsterHealth,
+      groupMembers: nextGroupMembers,
       usedSkillIds,
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
@@ -6665,7 +6695,11 @@ export default function Home() {
                           LV. {monster.level}
                         </span>
                       </div>
-                      <div className="monster-region-label">{monster.region}</div>
+                      <div className="monster-region-label">
+                        {monster.region}
+                        {monster.encounterType === "individual" && " · 個體小怪"}
+                        {monster.encounterType === "swarm" && " · 群聚小怪"}
+                      </div>
                       <h3>{monster.name}</h3>
                       <p>{monster.description}</p>
                       <div className="monster-requirements">
@@ -7747,7 +7781,15 @@ export default function Home() {
                         </div>
                         <div>
                           <span className="monster-codex-region">{monster.region}</span>
-                          <small>{monster.isBoss ? "區域魔王" : "普通魔物"}</small>
+                          <small>
+                            {monster.isBoss
+                              ? "區域魔王"
+                              : monster.encounterType === "individual"
+                                ? "個體小怪"
+                                : monster.encounterType === "swarm"
+                                  ? "群聚小怪"
+                                  : "普通魔物"}
+                          </small>
                         </div>
                       </div>
                       <div className="monster-codex-copy">
@@ -8675,6 +8717,19 @@ export default function Home() {
                   />
                 </div>
                 <small>/ {activeBattleMonster.health} 生命</small>
+                {battle.groupMembers && (
+                  <div className="battle-group-members" aria-label="群聚小怪成員">
+                    {battle.groupMembers.map((member, index) => (
+                      <div className="battle-group-member" key={member.id}>
+                        <small>成員 {index + 1}</small>
+                        <div className="battle-hp-track">
+                          <span style={{ width: `${Math.max(0, Math.min(100, (member.health / member.maxHealth) * 100))}%` }} />
+                        </div>
+                        <small>{member.health} / {member.maxHealth}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="battle-turn-label">
