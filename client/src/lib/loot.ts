@@ -943,7 +943,7 @@ export function parseLootItem(value: unknown): LootItem | null {
     typeof item.bonus === "string"
   ) {
     const slot = normalizeEquipmentSlot(item.slot);
-    const canonicalTemplate = RPG_EQUIPMENT_TEMPLATES.find(
+    const canonicalTemplate = equipmentTemplates.find(
       template =>
         template.name === item.name &&
         template.rarity === item.rarity &&
