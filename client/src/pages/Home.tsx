@@ -142,6 +142,10 @@ import {
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
 import {
+  getDailyMonsterId,
+  normalizeDailyMonsterId,
+} from "../lib/daily-monster-ids";
+import {
   applyMonsterGroupDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
@@ -902,7 +906,7 @@ function generateDailyMonsters(
       const baseCritRate = Math.min(25, 4 + level * 0.35);
       const baseDodgeRate = Math.min(28, 5 + level * 0.35);
       return {
-        id: `daily-${dateKey}-${catalogIndex}-${level}`,
+        id: getDailyMonsterId(dateKey, catalogIndex),
         ...monsterDefinition,
         level,
         health: scaleStat(60 + level * 30),
@@ -3628,8 +3632,15 @@ export default function Home() {
       const previousDefeated = Array.isArray(previous.defeatedMonsterIds)
         ? previous.defeatedMonsterIds
         : [];
-      const nextDefeated = previousDefeated.filter(id => availableIds.has(id));
-      return nextDefeated.length === previousDefeated.length
+      const nextDefeated = Array.from(
+        new Set(
+          previousDefeated
+            .map(normalizeDailyMonsterId)
+            .filter(id => availableIds.has(id))
+        )
+      );
+      return nextDefeated.length === previousDefeated.length &&
+        nextDefeated.every((id, index) => id === previousDefeated[index])
         ? previous
         : { ...previous, defeatedMonsterIds: nextDefeated };
     });
