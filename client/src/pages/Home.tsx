@@ -969,7 +969,7 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
     const level = Math.max(1, soulLevel + offset);
     const [name, description] = soulTrialMonsterNames[index];
     return {
-      id: `soul-trial-${refreshKey}-${index}-${level}`,
+      id: `soul-trial-${refreshKey}-${index}`,
       name,
       description,
       level,
@@ -1899,7 +1899,9 @@ function formatCooldown(milliseconds: number) {
 }
 
 function getSmallMonsterRefreshKey(date: Date) {
-  return `small-${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  const refreshDay = new Date(date);
+  if (refreshDay.getHours() < 12) refreshDay.setDate(refreshDay.getDate() - 1);
+  return `small-${refreshDay.getFullYear()}-${refreshDay.getMonth() + 1}-${refreshDay.getDate()}`;
 }
 
 function getWeeklyBossRefreshKey(date: Date) {
@@ -1912,8 +1914,8 @@ function getWeeklyBossRefreshKey(date: Date) {
 
 function getNextSmallMonsterRefreshAt(timestamp: number) {
   const next = new Date(timestamp);
-  next.setHours(0, 0, 0, 0);
-  next.setDate(next.getDate() + 1);
+  next.setHours(12, 0, 0, 0);
+  if (next.getTime() <= timestamp) next.setDate(next.getDate() + 1);
   return next.getTime();
 }
 
@@ -6668,7 +6670,7 @@ export default function Home() {
                     </div>
                     <h2>靈魂小怪</h2>
                     <p>
-                      共 9 隻 · 與怪物區域相同，每日 00:00 刷新 · 倒數{" "}
+                      共 9 隻 · 與怪物區域相同，每日 12:00 刷新 · 倒數{" "}
                       {formatRefreshCountdown(
                         nextSmallMonsterRefreshAt - currentTime
                       )}{" "}
@@ -6718,7 +6720,7 @@ export default function Home() {
                   <p>
                     {combatLocked
                       ? `戰鬥封鎖中 · 剩餘 ${formatCooldown(combatCooldownRemaining)}`
-                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 00:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
+                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 12:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
                   </p>
                 </div>
                 <div className="monster-zone-stats">
