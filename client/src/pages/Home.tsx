@@ -206,6 +206,7 @@ type BattleState = {
   monsterId: string;
   monsterSnapshot: Monster;
   groupMembers?: MonsterGroupMember[];
+  targetMonsterMemberId?: string;
   playerHealth: number;
   monsterHealth: number;
   turn: number;
@@ -3938,12 +3939,14 @@ export default function Home() {
       showToast(`${monster.name} 已被擊倒，金幣獎勵已領取`);
       return;
     }
+    const groupMembers = monster.encounterType === "swarm"
+      ? createMonsterGroupMembers(monster.id, monster.health)
+      : undefined;
     setBattle({
       monsterId: monster.id,
       monsterSnapshot: monster,
-      groupMembers: monster.encounterType === "swarm"
-        ? createMonsterGroupMembers(monster.id, monster.health)
-        : undefined,
+      groupMembers,
+      targetMonsterMemberId: groupMembers?.[0]?.id,
       playerHealth: clampCurrentHealth(
         state.currentHealth,
         effectiveAbilities.health
@@ -4136,24 +4139,40 @@ export default function Home() {
       Math.max(0, battle.monsterHealth - damageDealt)
     );
     const groupDamageResult = battle.groupMembers
-      ? applyMonsterGroupDamage(battle.groupMembers, damageDealt + statusDamage)
+      ? applyMonsterGroupDamage(
+          battle.groupMembers,
+          damageDealt + statusDamage,
+          battle.targetMonsterMemberId
+        )
       : undefined;
     const nextGroupMembers = groupDamageResult?.members;
+    const appliedGroupDamage = groupDamageResult?.totalDamageApplied;
+    const appliedDamage = appliedGroupDamage ?? damageDealt + statusDamage;
+    const actualDamageDealt = groupDamageResult
+      ? Math.min(damageDealt, appliedDamage)
+      : damageDealt;
+    const actualStatusDamage = appliedDamage - actualDamageDealt;
+    const nextTargetMonsterMemberId = nextGroupMembers
+      ?.find(member => member.id === battle.targetMonsterMemberId && member.health > 0)?.id
+      ?? nextGroupMembers?.find(member => member.health > 0)?.id;
     const remainingGroupCount = nextGroupMembers
       ? getLivingMonsterGroupMembers(nextGroupMembers).length
       : 0;
+    const targetMemberNumber = nextGroupMembers && groupDamageResult?.targetMemberId
+      ? nextGroupMembers.findIndex(member => member.id === groupDamageResult.targetMemberId) + 1
+      : 0;
     const groupDamageLog = nextGroupMembers
-      ? `；群聚分攤傷害，${remainingGroupCount} 隻仍在戰鬥`
+      ? `；集中攻擊群聚成員 ${targetMemberNumber || "目標"}，${remainingGroupCount} 隻仍在戰鬥`
       : "";
     const statusLabels = [
       ...statusTick.labels,
       ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
     ];
     const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
-    const lifestealHealing = damageDealt > 0
-      ? Math.floor(damageDealt * (monster.lifestealPercent ?? 0) / 100)
+    const lifestealHealing = actualDamageDealt > 0
+      ? Math.floor(actualDamageDealt * (monster.lifestealPercent ?? 0) / 100)
       : 0;
-    const reflectedDamage = damageDealt > 0 ? monster.reflectDamage ?? 0 : 0;
+    const reflectedDamage = actualDamageDealt > 0 ? monster.reflectDamage ?? 0 : 0;
     const reactiveDamageOnDeath = reflectedDamage + (monster.explosionDamage ?? 0);
     const activeBuffHealing = Math.floor(
       effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
@@ -4163,10 +4182,10 @@ export default function Home() {
       battle.playerHealth + lifestealHealing + activeBuffHealing
     );
     const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
-    const monsterHealth = Math.max(0, battle.monsterHealth - damageDealt - statusDamage);
+    const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${damageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}`}`,
+      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${actualDamageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -4187,6 +4206,7 @@ export default function Home() {
         ...battle,
         monsterHealth: 0,
         groupMembers: nextGroupMembers,
+        targetMonsterMemberId: nextTargetMonsterMemberId,
         playerHealth: Math.max(0, healedPlayerHealth - reactiveDamageOnDeath),
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
@@ -4205,7 +4225,7 @@ export default function Home() {
             ? `戰利品掉落：${lootDrop.kind === "equipment" ? "裝備" : "寶藏"}「${lootDrop.name}」（${lootDrop.rarity}${lootAffixSummary}）！`
             : "這次沒有發現新的戰利品。",
         ],
-        damageDealt: battle.damageDealt + damageDealt + statusDamage,
+        damageDealt: battle.damageDealt + appliedDamage,
         damageTaken: battle.damageTaken + reactiveDamageOnDeath,
         criticalHits,
         dodges,
@@ -4215,7 +4235,7 @@ export default function Home() {
       };
       showBattleFx({
         action: selectedSkill ? "skill" : "attack",
-        monsterDamage: damageDealt + statusDamage,
+        monsterDamage: appliedDamage,
         playerDamage: reactiveDamageOnDeath,
         healing: lifestealHealing + activeBuffHealing,
         critical: criticalHit,
@@ -4351,7 +4371,7 @@ export default function Home() {
     if (playerHealth <= 0) {
       showBattleFx({
         action: selectedSkill ? "skill" : "attack",
-        monsterDamage: damageDealt + statusDamage,
+        monsterDamage: appliedDamage,
         playerDamage: damageTaken,
         healing: lifestealHealing + activeBuffHealing,
         critical: criticalHit || monsterCritical,
@@ -4367,6 +4387,7 @@ export default function Home() {
           playerHealth: 0,
           monsterHealth,
           groupMembers: nextGroupMembers,
+          targetMonsterMemberId: nextTargetMonsterMemberId,
           usedSkillIds,
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
@@ -4377,7 +4398,7 @@ export default function Home() {
             ...nextLogs,
             `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`,
           ],
-          damageDealt: battle.damageDealt + damageDealt + statusDamage,
+          damageDealt: battle.damageDealt + appliedDamage,
           damageTaken: nextDamageTaken,
           criticalHits,
           dodges: dodges + (playerDodges ? 1 : 0),
@@ -4409,6 +4430,7 @@ export default function Home() {
         playerHealth: 0,
         monsterHealth,
         groupMembers: nextGroupMembers,
+        targetMonsterMemberId: nextTargetMonsterMemberId,
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
@@ -4416,7 +4438,7 @@ export default function Home() {
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [...nextLogs, `你被${monster.name}擊倒了！`],
-        damageDealt: battle.damageDealt + damageDealt + statusDamage,
+        damageDealt: battle.damageDealt + appliedDamage,
         damageTaken: nextDamageTaken,
         criticalHits,
         dodges: dodges + (playerDodges ? 1 : 0),
@@ -4442,7 +4464,7 @@ export default function Home() {
     }
     showBattleFx({
       action: selectedSkill ? "skill" : "attack",
-      monsterDamage: damageDealt + statusDamage,
+      monsterDamage: appliedDamage,
       playerDamage: damageTaken,
       healing: lifestealHealing + activeBuffHealing,
       critical: criticalHit || monsterCritical,
@@ -4456,6 +4478,7 @@ export default function Home() {
       playerHealth,
       monsterHealth,
       groupMembers: nextGroupMembers,
+      targetMonsterMemberId: nextTargetMonsterMemberId,
       usedSkillIds,
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
@@ -4463,7 +4486,7 @@ export default function Home() {
       actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
       logs: nextLogs,
-      damageDealt: battle.damageDealt + damageDealt + statusDamage,
+      damageDealt: battle.damageDealt + appliedDamage,
       damageTaken: nextDamageTaken,
       criticalHits,
       dodges: dodges + (playerDodges ? 1 : 0),
@@ -8720,13 +8743,28 @@ export default function Home() {
                 {battle.groupMembers && (
                   <div className="battle-group-members" aria-label="群聚小怪成員">
                     {battle.groupMembers.map((member, index) => (
-                      <div className="battle-group-member" key={member.id}>
+                      <button
+                        type="button"
+                        className={`battle-group-member ${
+                          battle.targetMonsterMemberId === member.id ? "is-targeted" : ""
+                        }`}
+                        key={member.id}
+                        disabled={member.health <= 0 || battle.outcome !== "fighting"}
+                        onClick={() =>
+                          setBattle(previous =>
+                            previous
+                              ? { ...previous, targetMonsterMemberId: member.id }
+                              : previous
+                          )
+                        }
+                        aria-label={`選擇群聚成員 ${index + 1} 為攻擊目標`}
+                      >
                         <small>成員 {index + 1}</small>
                         <div className="battle-hp-track">
                           <span style={{ width: `${Math.max(0, Math.min(100, (member.health / member.maxHealth) * 100))}%` }} />
                         </div>
                         <small>{member.health} / {member.maxHealth}</small>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
