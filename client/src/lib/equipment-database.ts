@@ -230,12 +230,12 @@ const generatedWeaponTemplates: EquipmentDatabaseTemplate[] = weaponRarityProfil
 );
 
 const sixSetThemes = [
-  { id: "dawn-warden", name: "曙光聖衛" },
-  { id: "moon-stalker", name: "影月獵行" },
-  { id: "astral-sage", name: "星界賢者" },
-  { id: "titan-bastion", name: "鐵壁巨神" },
-  { id: "storm-sword", name: "風暴劍魂" },
-  { id: "azure-dragon", name: "蒼龍天命" },
+  { id: "dawn-warden", name: "曙光聖衛", story: "守望黎明、替迷途者點亮歸途" },
+  { id: "moon-stalker", name: "影月獵行", story: "藏身月影、在無聲夜色中追獵邪祟" },
+  { id: "astral-sage", name: "星界賢者", story: "仰望群星、將遠古智慧帶回凡世" },
+  { id: "titan-bastion", name: "鐵壁巨神", story: "承受山嶽重量、以不倒的意志守住陣線" },
+  { id: "storm-sword", name: "風暴劍魂", story: "喚起雷霆與疾風、以一往無前的鋒芒破陣" },
+  { id: "azure-dragon", name: "蒼龍天命", story: "承接蒼龍血脈、在雲海之上宣告新的時代" },
 ] as const;
 
 const setPieceNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
@@ -244,6 +244,13 @@ const setPieceNames: Record<EquipmentDatabaseTemplate["slot"], string> = {
   武器: "武器",
   護腿: "護腿",
   護身符: "徽記",
+};
+const setSlotStories: Record<EquipmentDatabaseTemplate["slot"], string> = {
+  頭盔: "它替佩戴者守住視線與信念，讓混亂中的道路重新清晰",
+  胸甲: "它擋下最沉重的衝擊，也替身後的同伴留下反擊的時機",
+  武器: "它在出鞘時回應持有者的誓言，將戰意化為無可阻擋的一擊",
+  護腿: "它把每一步都化成穩定的力量，陪英雄走過最危險的疆域",
+  護身符: "它收納歷代守護者的祈願，在最需要的時刻回應勇者",
 };
 
 const weaponFamilyIndex: Record<string, number> = {
@@ -361,7 +368,7 @@ const sixSetEquipmentTemplates: EquipmentDatabaseTemplate[] =
       ...template,
       setId: `${theme.id}-${template.rarity}`,
       name: `${theme.name}·${template.rarity}${pieceName}`,
-      description: `${theme.name}套裝的${template.rarity}${pieceName}，沿用原始裝備數值。`,
+      description: `「${theme.name}·${template.rarity}${pieceName}」承載${theme.story}的傳承；${setSlotStories[template.slot]}。`,
     };
   });
 

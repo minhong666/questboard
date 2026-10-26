@@ -430,7 +430,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     slot: "武器",
     weaponType: "劍",
     rarity: "普通",
-    description: "陪你踏出第一步的可靠短劍",
+    description: "它曾陪一位新手穿過第一座村門，如今仍在等待下一場真正的冒險；握緊劍柄，最初的勇氣便會再次回來。",
     bonus: "力量 +2",
     icon: "sword",
     minLevel: 1,
@@ -439,7 +439,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "森林守護胸甲",
     slot: "胸甲",
     rarity: "普通",
-    description: "以韌性藤木與輕甲片編成，守護旅人的軀幹。",
+    description: "藤木取自晨霧森林，輕甲片來自老獵人的行囊；這件胸甲把旅人第一次遠行的勇氣牢牢護在心口。",
     bonus: "防禦 +2",
     icon: "shield-check",
     minLevel: 1,
@@ -448,7 +448,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "旅者皮帽",
     slot: "頭盔",
     rarity: "普通",
-    description: "縫有銅扣的輕便皮帽，能擋下沿途碎石。",
+    description: "帽沿縫著旅人從各地帶回的銅扣，曾在無數風沙與碎石間替它的主人守住清醒。",
     bonus: "生命 +6",
     icon: "shield-check",
     minLevel: 1,
@@ -457,7 +457,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "見習者護腿",
     slot: "護腿",
     rarity: "普通",
-    description: "為長途跋涉準備的耐磨護腿。",
+    description: "耐磨的布料記錄著穿越荒原的每一道塵痕，它讓疲憊的雙腿仍能朝著下一盞營火前進。",
     bonus: "閃避率 +1%",
     icon: "target",
     minLevel: 1,
@@ -466,7 +466,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "森林守護護身符",
     slot: "護身符",
     rarity: "普通",
-    description: "沾著森林露水的溫和護身符。",
+    description: "護身符上的露珠永不乾涸，據說那是森林守護者送給第一位迷路旅人的回家指引。",
     bonus: "生命 +6",
     icon: "leaf",
     minLevel: 1,
@@ -475,7 +475,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "專注學者之戒",
     slot: "護身符",
     rarity: "稀有",
-    description: "讓思緒保持清晰的藍晶戒指",
+    description: "藍晶戒指曾在學者的燈下照亮整夜手稿，佩戴它的人總能在混亂線索中找到真正的答案。",
     bonus: "智力 +3",
     icon: "brain",
     minLevel: 5,
@@ -484,7 +484,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "迅捷旅者護腿",
     slot: "護腿",
     rarity: "稀有",
-    description: "在林間行動時幾乎不會發出聲音的輕便護腿。",
+    description: "它沿著林間獵徑縫製，連落葉都不願驚動；每一次無聲踏步，都是旅者與森林交換的默契。",
     bonus: "閃避率 +2%",
     icon: "target",
     minLevel: 8,
@@ -493,7 +493,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "不屈心核",
     slot: "護身符",
     rarity: "史詩",
-    description: "即使倒下也會再次燃起的心核",
+    description: "心核封存著一簇不肯熄滅的火，曾陪一名倒下的守衛重新站起，直到黎明穿過戰場。",
     bonus: "生命 +25",
     icon: "heart",
     minLevel: 15,
@@ -503,7 +503,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     slot: "武器",
     weaponType: "劍",
     rarity: "史詩",
-    description: "能切開高階魔物護甲的魔刃",
+    description: "魔刃的裂紋裡流著擊敗古獸時留下的藍光，當高階魔物再次現身，它會替持有者撕開第一道防線。",
     bonus: "力量 +8",
     icon: "sword",
     minLevel: 25,
@@ -512,7 +512,7 @@ const starterEquipmentTemplates: Array<Omit<EquipmentItem, "id" | "kind"> & { mi
     name: "區域王冠",
     slot: "頭盔",
     rarity: "傳說",
-    description: "只有征服區域魔王者才配戴的王冠",
+    description: "王冠上的缺口記錄著征服區域魔王的最後一擊，只有真正走過那片領地的人，才懂得它沉甸甸的榮耀。",
     bonus: "全能力 +5",
     icon: "star",
     minLevel: 50,
@@ -943,15 +943,12 @@ export function parseLootItem(value: unknown): LootItem | null {
     typeof item.bonus === "string"
   ) {
     const slot = normalizeEquipmentSlot(item.slot);
-    const canonicalTemplate = typeof item.setId !== "string"
-      ? RPG_EQUIPMENT_TEMPLATES.find(
-          template =>
-            !template.setId &&
-            template.name === item.name &&
-            template.rarity === item.rarity &&
-            template.slot === slot
-        )
-      : undefined;
+    const canonicalTemplate = equipmentTemplates.find(
+      template =>
+        template.name === item.name &&
+        template.rarity === item.rarity &&
+        template.slot === slot
+    );
     return {
       ...common,
       description: canonicalTemplate?.description ?? common.description,
