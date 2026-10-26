@@ -2363,7 +2363,7 @@ export default function Home() {
       bosses.map(boss => ({
         ...tripleRegionalBossStats(boss),
         id: `${boss.id}-${weeklyBossRefreshKey}`,
-      })),
+      })).sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
     [weeklyBossRefreshKey]
   );
   const activeSoulTrialBosses = useMemo(
