@@ -4256,6 +4256,24 @@ h2 {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+.battle-group-member:not(:disabled) {
+  cursor: pointer;
+}
+.battle-group-member:not(:disabled):hover,
+.battle-group-member.is-targeted {
+  border-color: rgba(255, 190, 118, 0.45);
+  background: rgba(255, 190, 118, 0.1);
+}
+.battle-group-member:disabled {
+  opacity: 0.48;
 }
 .battle-group-member .battle-hp-track {
   width: 100%;
