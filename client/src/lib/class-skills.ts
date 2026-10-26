@@ -10,6 +10,7 @@ export type SkillStatusEffect = {
   durationTurns: number;
   damagePerTurn: number;
   damagePercentOfSkill?: number;
+  damageReductionPercent?: number;
   breakDamageThreshold?: number;
   breakDamage?: number;
 };

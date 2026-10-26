@@ -182,6 +182,9 @@ type MonsterElementalAttack = {
   element: SkillStatusEffect["element"];
   damagePercent: number;
   durationTurns: number;
+  skillDamagePercent: number;
+  damageReductionPercent: number;
+  cooldownTurns: number;
 };
 type Monster = {
   id: string;
@@ -230,6 +233,7 @@ type BattleState = {
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
+  monsterSkillCooldown?: number;
   activeBuff: {
     skillId: string;
     turnsRemaining: number;
@@ -248,6 +252,7 @@ type BattleStatus = {
   element: SkillStatusEffect["element"];
   turnsRemaining: number;
   damagePerTurn: number;
+  damageReductionPercent?: number;
   breakDamageThreshold?: number;
   breakDamage?: number;
 };
@@ -284,6 +289,7 @@ function applyBattleStatusEffects(
         element: effect.element,
         turnsRemaining: effect.durationTurns,
         damagePerTurn,
+        damageReductionPercent: effect.damageReductionPercent,
         breakDamageThreshold: effect.breakDamageThreshold,
         breakDamage: effect.breakDamage,
       });
@@ -1062,7 +1068,7 @@ const bosses: Monster[] = [
   {
     id: "boss-abyss-dragon",
     name: "深淵古龍",
-    description: "盤踞在高階區域的終極守門者，攻擊會施加持續三回合的火焰灼燒。",
+    description: "盤踞在高階區域的終極守門者，會交替施展普通攻擊與火焰灼燒技能。",
     level: 75,
     health: 1600,
     reward: 900,
@@ -1071,7 +1077,14 @@ const bosses: Monster[] = [
     critRate: 22,
     critDamage: 225,
     dodgeRate: 35,
-    elementalAttack: { element: "火焰", damagePercent: 5, durationTurns: 3 },
+    elementalAttack: {
+      element: "火焰",
+      damagePercent: 5,
+      durationTurns: 3,
+      skillDamagePercent: 75,
+      damageReductionPercent: 20,
+      cooldownTurns: 5,
+    },
     risk: "極高風險",
     requirements: { health: 550, strength: 70, defense: 60, intelligence: 50 },
     icon: Skull,
@@ -3998,6 +4011,7 @@ export default function Home() {
       actionLockTurns: 0,
       monsterStatuses: [],
       playerStatuses: [],
+      monsterSkillCooldown: 0,
       activeBuff: null,
       xpReward: 0,
       lootDrop: null,
@@ -4097,7 +4111,6 @@ export default function Home() {
     const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
     const statusDamageTaken = Math.min(playerStatusTick.damage, battle.playerHealth);
     const healthAfterPlayerStatus = Math.max(0, battle.playerHealth - statusDamageTaken);
->>>>>>> 5de1e84 (feat: make abyss dragon attack apply burning debuff)
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
       effectiveAbilities,
@@ -4108,6 +4121,24 @@ export default function Home() {
       monster.requirements
     );
     const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
+    const physicalDamageReductionPercent = damageType === "物理"
+      ? Math.min(
+          80,
+          (battle.playerStatuses ?? []).reduce(
+            (total, status) => total + (status.damageReductionPercent ?? 0),
+            0
+          )
+        )
+      : 0;
+    const monsterUsesSkill = Boolean(
+      monster.elementalAttack && (battle.monsterSkillCooldown ?? 0) <= 0
+    );
+    const monsterAttackMultiplier = monsterUsesSkill
+      ? (monster.elementalAttack?.skillDamagePercent ?? 100) / 100
+      : 1;
+    const nextMonsterSkillCooldown = monsterUsesSkill
+      ? monster.elementalAttack?.cooldownTurns ?? 0
+      : Math.max(0, (battle.monsterSkillCooldown ?? 0) - 1);
     const monsterDodges = actionLocked
       ? false
       : selectedSkill?.effectType === "buff"
@@ -4126,7 +4157,9 @@ export default function Home() {
       ? Math.round((basePlayerDamage * effectiveCombatStats.critDamage) / 100)
       : basePlayerDamage;
     const buffedPlayerDamage = Math.round(
-      damageBeforeDefense * (1 + (activeBuff?.damageBonusPercent ?? 0) / 100)
+      damageBeforeDefense *
+        (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
+        (1 - physicalDamageReductionPercent / 100)
     );
     const instantExecute = Boolean(
       selectedSkill?.executeBelowHealthPercent &&
@@ -4265,6 +4298,7 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         playerStatuses: playerStatusTick.statuses,
+        monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
@@ -4397,8 +4431,8 @@ export default function Home() {
     const incomingBaseDamage = statusTick.frozen
       ? 0
       : failedRequirement
-        ? groupDamage * 2
-        : groupDamage;
+        ? Math.round(groupDamage * 2 * monsterAttackMultiplier)
+        : Math.round(groupDamage * monsterAttackMultiplier);
     const reducedDamage = Math.max(
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
@@ -4425,7 +4459,7 @@ export default function Home() {
         : buffReducedDamage;
     const nextPlayerStatuses = applyBattleStatusEffects(
       playerStatusTick.statuses,
-      monster.elementalAttack && incomingDamageTaken > 0
+      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
         ? [{
             element: monster.elementalAttack.element,
             kind: "燃燒",
@@ -4433,10 +4467,13 @@ export default function Home() {
             durationTurns: monster.elementalAttack.durationTurns,
             damagePerTurn: 0,
             damagePercentOfSkill: monster.elementalAttack.damagePercent,
+            damageReductionPercent: monster.elementalAttack.damageReductionPercent,
           }]
         : []
     );
-    const burnApplied = Boolean(monster.elementalAttack && incomingDamageTaken > 0);
+    const burnApplied = Boolean(
+      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
+    );
     const damageTaken = incomingDamageTaken + reflectedDamage;
     const totalDamageTaken = statusDamageTaken + damageTaken;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
@@ -4447,7 +4484,7 @@ export default function Home() {
         ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
-        : `${monster.name}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合）` : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
+        : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
     ];
     const nextDamageTaken = battle.damageTaken + totalDamageTaken;
     if (playerHealth <= 0) {
@@ -4474,6 +4511,7 @@ export default function Home() {
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
           playerStatuses: nextPlayerStatuses,
+          monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
           actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
@@ -4518,6 +4556,7 @@ export default function Home() {
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
         playerStatuses: nextPlayerStatuses,
+        monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
@@ -4567,6 +4606,7 @@ export default function Home() {
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
       playerStatuses: nextPlayerStatuses,
+      monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
       actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
@@ -6890,7 +6930,7 @@ export default function Home() {
                   const mechanicLabels = [
                     ...getMonsterMechanicLabels(boss),
                     ...(boss.elementalAttack
-                      ? [`${boss.elementalAttack.element}灼燒：魔王傷害的${boss.elementalAttack.damagePercent}%／回合，持續${boss.elementalAttack.durationTurns}回合`]
+                      ? [`普通攻擊 100% · 技能攻擊 ${boss.elementalAttack.skillDamagePercent}% · 冷卻${boss.elementalAttack.cooldownTurns}回合`, `${boss.elementalAttack.element}灼燒：魔王實際技能傷害的${boss.elementalAttack.damagePercent}%／回合，持續${boss.elementalAttack.durationTurns}回合 · 物理攻擊傷害-${boss.elementalAttack.damageReductionPercent}%`]
                       : []),
                   ];
                   return (
@@ -8883,7 +8923,7 @@ export default function Home() {
               <div className="battle-status-row" aria-label="角色異常狀態">
                 {(battle.playerStatuses ?? []).map(status => (
                   <span className="battle-status battle-status-debuff" key={status.kind}>
-                    你受到{status.element}·{status.kind} · {status.turnsRemaining} 回合 · 每回合 {status.damagePerTurn} 傷害
+                    你受到{status.element}·{status.kind} · {status.turnsRemaining} 回合 · 每回合 {status.damagePerTurn} 傷害{status.damageReductionPercent ? ` · 物理攻擊傷害 -${status.damageReductionPercent}%` : ""}
                   </span>
                 ))}
               </div>
