@@ -178,6 +178,10 @@ type CombatStats = {
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
 type MonsterRequirements = Partial<Record<AbilityKey, number>>;
+type MonsterElementalAttack = {
+  element: SkillStatusEffect["element"];
+  damage: number;
+};
 type Monster = {
   id: string;
   name: string;
@@ -203,6 +207,7 @@ type Monster = {
   explosionDamage?: number;
   reflectDamage?: number;
   encounterType?: "individual" | "swarm";
+  elementalAttack?: MonsterElementalAttack;
   isBoss?: boolean;
   levelGate?: "player" | "soul";
 };
@@ -1055,7 +1060,7 @@ const bosses: Monster[] = [
   {
     id: "boss-abyss-dragon",
     name: "深淵古龍",
-    description: "盤踞在高階區域的終極守門者",
+    description: "盤踞在高階區域的終極守門者，攻擊附帶火焰元素傷害。",
     level: 75,
     health: 1600,
     reward: 900,
@@ -1063,7 +1068,8 @@ const bosses: Monster[] = [
     defense: 70,
     critRate: 22,
     critDamage: 225,
-    dodgeRate: 22,
+    dodgeRate: 35,
+    elementalAttack: { element: "火焰", damage: 60 },
     risk: "極高風險",
     requirements: { health: 550, strength: 70, defense: 60, intelligence: 50 },
     icon: Skull,
@@ -1152,6 +1158,7 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     lifestealPercent: boss.lifestealPercent,
     explosionDamage: boss.explosionDamage,
     reflectDamage: boss.reflectDamage,
+    elementalAttack: boss.elementalAttack,
   };
 }
 
@@ -4408,7 +4415,10 @@ export default function Home() {
             (buffReducedDamage * (targetGroupMember?.critDamage ?? monster.critDamage)) / 100
           )
         : buffReducedDamage;
-    const damageTaken = incomingDamageTaken + reflectedDamage;
+    const elementalDamageTaken = playerDodges || statusTick.frozen
+      ? 0
+      : monster.elementalAttack?.damage ?? 0;
+    const damageTaken = incomingDamageTaken + elementalDamageTaken + reflectedDamage;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
     const nextLogs = [
       ...logs,
@@ -4416,7 +4426,7 @@ export default function Home() {
         ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
-        : `${monster.name}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
+        : `${monster.name}造成 ${incomingDamageTaken + elementalDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${elementalDamageTaken ? `（含${monster.elementalAttack?.element}元素 ${elementalDamageTaken}）` : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
     ];
     const nextDamageTaken = battle.damageTaken + damageTaken;
     if (playerHealth <= 0) {
@@ -6853,7 +6863,12 @@ export default function Home() {
                 {activeBosses.map(boss => {
                   const defeated = defeatedMonsterIds.includes(boss.id);
                   const Icon = boss.icon;
-                  const mechanicLabels = getMonsterMechanicLabels(boss);
+                  const mechanicLabels = [
+                    ...getMonsterMechanicLabels(boss),
+                    ...(boss.elementalAttack
+                      ? [`${boss.elementalAttack.element}元素攻擊 +${boss.elementalAttack.damage} 傷害`]
+                      : []),
+                  ];
                   return (
                     <div
                       className={`monster-card boss-card panel-card monster-${boss.tone} ${defeated ? "is-defeated" : ""}`}
