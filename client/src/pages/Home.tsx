@@ -3940,7 +3940,18 @@ export default function Home() {
       return;
     }
     const groupMembers = monster.encounterType === "swarm"
-      ? createMonsterGroupMembers(monster.id, monster.health)
+      ? createMonsterGroupMembers(monster.id, monster.health, 3, {
+          damage: monster.damage,
+          defense: monster.defense,
+          critRate: monster.critRate,
+          critDamage: monster.critDamage,
+          dodgeRate: monster.dodgeRate,
+          physicalResistancePercent: monster.physicalResistancePercent,
+          magicResistancePercent: monster.magicResistancePercent,
+          lifestealPercent: monster.lifestealPercent,
+          reflectDamage: monster.reflectDamage,
+          explosionDamage: monster.explosionDamage,
+        })
       : undefined;
     setBattle({
       monsterId: monster.id,
@@ -3951,7 +3962,9 @@ export default function Home() {
         state.currentHealth,
         effectiveAbilities.health
       ),
-      monsterHealth: monster.health,
+      monsterHealth: groupMembers
+        ? groupMembers.reduce((total, member) => total + member.maxHealth, 0)
+        : monster.health,
       turn: 1,
       logs: [`你與${monster.name}遭遇了！選擇「進行回合」開始攻擊。`],
       damageDealt: 0,
@@ -4047,9 +4060,17 @@ export default function Home() {
       ? { ...activeBuff, turnsRemaining: activeBuff.turnsRemaining - 1 }
       : null;
     const monster = activeBattleMonster;
-    const livingGroupCount = battle.groupMembers
-      ? getLivingMonsterGroupMembers(battle.groupMembers).length
-      : 1;
+    const targetGroupMember = battle.groupMembers?.find(
+      member => member.id === battle.targetMonsterMemberId && member.health > 0
+    ) ?? battle.groupMembers?.find(member => member.health > 0);
+    const targetMonsterHealth = targetGroupMember?.health ?? battle.monsterHealth;
+    const targetMonsterMaxHealth = targetGroupMember?.maxHealth ?? monster.health;
+    const targetMonsterDefense = targetGroupMember?.defense ?? monster.defense;
+    const targetMonsterDodgeRate = targetGroupMember?.dodgeRate ?? monster.dodgeRate;
+    const targetPhysicalResistance =
+      targetGroupMember?.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0;
+    const targetMagicResistance =
+      targetGroupMember?.magicResistancePercent ?? monster.magicResistancePercent ?? 0;
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
       effectiveAbilities,
@@ -4064,7 +4085,7 @@ export default function Home() {
       ? false
       : selectedSkill?.effectType === "buff"
         ? false
-        : Math.random() < monster.dodgeRate / 100;
+        : Math.random() < targetMonsterDodgeRate / 100;
     const criticalHit =
       !actionLocked &&
       !isMage &&
@@ -4082,15 +4103,15 @@ export default function Home() {
     );
     const instantExecute = Boolean(
       selectedSkill?.executeBelowHealthPercent &&
-      battle.monsterHealth <
-        monster.health * (selectedSkill.executeBelowHealthPercent / 100)
+      targetMonsterHealth <
+        targetMonsterMaxHealth * (selectedSkill.executeBelowHealthPercent / 100)
     );
     const skillHitCount = selectedSkill?.hitCountMin && selectedSkill.hitCountMax
       ? selectedSkill.hitCountMin +
         Math.floor(Math.random() * (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1))
       : 1;
     const rawDamageDealt = instantExecute
-      ? battle.monsterHealth
+      ? targetMonsterHealth
       : actionLocked
       ? 0
       : monsterDodges
@@ -4100,20 +4121,20 @@ export default function Home() {
       : selectedSkill
         ? calculateSpecialSkillDamage(
             buffedPlayerDamage,
-            monster.defense,
+            targetMonsterDefense,
             selectedSkill
           ) * skillHitCount
         : Math.max(
             1,
-            buffedPlayerDamage - getDefenseReduction(monster.defense)
+            buffedPlayerDamage - getDefenseReduction(targetMonsterDefense)
           );
     const resistancePercent = damageType === "魔法"
       ? Math.max(
           0,
-          (monster.magicResistancePercent ?? 0) -
+          targetMagicResistance -
             (effectiveCombatStats.magicPenetrationPercent ?? 0)
         )
-      : monster.physicalResistancePercent ?? 0;
+      : targetPhysicalResistance;
     const damageDealt = instantExecute
       ? battle.monsterHealth
       : rawDamageDealt === 0
@@ -4170,10 +4191,15 @@ export default function Home() {
     ];
     const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
     const lifestealHealing = actualDamageDealt > 0
-      ? Math.floor(actualDamageDealt * (monster.lifestealPercent ?? 0) / 100)
+      ? Math.floor(
+          actualDamageDealt * (targetGroupMember?.lifestealPercent ?? monster.lifestealPercent ?? 0) / 100
+        )
       : 0;
-    const reflectedDamage = actualDamageDealt > 0 ? monster.reflectDamage ?? 0 : 0;
-    const reactiveDamageOnDeath = reflectedDamage + (monster.explosionDamage ?? 0);
+    const reflectedDamage = actualDamageDealt > 0
+      ? targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0
+      : 0;
+    const reactiveDamageOnDeath =
+      reflectedDamage + (targetGroupMember?.explosionDamage ?? monster.explosionDamage ?? 0);
     const activeBuffHealing = Math.floor(
       effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
     );
@@ -4320,7 +4346,9 @@ export default function Home() {
       ? false
       : Math.random() < effectivePlayerDodgeRate / 100;
     const monsterCritical =
-      !statusTick.frozen && !playerDodges && Math.random() < monster.critRate / 100;
+      !statusTick.frozen &&
+      !playerDodges &&
+      Math.random() < (targetGroupMember?.critRate ?? monster.critRate) / 100;
     const nextArcherDodgeFailStacks = isArcher
       ? getNextArcherDodgeFailStacks(state.archerDodgeFailStacks, playerDodges)
       : 0;
@@ -4332,9 +4360,17 @@ export default function Home() {
         ? "（游擊本能觸發：閃避成功，累積加成重置）"
         : `（游擊本能累積 ${nextArcherDodgeFailStacks} 層：攻擊 +${nextArcherTalentBonuses.attackPercent}%、閃避 +${nextArcherTalentBonuses.dodgePercent}%）`
       : "";
+    const groupDamage = battle.groupMembers
+      ? getLivingMonsterGroupMembers(battle.groupMembers).reduce(
+          (total, member) => total + (member.damage ?? Math.max(1, Math.round(monster.damage / 2))),
+          0
+        )
+      : monster.damage;
     const incomingBaseDamage = statusTick.frozen
       ? 0
-      : (failedRequirement ? monster.damage * 2 : monster.damage) * livingGroupCount;
+      : failedRequirement
+        ? groupDamage * 2
+        : groupDamage;
     const reducedDamage = Math.max(
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
@@ -4355,7 +4391,9 @@ export default function Home() {
     const incomingDamageTaken = playerDodges
       ? 0
       : monsterCritical
-        ? Math.ceil((buffReducedDamage * monster.critDamage) / 100)
+        ? Math.ceil(
+            (buffReducedDamage * (targetGroupMember?.critDamage ?? monster.critDamage)) / 100
+          )
         : buffReducedDamage;
     const damageTaken = incomingDamageTaken + reflectedDamage;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
@@ -8734,12 +8772,12 @@ export default function Home() {
                 <strong>{battle.monsterHealth}</strong>
                 <div className="battle-hp-track">
                   <span
-                    style={{
-                      width: `${Math.max(0, Math.min(100, (battle.monsterHealth / activeBattleMonster.health) * 100))}%`,
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (battle.monsterHealth / (battle.groupMembers?.reduce((total, member) => total + member.maxHealth, 0) ?? activeBattleMonster.health)) * 100))}%`,
                     }}
                   />
                 </div>
-                <small>/ {activeBattleMonster.health} 生命</small>
+                <small>/ {battle.groupMembers?.reduce((total, member) => total + member.maxHealth, 0) ?? activeBattleMonster.health} 生命</small>
                 {battle.groupMembers && (
                   <div className="battle-group-members" aria-label="群聚小怪成員">
                     {battle.groupMembers.map((member, index) => (

@@ -13,6 +13,36 @@ describe("monster group combat", () => {
     expect(members.reduce((total, member) => total + member.health, 0)).toBe(100);
   });
 
+  it("sets each swarm member to half of the monster card values", () => {
+    const members = createMonsterGroupMembers("swarm", 100, 3, {
+      damage: 21,
+      defense: 11,
+      critRate: 9,
+      critDamage: 150,
+      dodgeRate: 7,
+      physicalResistancePercent: 25,
+      magicResistancePercent: 20,
+      lifestealPercent: 15,
+      reflectDamage: 8,
+      explosionDamage: 19,
+    });
+
+    expect(members).toHaveLength(3);
+    expect(members.every(member => member.health === 50)).toBe(true);
+    expect(members[0]).toMatchObject({
+      damage: 11,
+      defense: 6,
+      critRate: 5,
+      critDamage: 75,
+      dodgeRate: 4,
+      physicalResistancePercent: 13,
+      magicResistancePercent: 10,
+      lifestealPercent: 8,
+      reflectDamage: 4,
+      explosionDamage: 10,
+    });
+  });
+
   it("applies one attack to only one living member", () => {
     const members = createMonsterGroupMembers("swarm", 90);
     const result = applyMonsterGroupDamage(members, 40);
