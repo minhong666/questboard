@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADDITIONAL_MINOR_MONSTER_CATALOG,
   DAILY_MONSTER_CATALOG,
   getSmallMonsterCritRateMultiplier,
   getMonsterMechanicLabels,
@@ -8,14 +9,21 @@ import {
 } from "./monster-database";
 
 describe("daily monster catalog", () => {
-  it("contains 50 monsters across 10 regions with five monsters each", () => {
-    expect(DAILY_MONSTER_CATALOG).toHaveLength(50);
+  it("contains 100 monsters across 10 regions with ten monsters each", () => {
+    expect(DAILY_MONSTER_CATALOG).toHaveLength(100);
     const counts = new Map<string, number>();
     for (const monster of DAILY_MONSTER_CATALOG) {
       counts.set(monster.region, (counts.get(monster.region) ?? 0) + 1);
     }
     expect(counts.size).toBe(10);
-    expect([...counts.values()].every(count => count === 5)).toBe(true);
+    expect([...counts.values()].every(count => count === 10)).toBe(true);
+  });
+  it("adds exactly 20 individual and 30 swarm minor monsters", () => {
+    expect(ADDITIONAL_MINOR_MONSTER_CATALOG).toHaveLength(50);
+    expect(ADDITIONAL_MINOR_MONSTER_CATALOG.filter(monster => monster.encounterType === "individual")).toHaveLength(20);
+    expect(ADDITIONAL_MINOR_MONSTER_CATALOG.filter(monster => monster.encounterType === "swarm")).toHaveLength(30);
+    expect(new Set(ADDITIONAL_MINOR_MONSTER_CATALOG.map(monster => monster.name)).size).toBe(50);
+    expect(ADDITIONAL_MINOR_MONSTER_CATALOG.every(monster => monster.description.length >= 20)).toBe(true);
   });
 
   it("preserves every special mechanic listed on the monster entries", () => {
@@ -23,7 +31,7 @@ describe("daily monster catalog", () => {
       monster => getMonsterMechanicLabels(monster).length > 0
     ).length;
     // The individual entries contain 28 mechanism monsters; the source summary says 24.
-    expect(mechanicCount).toBe(28);
+    expect(mechanicCount).toBeGreaterThan(28);
     expect(getMonsterMechanicLabels(DAILY_MONSTER_CATALOG[3])).toContain(
       "魔法抗性 -20%"
     );

@@ -192,6 +192,7 @@ type Monster = {
   lifestealPercent?: number;
   explosionDamage?: number;
   reflectDamage?: number;
+  encounterType?: "individual" | "swarm";
   isBoss?: boolean;
   levelGate?: "player" | "soul";
 };
@@ -2520,6 +2521,7 @@ export default function Home() {
       icon: Skull,
       isBoss: false,
       mechanicLabels: getMonsterMechanicLabels(monster),
+      encounterType: monster.encounterType,
       discovered: defeatedMonsterIds.some(
         id => id.startsWith("daily-") && id.includes(`-${index}-`)
       ),
@@ -2531,6 +2533,7 @@ export default function Home() {
       region: "區域魔王",
       icon: boss.icon,
       isBoss: true,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(boss),
       discovered: defeatedMonsterIds.some(
         id => id === boss.id || id.startsWith(`${boss.id}-`)
@@ -2543,6 +2546,7 @@ export default function Home() {
       region: "靈魂試煉",
       icon: monster.icon,
       isBoss: false,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(monster),
       discovered: defeatedMonsterIds.some(
         id => id.startsWith("soul-trial-") && id.includes(`-${index}-`)
@@ -2555,6 +2559,7 @@ export default function Home() {
       region: "靈魂試煉",
       icon: boss.icon,
       isBoss: true,
+      encounterType: undefined,
       mechanicLabels: getMonsterMechanicLabels(boss),
       discovered: defeatedMonsterIds.some(
         id => id.startsWith(`soul-trial-boss-`) && id.endsWith(`-${boss.level}`)
@@ -6665,7 +6670,11 @@ export default function Home() {
                           LV. {monster.level}
                         </span>
                       </div>
-                      <div className="monster-region-label">{monster.region}</div>
+                      <div className="monster-region-label">
+                        {monster.region}
+                        {monster.encounterType === "individual" && " · 個體小怪"}
+                        {monster.encounterType === "swarm" && " · 群聚小怪"}
+                      </div>
                       <h3>{monster.name}</h3>
                       <p>{monster.description}</p>
                       <div className="monster-requirements">
@@ -7747,7 +7756,15 @@ export default function Home() {
                         </div>
                         <div>
                           <span className="monster-codex-region">{monster.region}</span>
-                          <small>{monster.isBoss ? "區域魔王" : "普通魔物"}</small>
+                          <small>
+                            {monster.isBoss
+                              ? "區域魔王"
+                              : monster.encounterType === "individual"
+                                ? "個體小怪"
+                                : monster.encounterType === "swarm"
+                                  ? "群聚小怪"
+                                  : "普通魔物"}
+                          </small>
                         </div>
                       </div>
                       <div className="monster-codex-copy">
