@@ -55,7 +55,9 @@ describe("class-specific special skills", () => {
     expect(skills[3]).toMatchObject({
       name: "隕星術",
       damageMultiplier: 3,
+      defensePiercePercent: 50,
       cooldownTurns: 5,
+      targetMode: "all",
       statusEffect: {
         kind: "石化",
         element: "奧術",
@@ -66,6 +68,7 @@ describe("class-specific special skills", () => {
         breakDamage: 25,
       },
     });
+    expect(skills[3].description).toContain("對所有敵人");
     expect(skills[3].description).toContain("石化");
   });
 
@@ -90,14 +93,14 @@ describe("class-specific special skills", () => {
       damageMultiplier: 1.6,
       defensePiercePercent: 30,
       cooldownTurns: 4,
+      targetMode: "two",
       damageType: "物理",
     });
     expect(skills[2]).toMatchObject({
-      damageMultiplier: 1.65,
-      defensePiercePercent: 0,
+      damageMultiplier: 2,
+      defensePiercePercent: 40,
       cooldownTurns: 4,
-      hitCountMin: 1,
-      hitCountMax: 3,
+      targetMode: "all",
       damageType: "物理",
     });
     expect(skills[3]).toMatchObject({
@@ -111,37 +114,43 @@ describe("class-specific special skills", () => {
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
   });
 
-  it("unlocks three rogue physical skills at 10%, 20%, and 30% critical rate", () => {
-    expect(getUnlockedSpecialSkills("rogue", 500, 500, 9.9)).toEqual([]);
-    expect(getNextSkillUnlockThreshold("rogue", 500, 500, 9.9)).toBe(10);
+  it("unlocks four rogue physical skills at 170%, 200%, 225%, and 250% critical damage", () => {
+    expect(getUnlockedSpecialSkills("rogue", 500, 500, 0, 169.9)).toEqual([]);
+    expect(getNextSkillUnlockThreshold("rogue", 500, 500, 0, 169.9)).toBe(170);
 
-    const firstSkill = getUnlockedSpecialSkills("rogue", 0, 0, 10);
+    const firstSkill = getUnlockedSpecialSkills("rogue", 0, 0, 0, 170);
     expect(firstSkill.map(skill => skill.name)).toEqual(["背刺"]);
     expect(firstSkill[0]).toMatchObject({
-      id: "rogue-10",
+      id: "rogue-170",
       jobClass: "rogue",
-      attributeName: "暴擊率",
-      requiredValue: 10,
+      attributeName: "暴擊傷害",
+      requiredValue: 170,
       damageType: "物理",
     });
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 30).every(skill => skill.damageType === "物理")).toBe(true);
-    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 10)).toBe(20);
+    const at200 = getUnlockedSpecialSkills("rogue", 0, 0, 0, 200);
+    expect(at200.map(skill => skill.name)).toEqual(["背刺", "順影鏢殺"]);
+    expect(at200[1]).toMatchObject({
+      damageMultiplier: 2.3,
+      defensePiercePercent: 0,
+      targetMode: "all",
+    });
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 250).every(skill => skill.damageType === "物理")).toBe(true);
+    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 170)).toBe(200);
 
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 20).map(skill => skill.name))
-      .toEqual(["背刺", "影刃連擊"]);
-    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 30);
-    expect(allSkills.map(skill => skill.requiredValue)).toEqual([10, 20, 30]);
+    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 0, 250);
+    expect(allSkills.map(skill => skill.requiredValue)).toEqual([170, 200, 225, 250]);
     expect(allSkills.map(skill => skill.name)).toEqual([
       "背刺",
+      "順影鏢殺",
       "影刃連擊",
       "死亡標記",
     ]);
-    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 30)).toBeNull();
+    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 250)).toBeNull();
   });
 
-  it("keeps rogue unlocks exclusive to critical rate and caps them at three", () => {
-    expect(getUnlockedSpecialSkills("rogue", 1000, 1000, 0)).toEqual([]);
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 99)).toHaveLength(3);
+  it("keeps rogue unlocks exclusive to critical damage and caps them at four", () => {
+    expect(getUnlockedSpecialSkills("rogue", 1000, 1000, 0, 0)).toEqual([]);
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 250)).toHaveLength(4);
     expect(getUnlockedSpecialSkills("mage", 0, 0, 100)).toEqual([]);
   });
 

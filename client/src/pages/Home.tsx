@@ -178,6 +178,14 @@ type CombatStats = {
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
 type MonsterRequirements = Partial<Record<AbilityKey, number>>;
+type MonsterElementalAttack = {
+  element: SkillStatusEffect["element"];
+  damagePercent: number;
+  durationTurns: number;
+  skillDamagePercent: number;
+  damageReductionPercent: number;
+  cooldownTurns: number;
+};
 type Monster = {
   id: string;
   name: string;
@@ -203,6 +211,7 @@ type Monster = {
   explosionDamage?: number;
   reflectDamage?: number;
   encounterType?: "individual" | "swarm";
+  elementalAttack?: MonsterElementalAttack;
   isBoss?: boolean;
   levelGate?: "player" | "soul";
 };
@@ -223,6 +232,8 @@ type BattleState = {
   skillCooldowns: Record<string, number>;
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
+  playerStatuses: BattleStatus[];
+  monsterSkillCooldown?: number;
   activeBuff: {
     skillId: string;
     turnsRemaining: number;
@@ -241,6 +252,7 @@ type BattleStatus = {
   element: SkillStatusEffect["element"];
   turnsRemaining: number;
   damagePerTurn: number;
+  damageReductionPercent?: number;
   breakDamageThreshold?: number;
   breakDamage?: number;
 };
@@ -277,6 +289,7 @@ function applyBattleStatusEffects(
         element: effect.element,
         turnsRemaining: effect.durationTurns,
         damagePerTurn,
+        damageReductionPercent: effect.damageReductionPercent,
         breakDamageThreshold: effect.breakDamageThreshold,
         breakDamage: effect.breakDamage,
       });
@@ -969,7 +982,7 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
     const level = Math.max(1, soulLevel + offset);
     const [name, description] = soulTrialMonsterNames[index];
     return {
-      id: `soul-trial-${refreshKey}-${index}-${level}`,
+      id: `soul-trial-${refreshKey}-${index}`,
       name,
       description,
       level,
@@ -1055,7 +1068,7 @@ const bosses: Monster[] = [
   {
     id: "boss-abyss-dragon",
     name: "深淵古龍",
-    description: "盤踞在高階區域的終極守門者",
+    description: "盤踞在高階區域的終極守門者，會交替施展普通攻擊與火焰灼燒技能。",
     level: 75,
     health: 1600,
     reward: 900,
@@ -1063,7 +1076,15 @@ const bosses: Monster[] = [
     defense: 70,
     critRate: 22,
     critDamage: 225,
-    dodgeRate: 22,
+    dodgeRate: 35,
+    elementalAttack: {
+      element: "火焰",
+      damagePercent: 5,
+      durationTurns: 3,
+      skillDamagePercent: 75,
+      damageReductionPercent: 20,
+      cooldownTurns: 5,
+    },
     risk: "極高風險",
     requirements: { health: 550, strength: 70, defense: 60, intelligence: 50 },
     icon: Skull,
@@ -1152,6 +1173,7 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     lifestealPercent: boss.lifestealPercent,
     explosionDamage: boss.explosionDamage,
     reflectDamage: boss.reflectDamage,
+    elementalAttack: boss.elementalAttack,
   };
 }
 
@@ -1336,7 +1358,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
   if (jobClass === "archer") {
     growth.abilities.strength += safeLevelUps;
     growth.combat = {
-      critRate: safeLevelUps * 0.6,
+      critRate: safeLevelUps * 0.5,
       critDamage: safeLevelUps * 0.5,
     };
   }
@@ -1505,7 +1527,7 @@ const jobClasses: Record<
     name: "弓箭手",
     icon: "target",
     description: "敏捷的遠程獵手，擅長閃避與暴擊。",
-    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.6%、暴擊傷害 +0.5%",
+    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +0.5%",
     bonuses: { health: 0, strength: 2, defense: 0, intelligence: 1 },
     combat: { critRate: 3, dodgeRate: 4 },
   },
@@ -1899,7 +1921,9 @@ function formatCooldown(milliseconds: number) {
 }
 
 function getSmallMonsterRefreshKey(date: Date) {
-  return `small-${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  const refreshDay = new Date(date);
+  if (refreshDay.getHours() < 12) refreshDay.setDate(refreshDay.getDate() - 1);
+  return `small-${refreshDay.getFullYear()}-${refreshDay.getMonth() + 1}-${refreshDay.getDate()}`;
 }
 
 function getWeeklyBossRefreshKey(date: Date) {
@@ -1912,8 +1936,8 @@ function getWeeklyBossRefreshKey(date: Date) {
 
 function getNextSmallMonsterRefreshAt(timestamp: number) {
   const next = new Date(timestamp);
-  next.setHours(0, 0, 0, 0);
-  next.setDate(next.getDate() + 1);
+  next.setHours(12, 0, 0, 0);
+  if (next.getTime() <= timestamp) next.setDate(next.getDate() + 1);
   return next.getTime();
 }
 
@@ -2361,7 +2385,7 @@ export default function Home() {
       bosses.map(boss => ({
         ...tripleRegionalBossStats(boss),
         id: `${boss.id}-${weeklyBossRefreshKey}`,
-      })),
+      })).sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
     [weeklyBossRefreshKey]
   );
   const activeSoulTrialBosses = useMemo(
@@ -2708,7 +2732,8 @@ export default function Home() {
     state.jobClass,
     state.abilities.strength,
     state.abilities.intelligence,
-    effectiveCombatStats.critRate
+    effectiveCombatStats.critRate,
+    effectiveCombatStats.critDamage
   ).map(skill =>
     applySkillUpgrade(
       specializationUnlocked
@@ -2770,7 +2795,8 @@ export default function Home() {
     state.jobClass,
     state.abilities.strength,
     state.abilities.intelligence,
-    effectiveCombatStats.critRate
+    effectiveCombatStats.critRate,
+    effectiveCombatStats.critDamage
   );
   const nextSpecializationSkillLevel = specializationUnlocked
     ? getNextSpecializationSkillLevel(currentSpecialization, player.level)
@@ -2782,13 +2808,13 @@ export default function Home() {
     state.jobClass === "rogue";
   const skillAttributeName =
     state.jobClass === "rogue"
-      ? "暴擊率"
+      ? "暴擊傷害"
       : state.jobClass === "warrior"
         ? "力量"
         : "智力";
   const skillAttributeValue =
     state.jobClass === "rogue"
-      ? effectiveCombatStats.critRate
+      ? effectiveCombatStats.critDamage
       : state.jobClass === "warrior"
         ? state.abilities.strength
         : state.abilities.intelligence;
@@ -3986,6 +4012,8 @@ export default function Home() {
       skillCooldowns: {},
       actionLockTurns: 0,
       monsterStatuses: [],
+      playerStatuses: [],
+      monsterSkillCooldown: 0,
       activeBuff: null,
       xpReward: 0,
       lootDrop: null,
@@ -4082,6 +4110,9 @@ export default function Home() {
       targetGroupMember?.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0;
     const targetMagicResistance =
       targetGroupMember?.magicResistancePercent ?? monster.magicResistancePercent ?? 0;
+    const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
+    const statusDamageTaken = Math.min(playerStatusTick.damage, battle.playerHealth);
+    const healthAfterPlayerStatus = Math.max(0, battle.playerHealth - statusDamageTaken);
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
       effectiveAbilities,
@@ -4092,6 +4123,24 @@ export default function Home() {
       monster.requirements
     );
     const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
+    const physicalDamageReductionPercent = damageType === "物理"
+      ? Math.min(
+          80,
+          (battle.playerStatuses ?? []).reduce(
+            (total, status) => total + (status.damageReductionPercent ?? 0),
+            0
+          )
+        )
+      : 0;
+    const monsterUsesSkill = Boolean(
+      monster.elementalAttack && (battle.monsterSkillCooldown ?? 0) <= 0
+    );
+    const monsterAttackMultiplier = monsterUsesSkill
+      ? (monster.elementalAttack?.skillDamagePercent ?? 100) / 100
+      : 1;
+    const nextMonsterSkillCooldown = monsterUsesSkill
+      ? monster.elementalAttack?.cooldownTurns ?? 0
+      : Math.max(0, (battle.monsterSkillCooldown ?? 0) - 1);
     const monsterDodges = actionLocked
       ? false
       : selectedSkill?.effectType === "buff"
@@ -4110,7 +4159,9 @@ export default function Home() {
       ? Math.round((basePlayerDamage * effectiveCombatStats.critDamage) / 100)
       : basePlayerDamage;
     const buffedPlayerDamage = Math.round(
-      damageBeforeDefense * (1 + (activeBuff?.damageBonusPercent ?? 0) / 100)
+      damageBeforeDefense *
+        (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
+        (1 - physicalDamageReductionPercent / 100)
     );
     const instantExecute = Boolean(
       selectedSkill?.executeBelowHealthPercent &&
@@ -4216,7 +4267,7 @@ export default function Home() {
     );
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
-      battle.playerHealth + lifestealHealing + activeBuffHealing
+      healthAfterPlayerStatus + lifestealHealing + activeBuffHealing
     );
     const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
@@ -4248,6 +4299,8 @@ export default function Home() {
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
+        playerStatuses: playerStatusTick.statuses,
+        monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
@@ -4380,8 +4433,8 @@ export default function Home() {
     const incomingBaseDamage = statusTick.frozen
       ? 0
       : failedRequirement
-        ? groupDamage * 2
-        : groupDamage;
+        ? Math.round(groupDamage * 2 * monsterAttackMultiplier)
+        : Math.round(groupDamage * monsterAttackMultiplier);
     const reducedDamage = Math.max(
       1,
       incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
@@ -4406,22 +4459,41 @@ export default function Home() {
             (buffReducedDamage * (targetGroupMember?.critDamage ?? monster.critDamage)) / 100
           )
         : buffReducedDamage;
+    const nextPlayerStatuses = applyBattleStatusEffects(
+      playerStatusTick.statuses,
+      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
+        ? [{
+            element: monster.elementalAttack.element,
+            kind: "燃燒",
+            chance: 1,
+            durationTurns: monster.elementalAttack.durationTurns,
+            damagePerTurn: 0,
+            damagePercentOfSkill: monster.elementalAttack.damagePercent,
+            damageReductionPercent: monster.elementalAttack.damageReductionPercent,
+          }]
+        : []
+    );
+    const burnApplied = Boolean(
+      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
+    );
     const damageTaken = incomingDamageTaken + reflectedDamage;
+    const totalDamageTaken = statusDamageTaken + damageTaken;
     const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
     const nextLogs = [
       ...logs,
+      ...(playerStatusTick.labels.length > 0 ? playerStatusTick.labels : []),
       statusTick.frozen
         ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
-        : `${monster.name}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
+        : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
     ];
-    const nextDamageTaken = battle.damageTaken + damageTaken;
+    const nextDamageTaken = battle.damageTaken + totalDamageTaken;
     if (playerHealth <= 0) {
       showBattleFx({
         action: selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
-        playerDamage: damageTaken,
+        playerDamage: totalDamageTaken,
         healing: lifestealHealing + activeBuffHealing,
         critical: criticalHit || monsterCritical,
         monsterDodged: monsterDodges,
@@ -4440,6 +4512,8 @@ export default function Home() {
           usedSkillIds,
           skillCooldowns: nextSkillCooldowns,
           monsterStatuses: statusTick.statuses,
+          playerStatuses: nextPlayerStatuses,
+          monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
           actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
@@ -4483,6 +4557,8 @@ export default function Home() {
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
         monsterStatuses: statusTick.statuses,
+        playerStatuses: nextPlayerStatuses,
+        monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
@@ -4514,7 +4590,7 @@ export default function Home() {
     showBattleFx({
       action: selectedSkill ? "skill" : "attack",
       monsterDamage: appliedDamage,
-      playerDamage: damageTaken,
+      playerDamage: totalDamageTaken,
       healing: lifestealHealing + activeBuffHealing,
       critical: criticalHit || monsterCritical,
       monsterDodged: monsterDodges,
@@ -4531,6 +4607,8 @@ export default function Home() {
       usedSkillIds,
       skillCooldowns: nextSkillCooldowns,
       monsterStatuses: statusTick.statuses,
+      playerStatuses: nextPlayerStatuses,
+      monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
       actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
@@ -6384,13 +6462,13 @@ export default function Home() {
                         <span>
                           {classDefinition.name} ·{" "}
                           {state.jobClass === "rogue"
-                            ? `暴擊率 ${skillAttributeValue.toFixed(1)}%`
+                            ? `暴擊傷害 ${skillAttributeValue.toFixed(1)}%`
                             : `基礎${skillAttributeName} ${skillAttributeValue}`}
                         </span>
                         <strong>
                           {nextSkillUnlockThreshold !== null
                             ? `下一技能：${nextSkillUnlockThreshold}${state.jobClass === "rogue" ? "%" : " 點"}`
-                            : "已解鎖全部盜賊技能"}
+                            : "已解鎖全部職業技能"}
                         </strong>
                       </div>
                       {battleSpecialSkills.length > 0 ? (
@@ -6402,7 +6480,7 @@ export default function Home() {
                                 <span>
                                   {skill.unlockLevel
                                     ? `角色 Lv.${skill.unlockLevel} 解鎖`
-                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
+                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" || skill.attributeName === "暴擊傷害" ? "%" : " 點"}`}
                                 </span>
                               </div>
                               <small>{skill.description}</small>
@@ -6412,14 +6490,14 @@ export default function Home() {
                       ) : (
                         <p className="class-skill-empty">
                           {state.jobClass === "rogue"
-                            ? "暴擊率達到 10%、20%、30% 時依序解鎖盜賊技能。"
+                            ? "暴擊傷害達到 170%、200%、225%、250% 時依序解鎖盜賊技能。"
                             : `基礎${skillAttributeName}達到 25 點後解鎖第一項職業技能；門檻不計裝備加成。`}
                         </p>
                       )}
                     </>
                   ) : (
                     <p className="class-skill-empty">
-                      特殊技能開放給戰士（力量物理技能）、弓箭手（智力被動技能）、法師（智力魔法技能）與盜賊（暴擊率技能）。
+                      特殊技能開放給戰士（力量物理技能）、弓箭手（暴擊率技能）、法師（智力魔法技能）與盜賊（暴擊傷害技能）。
                     </p>
                   )}
                 </div>
@@ -6668,7 +6746,7 @@ export default function Home() {
                     </div>
                     <h2>靈魂小怪</h2>
                     <p>
-                      共 9 隻 · 與怪物區域相同，每日 00:00 刷新 · 倒數{" "}
+                      共 9 隻 · 與怪物區域相同，每日 12:00 刷新 · 倒數{" "}
                       {formatRefreshCountdown(
                         nextSmallMonsterRefreshAt - currentTime
                       )}{" "}
@@ -6718,7 +6796,7 @@ export default function Home() {
                   <p>
                     {combatLocked
                       ? `戰鬥封鎖中 · 剩餘 ${formatCooldown(combatCooldownRemaining)}`
-                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 00:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
+                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 12:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
                   </p>
                 </div>
                 <div className="monster-zone-stats">
@@ -6851,7 +6929,12 @@ export default function Home() {
                 {activeBosses.map(boss => {
                   const defeated = defeatedMonsterIds.includes(boss.id);
                   const Icon = boss.icon;
-                  const mechanicLabels = getMonsterMechanicLabels(boss);
+                  const mechanicLabels = [
+                    ...getMonsterMechanicLabels(boss),
+                    ...(boss.elementalAttack
+                      ? [`普通攻擊 100% · 技能攻擊 ${boss.elementalAttack.skillDamagePercent}% · 冷卻${boss.elementalAttack.cooldownTurns}回合`, `${boss.elementalAttack.element}灼燒：魔王實際技能傷害的${boss.elementalAttack.damagePercent}%／回合，持續${boss.elementalAttack.durationTurns}回合 · 物理攻擊傷害-${boss.elementalAttack.damageReductionPercent}%`]
+                      : []),
+                  ];
                   return (
                     <div
                       className={`monster-card boss-card panel-card monster-${boss.tone} ${defeated ? "is-defeated" : ""}`}
@@ -8834,6 +8917,15 @@ export default function Home() {
                       : status.kind === "冰凍" || status.kind === "石化"
                         ? " · 無法反擊"
                         : " · 持續中"}
+                  </span>
+                ))}
+              </div>
+            )}
+            {(battle.playerStatuses ?? []).length > 0 && (
+              <div className="battle-status-row" aria-label="角色異常狀態">
+                {(battle.playerStatuses ?? []).map(status => (
+                  <span className="battle-status battle-status-debuff" key={status.kind}>
+                    你受到{status.element}·{status.kind} · {status.turnsRemaining} 回合 · 每回合 {status.damagePerTurn} 傷害{status.damageReductionPercent ? ` · 物理攻擊傷害 -${status.damageReductionPercent}%` : ""}
                   </span>
                 ))}
               </div>
