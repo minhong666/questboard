@@ -55,7 +55,9 @@ describe("class-specific special skills", () => {
     expect(skills[3]).toMatchObject({
       name: "隕星術",
       damageMultiplier: 3,
+      defensePiercePercent: 50,
       cooldownTurns: 5,
+      targetMode: "all",
       statusEffect: {
         kind: "石化",
         element: "奧術",
@@ -66,6 +68,7 @@ describe("class-specific special skills", () => {
         breakDamage: 25,
       },
     });
+    expect(skills[3].description).toContain("對所有敵人");
     expect(skills[3].description).toContain("石化");
   });
 

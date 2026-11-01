@@ -232,6 +232,8 @@ export function getUnlockedSpecialSkills(
           ? "物理技能，對兩個敵人各造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
         : isArcherRapidVolley
           ? "物理技能，對所有敵人各造成 2.00 倍傷害，防禦穿透 40%；冷卻 4 回合。"
+        : isMageMeteor
+          ? "魔法技能，對所有敵人各造成 3.00 倍魔法傷害，魔法防禦穿透 50%；100% 石化 2 回合，每回合 5 點石化傷害；冷卻 5 回合。"
         : isArcherDawnShot
           ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
@@ -243,7 +245,13 @@ export function getUnlockedSpecialSkills(
       damageReductionPercent: isKnightHeart ? 20 : 0,
       flatDamageBonus: 0,
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
-      targetMode: isArcherPiercingShot ? "two" : isArcherRapidVolley ? "all" : "single",
+      targetMode: isMageMeteor
+        ? "all"
+        : isArcherPiercingShot
+          ? "two"
+          : isArcherRapidVolley
+            ? "all"
+            : "single",
       statusEffect,
     };
   });
