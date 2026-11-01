@@ -1358,7 +1358,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
   if (jobClass === "archer") {
     growth.abilities.strength += safeLevelUps;
     growth.combat = {
-      critRate: safeLevelUps * 0.6,
+      critRate: safeLevelUps * 0.5,
       critDamage: safeLevelUps * 0.5,
     };
   }
@@ -1527,7 +1527,7 @@ const jobClasses: Record<
     name: "弓箭手",
     icon: "target",
     description: "敏捷的遠程獵手，擅長閃避與暴擊。",
-    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.6%、暴擊傷害 +0.5%",
+    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +0.5%",
     bonuses: { health: 0, strength: 2, defense: 0, intelligence: 1 },
     combat: { critRate: 3, dodgeRate: 4 },
   },
@@ -2732,7 +2732,8 @@ export default function Home() {
     state.jobClass,
     state.abilities.strength,
     state.abilities.intelligence,
-    effectiveCombatStats.critRate
+    effectiveCombatStats.critRate,
+    effectiveCombatStats.critDamage
   ).map(skill =>
     applySkillUpgrade(
       specializationUnlocked
@@ -2794,7 +2795,8 @@ export default function Home() {
     state.jobClass,
     state.abilities.strength,
     state.abilities.intelligence,
-    effectiveCombatStats.critRate
+    effectiveCombatStats.critRate,
+    effectiveCombatStats.critDamage
   );
   const nextSpecializationSkillLevel = specializationUnlocked
     ? getNextSpecializationSkillLevel(currentSpecialization, player.level)
@@ -2806,13 +2808,13 @@ export default function Home() {
     state.jobClass === "rogue";
   const skillAttributeName =
     state.jobClass === "rogue"
-      ? "暴擊率"
+      ? "暴擊傷害"
       : state.jobClass === "warrior"
         ? "力量"
         : "智力";
   const skillAttributeValue =
     state.jobClass === "rogue"
-      ? effectiveCombatStats.critRate
+      ? effectiveCombatStats.critDamage
       : state.jobClass === "warrior"
         ? state.abilities.strength
         : state.abilities.intelligence;
@@ -6460,13 +6462,13 @@ export default function Home() {
                         <span>
                           {classDefinition.name} ·{" "}
                           {state.jobClass === "rogue"
-                            ? `暴擊率 ${skillAttributeValue.toFixed(1)}%`
+                            ? `暴擊傷害 ${skillAttributeValue.toFixed(1)}%`
                             : `基礎${skillAttributeName} ${skillAttributeValue}`}
                         </span>
                         <strong>
                           {nextSkillUnlockThreshold !== null
                             ? `下一技能：${nextSkillUnlockThreshold}${state.jobClass === "rogue" ? "%" : " 點"}`
-                            : "已解鎖全部盜賊技能"}
+                            : "已解鎖全部職業技能"}
                         </strong>
                       </div>
                       {battleSpecialSkills.length > 0 ? (
@@ -6478,7 +6480,7 @@ export default function Home() {
                                 <span>
                                   {skill.unlockLevel
                                     ? `角色 Lv.${skill.unlockLevel} 解鎖`
-                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" ? "%" : " 點"}`}
+                                    : `${skill.attributeName} ${skill.requiredValue}${skill.attributeName === "暴擊率" || skill.attributeName === "暴擊傷害" ? "%" : " 點"}`}
                                 </span>
                               </div>
                               <small>{skill.description}</small>
@@ -6488,14 +6490,14 @@ export default function Home() {
                       ) : (
                         <p className="class-skill-empty">
                           {state.jobClass === "rogue"
-                            ? "暴擊率達到 10%、20%、30% 時依序解鎖盜賊技能。"
+                            ? "暴擊傷害達到 170%、200%、225% 時依序解鎖盜賊技能。"
                             : `基礎${skillAttributeName}達到 25 點後解鎖第一項職業技能；門檻不計裝備加成。`}
                         </p>
                       )}
                     </>
                   ) : (
                     <p className="class-skill-empty">
-                      特殊技能開放給戰士（力量物理技能）、弓箭手（智力被動技能）、法師（智力魔法技能）與盜賊（暴擊率技能）。
+                      特殊技能開放給戰士（力量物理技能）、弓箭手（暴擊率技能）、法師（智力魔法技能）與盜賊（暴擊傷害技能）。
                     </p>
                   )}
                 </div>

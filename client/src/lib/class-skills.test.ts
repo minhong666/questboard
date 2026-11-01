@@ -114,37 +114,37 @@ describe("class-specific special skills", () => {
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
   });
 
-  it("unlocks three rogue physical skills at 10%, 20%, and 30% critical rate", () => {
-    expect(getUnlockedSpecialSkills("rogue", 500, 500, 9.9)).toEqual([]);
-    expect(getNextSkillUnlockThreshold("rogue", 500, 500, 9.9)).toBe(10);
+  it("unlocks three rogue physical skills at 170%, 200%, and 225% critical damage", () => {
+    expect(getUnlockedSpecialSkills("rogue", 500, 500, 0, 169.9)).toEqual([]);
+    expect(getNextSkillUnlockThreshold("rogue", 500, 500, 0, 169.9)).toBe(170);
 
-    const firstSkill = getUnlockedSpecialSkills("rogue", 0, 0, 10);
+    const firstSkill = getUnlockedSpecialSkills("rogue", 0, 0, 0, 170);
     expect(firstSkill.map(skill => skill.name)).toEqual(["背刺"]);
     expect(firstSkill[0]).toMatchObject({
-      id: "rogue-10",
+      id: "rogue-170",
       jobClass: "rogue",
-      attributeName: "暴擊率",
-      requiredValue: 10,
+      attributeName: "暴擊傷害",
+      requiredValue: 170,
       damageType: "物理",
     });
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 30).every(skill => skill.damageType === "物理")).toBe(true);
-    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 10)).toBe(20);
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 225).every(skill => skill.damageType === "物理")).toBe(true);
+    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 170)).toBe(200);
 
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 20).map(skill => skill.name))
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 200).map(skill => skill.name))
       .toEqual(["背刺", "影刃連擊"]);
-    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 30);
-    expect(allSkills.map(skill => skill.requiredValue)).toEqual([10, 20, 30]);
+    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 0, 225);
+    expect(allSkills.map(skill => skill.requiredValue)).toEqual([170, 200, 225]);
     expect(allSkills.map(skill => skill.name)).toEqual([
       "背刺",
       "影刃連擊",
       "死亡標記",
     ]);
-    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 30)).toBeNull();
+    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 225)).toBeNull();
   });
 
-  it("keeps rogue unlocks exclusive to critical rate and caps them at three", () => {
-    expect(getUnlockedSpecialSkills("rogue", 1000, 1000, 0)).toEqual([]);
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 99)).toHaveLength(3);
+  it("keeps rogue unlocks exclusive to critical damage and caps them at three", () => {
+    expect(getUnlockedSpecialSkills("rogue", 1000, 1000, 0, 0)).toEqual([]);
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 225)).toHaveLength(3);
     expect(getUnlockedSpecialSkills("mage", 0, 0, 100)).toEqual([]);
   });
 

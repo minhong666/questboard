@@ -48,7 +48,7 @@ describe("skill upgrades", () => {
   });
 
   it("caps upgraded defense penetration at 60%", () => {
-    const skill = getUnlockedSpecialSkills("rogue", 0, 0, 30)[2];
+    const skill = getUnlockedSpecialSkills("rogue", 0, 0, 0, 225)[2];
     const upgraded = applySkillUpgrade(skill, MAX_SKILL_UPGRADE_LEVEL);
     expect(skill.defensePiercePercent).toBe(60);
     expect(upgraded.defensePiercePercent).toBe(60);

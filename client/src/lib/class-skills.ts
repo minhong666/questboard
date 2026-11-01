@@ -20,7 +20,7 @@ export type SpecialCombatSkill = {
   id: string;
   name: string;
   jobClass: "warrior" | "archer" | "mage" | "rogue";
-  attributeName: "力量" | "智力" | "暴擊率";
+  attributeName: "力量" | "智力" | "暴擊率" | "暴擊傷害";
   requiredValue: number;
   damageType: SpecialSkillDamageType;
   damageMultiplier: number;
@@ -58,8 +58,7 @@ export function clampDefensePiercePercent(value: number) {
 }
 
 const SKILL_STEP = 25;
-const ROGUE_SKILL_STEP = 10;
-const ROGUE_SKILL_LIMIT = 3;
+const rogueSkillUnlockThresholds = [170, 200, 225];
 const WARRIOR_SKILL_LIMIT = 4;
 const warriorSkillNames = ["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"];
 const archerSkillNames = ["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"];
@@ -74,16 +73,14 @@ export function getNextSkillUnlockThreshold(
   jobClass: SkillJobClass,
   strength: number,
   intelligence: number,
-  critRate = 0
+  critRate = 0,
+  critDamage = 0
 ): number | null {
   if (jobClass === "rogue") {
-    const unlockedCount = Math.min(
-      ROGUE_SKILL_LIMIT,
-      Math.floor(safeAttributeValue(critRate) / ROGUE_SKILL_STEP)
-    );
-    return unlockedCount < ROGUE_SKILL_LIMIT
-      ? (unlockedCount + 1) * ROGUE_SKILL_STEP
-      : null;
+    const unlockedCount = rogueSkillUnlockThresholds.filter(
+      threshold => safeAttributeValue(critDamage) >= threshold
+    ).length;
+    return rogueSkillUnlockThresholds[unlockedCount] ?? null;
   }
   if (jobClass === "warrior" && safeAttributeValue(strength) >= 100) return null;
   if (jobClass === "archer") {
@@ -107,18 +104,21 @@ export function getUnlockedSpecialSkills(
   jobClass: SkillJobClass,
   strength: number,
   intelligence: number,
-  critRate = 0
+  critRate = 0,
+  critDamage = 0
 ): SpecialCombatSkill[] {
   if (jobClass !== "warrior" && jobClass !== "archer" && jobClass !== "mage" && jobClass !== "rogue")
     return [];
 
   const isRogue = jobClass === "rogue";
   const isArcher = jobClass === "archer";
-  const attributeName = isRogue || isArcher
-    ? "暴擊率"
-    : jobClass === "warrior"
-      ? "力量"
-      : "智力";
+  const attributeName = isRogue
+    ? "暴擊傷害"
+    : isArcher
+      ? "暴擊率"
+      : jobClass === "warrior"
+        ? "力量"
+        : "智力";
   const damageType: SpecialSkillDamageType =
     jobClass === "mage" ? "魔法" : "物理";
   const names =
@@ -130,19 +130,21 @@ export function getUnlockedSpecialSkills(
         ? mageSkillNames
         : rogueSkillNames;
   const currentValue = safeAttributeValue(
-    isRogue || isArcher ? critRate : jobClass === "warrior" ? strength : intelligence
+    isRogue ? critDamage : isArcher ? critRate : jobClass === "warrior" ? strength : intelligence
   );
-  const skillStep = isRogue ? ROGUE_SKILL_STEP : isArcher ? 5 : SKILL_STEP;
+  const skillStep = isArcher ? 5 : SKILL_STEP;
   const skillCount = isArcher
     ? Math.min(archerSkillNames.length, Math.floor(currentValue / skillStep))
     : jobClass === "warrior"
     ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
     : isRogue
-    ? Math.min(ROGUE_SKILL_LIMIT, Math.floor(currentValue / skillStep))
+    ? rogueSkillUnlockThresholds.filter(threshold => currentValue >= threshold).length
     : Math.floor(currentValue / skillStep);
 
   return Array.from({ length: skillCount }, (_, index) => {
-    const requiredValue = (index + 1) * skillStep;
+    const requiredValue = isRogue
+      ? rogueSkillUnlockThresholds[index]
+      : (index + 1) * skillStep;
     const rank = Math.floor(index / names.length) + 1;
     const name = names[index % names.length];
     const isKnightHeart = jobClass === "warrior" && index === 0;
@@ -258,12 +260,13 @@ export function getUnlockedSpecialSkills(
 }
 
 export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 30 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
+  const maxValue = jobClass === "rogue" ? 225 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,
     jobClass === "mage" ? maxValue : 0,
-    jobClass === "rogue" || jobClass === "archer" ? maxValue : 0
+    jobClass === "archer" ? maxValue : 0,
+    jobClass === "rogue" ? maxValue : 0
   );
 }
 
