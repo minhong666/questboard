@@ -90,14 +90,14 @@ describe("class-specific special skills", () => {
       damageMultiplier: 1.6,
       defensePiercePercent: 30,
       cooldownTurns: 4,
+      targetMode: "two",
       damageType: "物理",
     });
     expect(skills[2]).toMatchObject({
-      damageMultiplier: 1.65,
-      defensePiercePercent: 0,
+      damageMultiplier: 2,
+      defensePiercePercent: 40,
       cooldownTurns: 4,
-      hitCountMin: 1,
-      hitCountMax: 3,
+      targetMode: "all",
       damageType: "物理",
     });
     expect(skills[3]).toMatchObject({

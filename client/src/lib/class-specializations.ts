@@ -194,7 +194,11 @@ export function getAllSpecializationSkills(
     ],
     "archer-ranger": [
       createSpecializationSkill(specialization, 50, "獵王直覺", "passive", 0, 0, 0, 0, 30, 0, 0, 0, 20),
-      createSpecializationSkill(specialization, 75, "連環箭雨", "damage", 2.2, 40),
+      {
+        ...createSpecializationSkill(specialization, 75, "連環箭雨", "damage", 2, 40),
+        description: "轉職專精技能：對所有敵人各造成 2.00 倍物理傷害，防禦穿透 40%。",
+        targetMode: "all",
+      },
       createSpecializationSkill(specialization, 100, "森林審判", "damage", 4.5, 55, 0, 0, 0, 0, 0, 0, 0, 5),
     ],
     "archer-sniper": [

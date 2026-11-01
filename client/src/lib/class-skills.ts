@@ -1,6 +1,7 @@
 export type SkillJobClass = "warrior" | "archer" | "mage" | "rogue";
 export type SpecialSkillDamageType = "物理" | "魔法";
 export type SpecialSkillEffectType = "damage" | "buff" | "passive";
+export type SkillTargetMode = "single" | "two" | "all";
 export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "石化" | "災厄";
 export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
 export type SkillStatusEffect = {
@@ -36,6 +37,7 @@ export type SpecialCombatSkill = {
   dodgeRateBonusPercent?: number;
   hitCountMin?: number;
   hitCountMax?: number;
+  targetMode?: SkillTargetMode;
   healPercentMaxHealth?: number;
   executeBelowHealthPercent?: number;
   unlockLevel?: number;
@@ -198,7 +200,7 @@ export function getUnlockedSpecialSkills(
         : isArcherPiercingShot
           ? 1.6
           : isArcherRapidVolley
-            ? 1.65
+            ? 2
             : isArcherDawnShot
               ? 3
         : isMageFireball
@@ -214,7 +216,9 @@ export function getUnlockedSpecialSkills(
         ? 0
         : isArcher
           ? isArcherPiercingShot
-            ? 30
+          ? 30
+            : isArcherRapidVolley
+              ? 40
             : 0
         : clampDefensePiercePercent(
             isRogue ? 35 + index * 15 : 20 + index * 10
@@ -225,9 +229,9 @@ export function getUnlockedSpecialSkills(
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
         : isArcherPiercingShot
-          ? "物理技能，造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
+          ? "物理技能，對兩個敵人各造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
         : isArcherRapidVolley
-          ? "物理技能，每次造成 1.65 倍傷害，隨機攻擊 1～3 次；冷卻 4 回合。"
+          ? "物理技能，對所有敵人各造成 2.00 倍傷害，防禦穿透 40%；冷卻 4 回合。"
         : isArcherDawnShot
           ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
@@ -239,8 +243,7 @@ export function getUnlockedSpecialSkills(
       damageReductionPercent: isKnightHeart ? 20 : 0,
       flatDamageBonus: 0,
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
-      hitCountMin: isArcherRapidVolley ? 1 : undefined,
-      hitCountMax: isArcherRapidVolley ? 3 : undefined,
+      targetMode: isArcherPiercingShot ? "two" : isArcherRapidVolley ? "all" : "single",
       statusEffect,
     };
   });
