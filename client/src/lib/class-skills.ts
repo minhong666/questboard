@@ -58,12 +58,12 @@ export function clampDefensePiercePercent(value: number) {
 }
 
 const SKILL_STEP = 25;
-const rogueSkillUnlockThresholds = [170, 200, 225];
+const rogueSkillUnlockThresholds = [170, 200, 225, 250];
 const WARRIOR_SKILL_LIMIT = 4;
 const warriorSkillNames = ["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"];
 const archerSkillNames = ["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"];
 const mageSkillNames = ["火球術", "冰霜矛", "雷霆風暴", "隕星術"];
-const rogueSkillNames = ["背刺", "影刃連擊", "死亡標記"];
+const rogueSkillNames = ["背刺", "順影鏢殺", "影刃連擊", "死亡標記"];
 
 function safeAttributeValue(value: number) {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
@@ -153,6 +153,7 @@ export function getUnlockedSpecialSkills(
     const isArcherPiercingShot = isArcher && index === 1;
     const isArcherRapidVolley = isArcher && index === 2;
     const isArcherDawnShot = isArcher && index === 3;
+    const isRogueShunyingDart = isRogue && index === 1;
     const isMageFireball = jobClass === "mage" && index === 0;
     const isMageMeteor = jobClass === "mage" && index === 3;
     const cooldownTurns = isKnightHeart
@@ -222,8 +223,10 @@ export function getUnlockedSpecialSkills(
             : isArcherRapidVolley
               ? 40
             : 0
-        : clampDefensePiercePercent(
-            isRogue ? 35 + index * 15 : 20 + index * 10
+        : isRogueShunyingDart
+          ? 0
+          : clampDefensePiercePercent(
+              isRogue ? 35 + index * 15 : 20 + index * 10
           ),
       effectType: isKnightHeart ? "buff" : isArcherFocus ? "passive" : "damage",
       description: isKnightHeart
@@ -236,6 +239,8 @@ export function getUnlockedSpecialSkills(
           ? "物理技能，對所有敵人各造成 2.00 倍傷害，防禦穿透 40%；冷卻 4 回合。"
         : isMageMeteor
           ? "魔法技能，對所有敵人各造成 3.00 倍魔法傷害，魔法防禦穿透 50%；100% 石化 2 回合，每回合 5 點石化傷害；冷卻 5 回合。"
+        : isRogueShunyingDart
+          ? "物理技能，對所有敵人各造成 2.30 倍物理傷害，無防禦穿透。"
         : isArcherDawnShot
           ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
         : isWarriorSlash
@@ -253,6 +258,8 @@ export function getUnlockedSpecialSkills(
           ? "two"
           : isArcherRapidVolley
             ? "all"
+        : isRogueShunyingDart
+          ? "all"
             : "single",
       statusEffect,
     };
@@ -260,7 +267,7 @@ export function getUnlockedSpecialSkills(
 }
 
 export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 225 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
+  const maxValue = jobClass === "rogue" ? 250 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,

@@ -114,7 +114,7 @@ describe("class-specific special skills", () => {
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
   });
 
-  it("unlocks three rogue physical skills at 170%, 200%, and 225% critical damage", () => {
+  it("unlocks four rogue physical skills at 170%, 200%, 225%, and 250% critical damage", () => {
     expect(getUnlockedSpecialSkills("rogue", 500, 500, 0, 169.9)).toEqual([]);
     expect(getNextSkillUnlockThreshold("rogue", 500, 500, 0, 169.9)).toBe(170);
 
@@ -127,24 +127,30 @@ describe("class-specific special skills", () => {
       requiredValue: 170,
       damageType: "物理",
     });
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 225).every(skill => skill.damageType === "物理")).toBe(true);
+    const at200 = getUnlockedSpecialSkills("rogue", 0, 0, 0, 200);
+    expect(at200.map(skill => skill.name)).toEqual(["背刺", "順影鏢殺"]);
+    expect(at200[1]).toMatchObject({
+      damageMultiplier: 2.3,
+      defensePiercePercent: 0,
+      targetMode: "all",
+    });
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 250).every(skill => skill.damageType === "物理")).toBe(true);
     expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 170)).toBe(200);
 
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 200).map(skill => skill.name))
-      .toEqual(["背刺", "影刃連擊"]);
-    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 0, 225);
-    expect(allSkills.map(skill => skill.requiredValue)).toEqual([170, 200, 225]);
+    const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 0, 250);
+    expect(allSkills.map(skill => skill.requiredValue)).toEqual([170, 200, 225, 250]);
     expect(allSkills.map(skill => skill.name)).toEqual([
       "背刺",
+      "順影鏢殺",
       "影刃連擊",
       "死亡標記",
     ]);
-    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 225)).toBeNull();
+    expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 250)).toBeNull();
   });
 
-  it("keeps rogue unlocks exclusive to critical damage and caps them at three", () => {
+  it("keeps rogue unlocks exclusive to critical damage and caps them at four", () => {
     expect(getUnlockedSpecialSkills("rogue", 1000, 1000, 0, 0)).toEqual([]);
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 225)).toHaveLength(3);
+    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 250)).toHaveLength(4);
     expect(getUnlockedSpecialSkills("mage", 0, 0, 100)).toEqual([]);
   });
 

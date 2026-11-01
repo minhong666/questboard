@@ -6490,7 +6490,7 @@ export default function Home() {
                       ) : (
                         <p className="class-skill-empty">
                           {state.jobClass === "rogue"
-                            ? "暴擊傷害達到 170%、200%、225% 時依序解鎖盜賊技能。"
+                            ? "暴擊傷害達到 170%、200%、225%、250% 時依序解鎖盜賊技能。"
                             : `基礎${skillAttributeName}達到 25 點後解鎖第一項職業技能；門檻不計裝備加成。`}
                         </p>
                       )}
