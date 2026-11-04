@@ -1,6 +1,10 @@
+import { getEquipmentSpecialAbilityIdByName } from "./equipment-special-abilities";
+import type { EquipmentSpecialAbilityId } from "./equipment-special-abilities";
+
 export type EquipmentDatabaseTemplate = {
   name: string;
   setId?: string;
+  specialAbilityId?: EquipmentSpecialAbilityId;
   slot: "頭盔" | "胸甲" | "武器" | "護腿" | "護身符";
   weaponType?: WeaponType;
   element?: WeaponElement;
@@ -334,10 +338,12 @@ function buildEquipmentStory(template: EquipmentDatabaseTemplate) {
 const originalRpgEquipmentTemplates = [
   ...LEGACY_EQUIPMENT_TEMPLATES.map(template => ({
     ...template,
+    specialAbilityId: getEquipmentSpecialAbilityIdByName(template.name),
     description: buildEquipmentStory(template),
   })),
   ...generatedWeaponTemplates.map(template => ({
     ...template,
+    specialAbilityId: getEquipmentSpecialAbilityIdByName(template.name),
     description: buildEquipmentStory(template),
   })),
 ];

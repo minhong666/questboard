@@ -3,6 +3,8 @@ import {
   type WeaponElement,
   type WeaponType,
 } from "./equipment-database";
+import { getEquipmentSpecialAbilityIdByName } from "./equipment-special-abilities";
+import type { EquipmentSpecialAbilityId } from "./equipment-special-abilities";
 
 export { RPG_EQUIPMENT_BENCHMARKS } from "./equipment-database";
 
@@ -62,6 +64,7 @@ export type EquipmentItem = {
   kind: "equipment";
   name: string;
   setId?: string;
+  specialAbilityId?: EquipmentSpecialAbilityId;
   slot: EquipmentSlot;
   weaponType?: WeaponType;
   element?: WeaponElement;
@@ -954,6 +957,9 @@ export function parseLootItem(value: unknown): LootItem | null {
       description: canonicalTemplate?.description ?? common.description,
       kind: "equipment",
       setId: typeof item.setId === "string" ? item.setId : undefined,
+      specialAbilityId:
+        canonicalTemplate?.specialAbilityId ??
+        getEquipmentSpecialAbilityIdByName(item.name),
       slot,
       weaponType:
         item.weaponType === "劍" ||

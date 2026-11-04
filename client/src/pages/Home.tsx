@@ -71,6 +71,11 @@ import {
 import { clampCurrentHealth } from "../lib/health";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
+  getActiveEquipmentSpecialEffects,
+  getEquipmentSpecialAbility,
+  resolveLethalProtection,
+} from "../lib/equipment-special-abilities";
+import {
   applyArcherAttackBonus,
   getArcherEffectiveDodgeRate,
   getArcherTalentBonuses,
@@ -230,6 +235,8 @@ type BattleState = {
   dodges: number;
   usedSkillIds: string[];
   skillCooldowns: Record<string, number>;
+  lethalProtectionUsed?: boolean;
+  nextAttackLifestealPercent?: number;
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
@@ -4010,6 +4017,8 @@ export default function Home() {
       dodges: 0,
       usedSkillIds: [],
       skillCooldowns: {},
+      lethalProtectionUsed: false,
+      nextAttackLifestealPercent: 0,
       actionLockTurns: 0,
       monsterStatuses: [],
       playerStatuses: [],
@@ -4037,6 +4046,14 @@ export default function Home() {
       showToast("目前職業或能力尚未解鎖這項技能");
       return;
     }
+    const helmetItem = equippedItems.find(item => item.slot === "頭盔");
+    const helmetAbility = helmetItem
+      ? getEquipmentSpecialAbility(
+          helmetItem.name,
+          helmetItem.rarity,
+          helmetItem.specialAbilityId
+        )
+      : undefined;
     const mageStaff = isMage
       ? equippedItems.find(item => item.slot === "武器" && item.weaponType === "法杖")
       : undefined;
@@ -4070,12 +4087,14 @@ export default function Home() {
       Object.entries(battle.skillCooldowns).map(([id, turns]) => [id, Math.max(0, turns - 1)])
     );
     if (selectedSkill && selectedSkill.cooldownTurns > 0) {
+      const passiveCooldownReduction =
+        helmetAbility?.effects.cooldownReductionOnSkill ?? 0;
       const cooldownReduction =
-        selectedSkill.damageType === "魔法"
+        (selectedSkill.damageType === "魔法"
           ? Math.floor((effectiveCombatStats.castSpeedPercent ?? 0) / 10)
-          : 0;
+          : 0) + passiveCooldownReduction;
       nextSkillCooldowns[selectedSkill.id] = Math.max(
-        1,
+        passiveCooldownReduction > 0 ? 0 : 1,
         selectedSkill.cooldownTurns - cooldownReduction
       );
     }
@@ -4113,6 +4132,11 @@ export default function Home() {
     const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
     const statusDamageTaken = Math.min(playerStatusTick.damage, battle.playerHealth);
     const healthAfterPlayerStatus = Math.max(0, battle.playerHealth - statusDamageTaken);
+    const activeHelmetEffects = getActiveEquipmentSpecialEffects(
+      helmetAbility,
+      healthAfterPlayerStatus,
+      effectiveAbilities.health
+    );
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
       effectiveAbilities,
@@ -4160,6 +4184,7 @@ export default function Home() {
       : basePlayerDamage;
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense *
+        (1 + activeHelmetEffects.attackDamageBonusPercent / 100) *
         (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
         (1 - physicalDamageReductionPercent / 100)
     );
@@ -4252,11 +4277,18 @@ export default function Home() {
       ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
     ];
     const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
-    const lifestealHealing = actualDamageDealt > 0
+    const targetLifestealHealing = actualDamageDealt > 0
       ? Math.floor(
           actualDamageDealt * (targetGroupMember?.lifestealPercent ?? monster.lifestealPercent ?? 0) / 100
         )
       : 0;
+    const pendingAttackLifestealPercent = battle.nextAttackLifestealPercent ?? 0;
+    const helmetLifestealPercent = activeHelmetEffects.lifestealPercent +
+      (actualDamageDealt > 0 ? pendingAttackLifestealPercent : 0);
+    const helmetLifestealHealing = actualDamageDealt > 0
+      ? Math.floor(actualDamageDealt * helmetLifestealPercent / 100)
+      : 0;
+    const lifestealHealing = targetLifestealHealing + helmetLifestealHealing;
     const reflectedDamage = actualDamageDealt > 0
       ? targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0
       : 0;
@@ -4265,6 +4297,21 @@ export default function Home() {
     const activeBuffHealing = Math.floor(
       effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
     );
+    const specialAbilityActionLogs = [
+      activeHelmetEffects.attackDamageBonusPercent > 0
+        ? `【${helmetAbility?.name}】傷害 +${activeHelmetEffects.attackDamageBonusPercent}%`
+        : "",
+      helmetLifestealHealing > 0
+        ? `【${helmetAbility?.name}】吸血回復 ${helmetLifestealHealing} 生命`
+        : "",
+      selectedSkill && selectedSkill.cooldownTurns > 0 &&
+        (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
+        ? `【${helmetAbility?.name}】技能冷卻額外減少 ${helmetAbility?.effects.cooldownReductionOnSkill} 回合`
+        : "",
+    ].filter(Boolean);
+    const specialAbilityActionLog = specialAbilityActionLogs.length > 0
+      ? `；${specialAbilityActionLogs.join("；")}`
+      : "";
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
       healthAfterPlayerStatus + lifestealHealing + activeBuffHealing
@@ -4273,7 +4320,7 @@ export default function Home() {
     const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${actualDamageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}`}`,
+      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${actualDamageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}${specialAbilityActionLog}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -4435,10 +4482,17 @@ export default function Home() {
       : failedRequirement
         ? Math.round(groupDamage * 2 * monsterAttackMultiplier)
         : Math.round(groupDamage * monsterAttackMultiplier);
+    const effectivePlayerDefense = Math.round(
+      effectiveAbilities.defense *
+        (1 + activeHelmetEffects.defenseBonusPercent / 100)
+    );
     const reducedDamage = Math.max(
       1,
-      incomingBaseDamage - getDefenseReduction(effectiveAbilities.defense)
+      incomingBaseDamage - getDefenseReduction(effectivePlayerDefense)
     );
+    const helmetResistancePercent = monsterUsesSkill
+      ? activeHelmetEffects.magicResistancePercent
+      : activeHelmetEffects.physicalResistancePercent;
     const buffReducedDamage = Math.max(
       1,
       Math.ceil(
@@ -4447,7 +4501,8 @@ export default function Home() {
             Math.min(
               80,
               (effectiveCombatStats.damageReductionPercent ?? 0) +
-                (activeBuff?.damageReductionPercent ?? 0)
+                (activeBuff?.damageReductionPercent ?? 0) +
+                helmetResistancePercent
             ) /
               100)
       )
@@ -4477,12 +4532,33 @@ export default function Home() {
       monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
     );
     const damageTaken = incomingDamageTaken + reflectedDamage;
-    const totalDamageTaken = statusDamageTaken + damageTaken;
-    const playerHealth = Math.max(0, healedPlayerHealth - damageTaken);
+    const lethalProtection = resolveLethalProtection(
+      helmetAbility,
+      healedPlayerHealth,
+      damageTaken,
+      Boolean(battle.lethalProtectionUsed)
+    );
+    const lethalProtectionTriggered = lethalProtection.triggered;
+    const totalDamageTaken = statusDamageTaken +
+      (lethalProtectionTriggered ? 0 : damageTaken);
+    const playerHealth = lethalProtection.health;
+    const nextAttackLifestealPercent = lethalProtectionTriggered
+      ? lethalProtection.nextAttackLifestealPercent
+      : actualDamageDealt > 0
+        ? 0
+        : pendingAttackLifestealPercent;
     const nextLogs = [
       ...logs,
       ...(playerStatusTick.labels.length > 0 ? playerStatusTick.labels : []),
-      statusTick.frozen
+      ...(activeHelmetEffects.defenseBonusPercent > 0
+        ? [`【${helmetAbility?.name}】防禦 +${activeHelmetEffects.defenseBonusPercent}%`]
+        : []),
+      ...(helmetResistancePercent > 0 && incomingDamageTaken > 0
+        ? [`【${helmetAbility?.name}】${monsterUsesSkill ? "魔法" : "物理"}傷害抗性 +${helmetResistancePercent}%`]
+        : []),
+      lethalProtectionTriggered
+        ? `致命傷害被【${helmetAbility?.name}】抵銷！下一次成功攻擊將獲得 ${nextAttackLifestealPercent}% 吸血。`
+        : statusTick.frozen
         ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
@@ -4606,6 +4682,10 @@ export default function Home() {
       targetMonsterMemberId: nextTargetMonsterMemberId,
       usedSkillIds,
       skillCooldowns: nextSkillCooldowns,
+      lethalProtectionUsed: Boolean(
+        battle.lethalProtectionUsed || lethalProtectionTriggered
+      ),
+      nextAttackLifestealPercent,
       monsterStatuses: statusTick.statuses,
       playerStatuses: nextPlayerStatuses,
       monsterSkillCooldown: nextMonsterSkillCooldown,
@@ -6161,6 +6241,9 @@ export default function Home() {
                       const item = equippedItems.find(
                         equipped => equipped.slot === slot
                       );
+                      const specialAbility = item
+                        ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
+                        : undefined;
                       return item ? (
                         <button
                           type="button"
@@ -6172,6 +6255,7 @@ export default function Home() {
                           <span>{getTaskIcon(item.icon, 14)}</span>
                           <strong>{slot} · {item.name}</strong>
                           <small>{item.element ? `${item.element}元素 · ` : ""}{item.bonus}</small>
+                          {specialAbility ? <small>特殊能力：{specialAbility.description}</small> : null}
                         </button>
                       ) : (
                         <button
@@ -7626,7 +7710,11 @@ export default function Home() {
                   selectedLootItems
                     .slice()
                     .reverse()
-                    .map(item => (
+                    .map(item => {
+                      const specialAbility = item.kind === "equipment"
+                        ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
+                        : undefined;
+                      return (
                       <div
                         className={`loot-card panel-card loot-${LOOT_RARITY_CLASS[item.rarity]} loot-${item.kind}`}
                         key={item.id}
@@ -7654,6 +7742,12 @@ export default function Home() {
                           </span>
                           <h3>{item.name}</h3>
                           <p>{item.description}</p>
+                          {specialAbility ? (
+                            <div className="loot-affix">
+                              <strong>特殊能力 · {specialAbility.name}</strong>
+                              <small>{specialAbility.description}</small>
+                            </div>
+                          ) : null}
                           {item.affixes?.length ? (
                             <div className="loot-affix-list" aria-label="特殊詞綴">
                               {item.affixes.map((affix, index) => (
@@ -7710,7 +7804,8 @@ export default function Home() {
                           ) : null}
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                 )}
               </div>
             </section>
@@ -7805,6 +7900,9 @@ export default function Home() {
               <div className="codex-grid">
                 {codexItems.map(item => {
                   const discovered = discoveredEquipmentNames.has(item.name);
+                  const specialAbility = discovered
+                    ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
+                    : undefined;
                   const collectionNumber = RPG_EQUIPMENT_TEMPLATES.indexOf(item) + 1;
                   return (
                     <article
@@ -7828,6 +7926,12 @@ export default function Home() {
                           <small>{discovered ? "裝備效果" : "效果資訊"}</small>
                           <strong>{discovered ? item.bonus : "????????"}</strong>
                         </div>
+                        {specialAbility ? (
+                          <div className="codex-bonus">
+                            <small>特殊能力 · {specialAbility.name}</small>
+                            <strong>{specialAbility.description}</strong>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="codex-card-bottom">
                         <span>裝備等級 {discovered ? `Lv.${item.equipmentLevel}` : "?"}</span>
