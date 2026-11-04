@@ -5,7 +5,11 @@ import {
   getActiveEquipmentSpecialEffects,
   getEquipmentSpecialAbility,
   getEquipmentSpecialAbilityIdByName,
+  resolveDivineShieldDamage,
+  resolveDodgeCounterState,
+  resolveGaleStackCount,
   resolveLethalProtection,
+  rollTruthDoubleCast,
 } from "./equipment-special-abilities";
 
 describe("legendary helmet abilities", () => {
@@ -165,5 +169,207 @@ describe("legendary helmet abilities", () => {
     expect(
       getActiveEquipmentSpecialEffects(highHealthAbility, 50, 100)
     ).toMatchObject({ attackDamageBonusPercent: 0, defenseBonusPercent: 0 });
+  });
+});
+
+describe("legendary chest armor abilities", () => {
+  it("assigns the six requested passives and their legendary set copies", () => {
+    const armorPairs = [
+      ["帝王光輝聖甲", "曙光聖衛·傳說胸甲", "imperial-pressure"],
+      ["深淵獵手皮革", "影月獵行·傳說胸甲", "abyssal-counter"],
+      ["真理之門法袍", "星界賢者·傳說胸甲", "truth-awakening"],
+      ["神聖守護者之壁", "鐵壁巨神·傳說胸甲", "sacred-wall"],
+      ["疾風劍聖法衣", "風暴劍魂·傳說胸甲", "gale-dancer"],
+      ["神諭聖甲", "蒼龍天命·傳說胸甲", "oracle-blessing"],
+    ] as const;
+
+    for (const [name, setName, abilityId] of armorPairs) {
+      const mythicSetName = setName.replace("傳說", "神話");
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBe(abilityId);
+      expect(getEquipmentSpecialAbilityIdByName(setName)).toBe(abilityId);
+      expect(getEquipmentSpecialAbilityIdByName(mythicSetName)).toBeUndefined();
+      expect(
+        RPG_EQUIPMENT_TEMPLATES.find(item => item.name === name)
+          ?.specialAbilityId
+      ).toBe(abilityId);
+      expect(
+        RPG_EQUIPMENT_TEMPLATES.find(item => item.name === setName)
+          ?.specialAbilityId
+      ).toBe(abilityId);
+      expect(
+        RPG_EQUIPMENT_TEMPLATES.find(item => item.name === mythicSetName)
+          ?.specialAbilityId
+      ).toBeUndefined();
+      expect(
+        getEquipmentSpecialAbility(mythicSetName, "神話", abilityId)
+      ).toBeUndefined();
+    }
+
+    expect(
+      getEquipmentSpecialAbility("帝王光輝聖甲", "傳說")?.effects
+    ).toMatchObject({
+      attackBonusAbove70HealthPercent: 15,
+      defenseBonusAbove70HealthPercent: 15,
+      enemyDamageReductionAbove70HealthPercent: 15,
+    });
+    expect(
+      getEquipmentSpecialAbility("深淵獵手皮革", "傳說")?.effects
+    ).toMatchObject({
+      guaranteedCritOnNextAttackAfterDodge: true,
+      nextAttackDamageBonusAfterDodgePercent: 15,
+    });
+    expect(
+      getEquipmentSpecialAbility("真理之門法袍", "傳說")?.effects
+    ).toMatchObject({ doubleCastSkillChancePercent: 10 });
+    expect(
+      getEquipmentSpecialAbility("神聖守護者之壁", "傳說")?.effects
+    ).toMatchObject({
+      sacredShieldBelowHealthPercent: 30,
+      sacredShieldAbsorbPercentMaxHealth: 25,
+      sacredShieldDurationTurns: 2,
+    });
+    expect(
+      getEquipmentSpecialAbility("疾風劍聖法衣", "傳說")?.effects
+    ).toMatchObject({
+      galeMaxStacks: 5,
+      galeAttackPercentPerStack: 3,
+      galeDodgePercentPerStack: 2,
+      galePhysicalDamageBonusAtMaxStacks: 10,
+    });
+    expect(
+      getEquipmentSpecialAbility("神諭聖甲", "傳說")?.effects
+    ).toMatchObject({
+      oracleFirstTurnsDamageReductionPercent: 20,
+      oracleFirstTurnsDuration: 3,
+      oracleStunEnemiesOnHitAtTurnEnd: true,
+    });
+  });
+
+  it("activates the threshold and duration-based effects at their boundaries", () => {
+    const emperor = getEquipmentSpecialAbility("帝王光輝聖甲", "傳說");
+    expect(getActiveEquipmentSpecialEffects(emperor, 71, 100)).toMatchObject({
+      attackDamageBonusPercent: 15,
+      defenseBonusPercent: 15,
+      enemyDamageReductionPercent: 15,
+    });
+    expect(getActiveEquipmentSpecialEffects(emperor, 70, 100)).toMatchObject({
+      attackDamageBonusPercent: 0,
+      defenseBonusPercent: 0,
+      enemyDamageReductionPercent: 0,
+    });
+
+    const gale = getEquipmentSpecialAbility("疾風劍聖法衣", "傳說");
+    expect(getActiveEquipmentSpecialEffects(gale, 50, 100, 1, 4)).toMatchObject(
+      {
+        attackDamageBonusPercent: 12,
+        dodgeRateBonusPercent: 8,
+        physicalDamageBonusPercent: 0,
+      }
+    );
+    expect(getActiveEquipmentSpecialEffects(gale, 50, 100, 1, 5)).toMatchObject(
+      {
+        attackDamageBonusPercent: 15,
+        dodgeRateBonusPercent: 10,
+        physicalDamageBonusPercent: 10,
+      }
+    );
+
+    const oracle = getEquipmentSpecialAbility("神諭聖甲", "傳說");
+    expect(getActiveEquipmentSpecialEffects(oracle, 50, 100, 3)).toMatchObject({
+      physicalResistancePercent: 20,
+      magicResistancePercent: 20,
+    });
+    expect(getActiveEquipmentSpecialEffects(oracle, 50, 100, 4)).toMatchObject({
+      physicalResistancePercent: 0,
+      magicResistancePercent: 0,
+    });
+  });
+
+  it("rolls truth double-cast chance and retains abyssal counter until a hit connects", () => {
+    const truth = getEquipmentSpecialAbility("真理之門法袍", "傳說");
+    expect(rollTruthDoubleCast(truth, 0.099)).toBe(true);
+    expect(rollTruthDoubleCast(truth, 0.1)).toBe(false);
+
+    const abyssal = getEquipmentSpecialAbility("深淵獵手皮革", "傳說");
+    const counter = resolveDodgeCounterState(
+      abyssal,
+      { guaranteedCrit: false, damageBonusPercent: 0 },
+      true,
+      false
+    );
+    expect(counter).toEqual({ guaranteedCrit: true, damageBonusPercent: 15 });
+    expect(resolveDodgeCounterState(abyssal, counter, false, false)).toEqual(
+      counter
+    );
+    expect(resolveDodgeCounterState(abyssal, counter, false, true)).toEqual({
+      guaranteedCrit: false,
+      damageBonusPercent: 0,
+    });
+  });
+
+  it("adds one gale stack per normal attack or dodge and caps at five", () => {
+    expect(resolveGaleStackCount(0, true, false)).toBe(1);
+    expect(resolveGaleStackCount(1, false, true)).toBe(2);
+    expect(resolveGaleStackCount(4, true, true)).toBe(5);
+    expect(resolveGaleStackCount(5, true, true)).toBe(5);
+  });
+
+  it("activates the one-time divine shield below 30% and absorbs up to 25% max HP", () => {
+    const sacredWall = getEquipmentSpecialAbility("神聖守護者之壁", "傳說");
+    const emptyState = {
+      charge: 0,
+      remainingAbsorb: 0,
+      turnsRemaining: 0,
+      used: false,
+    };
+    const activated = resolveDivineShieldDamage(
+      sacredWall,
+      emptyState,
+      40,
+      100,
+      20
+    );
+    expect(activated).toMatchObject({
+      health: 40,
+      damageTaken: 0,
+      absorbedDamage: 20,
+      triggered: true,
+      state: {
+        charge: 0,
+        remainingAbsorb: 5,
+        turnsRemaining: 2,
+        used: true,
+      },
+    });
+
+    const firstRound = resolveDivineShieldDamage(
+      sacredWall,
+      activated.state,
+      40,
+      100,
+      2,
+      true
+    );
+    expect(firstRound).toMatchObject({
+      health: 40,
+      absorbedDamage: 2,
+      state: { remainingAbsorb: 3, turnsRemaining: 1, used: true },
+    });
+
+    const secondRound = resolveDivineShieldDamage(
+      sacredWall,
+      firstRound.state,
+      40,
+      100,
+      10,
+      true
+    );
+    expect(secondRound).toMatchObject({
+      health: 33,
+      damageTaken: 7,
+      absorbedDamage: 3,
+      triggered: false,
+      state: { remainingAbsorb: 0, turnsRemaining: 0, used: true },
+    });
   });
 });

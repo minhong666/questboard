@@ -73,7 +73,12 @@ import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
   getActiveEquipmentSpecialEffects,
   getEquipmentSpecialAbility,
+  resolveDivineShieldDamage,
+  resolveDodgeCounterState,
+  resolveGaleStackCount,
   resolveLethalProtection,
+  rollTruthDoubleCast,
+  type DivineShieldState,
 } from "../lib/equipment-special-abilities";
 import {
   applyArcherAttackBonus,
@@ -237,6 +242,10 @@ type BattleState = {
   skillCooldowns: Record<string, number>;
   lethalProtectionUsed?: boolean;
   nextAttackLifestealPercent?: number;
+  nextAttackGuaranteedCrit?: boolean;
+  nextAttackDamageBonusPercent?: number;
+  galeStacks?: number;
+  divineShield?: DivineShieldState;
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
@@ -308,11 +317,15 @@ function applyBattleStatusEffects(
 function tickBattleStatuses(statuses: BattleStatus[]) {
   let damage = 0;
   let frozen = false;
-  let controlLabel: "冰凍" | "石化" | null = null;
+  let controlLabel: "冰凍" | "石化" | "暈眩" | null = null;
   const labels: string[] = [];
   const nextStatuses = statuses
     .map(status => {
-      if (status.kind === "冰凍" || status.kind === "石化") {
+      if (
+        status.kind === "冰凍" ||
+        status.kind === "石化" ||
+        status.kind === "暈眩"
+      ) {
         frozen = true;
         controlLabel = status.kind;
       }
@@ -4019,6 +4032,15 @@ export default function Home() {
       skillCooldowns: {},
       lethalProtectionUsed: false,
       nextAttackLifestealPercent: 0,
+      nextAttackGuaranteedCrit: false,
+      nextAttackDamageBonusPercent: 0,
+      galeStacks: 0,
+      divineShield: {
+        charge: 0,
+        remainingAbsorb: 0,
+        turnsRemaining: 0,
+        used: false,
+      },
       actionLockTurns: 0,
       monsterStatuses: [],
       playerStatuses: [],
@@ -4054,6 +4076,14 @@ export default function Home() {
           helmetItem.specialAbilityId
         )
       : undefined;
+    const chestItem = equippedItems.find(item => item.slot === "胸甲");
+    const chestAbility = chestItem
+      ? getEquipmentSpecialAbility(
+          chestItem.name,
+          chestItem.rarity,
+          chestItem.specialAbilityId
+        )
+      : undefined;
     const mageStaff = isMage
       ? equippedItems.find(item => item.slot === "武器" && item.weaponType === "法杖")
       : undefined;
@@ -4082,6 +4112,13 @@ export default function Home() {
       showToast(`「${selectedSkill.name}」還要 ${battle.skillCooldowns[selectedSkill.id]} 回合才能使用`);
       return;
     }
+    const truthDoubleCastTriggered = Boolean(
+      selectedSkill &&
+        selectedSkill.effectType !== "buff" &&
+        selectedSkill.damageMultiplier > 0 &&
+        (chestAbility?.effects.doubleCastSkillChancePercent ?? 0) > 0 &&
+        rollTruthDoubleCast(chestAbility)
+    );
     const usedSkillIds = battle.usedSkillIds;
     const nextSkillCooldowns = Object.fromEntries(
       Object.entries(battle.skillCooldowns).map(([id, turns]) => [id, Math.max(0, turns - 1)])
@@ -4131,11 +4168,33 @@ export default function Home() {
       targetGroupMember?.magicResistancePercent ?? monster.magicResistancePercent ?? 0;
     const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
     const statusDamageTaken = Math.min(playerStatusTick.damage, battle.playerHealth);
-    const healthAfterPlayerStatus = Math.max(0, battle.playerHealth - statusDamageTaken);
+    const initialDivineShieldState = battle.divineShield ?? {
+      charge: 0,
+      remainingAbsorb: 0,
+      turnsRemaining: 0,
+      used: false,
+    };
+    const statusShieldResolution = resolveDivineShieldDamage(
+      chestAbility,
+      initialDivineShieldState,
+      battle.playerHealth,
+      effectiveAbilities.health,
+      statusDamageTaken
+    );
+    const healthAfterPlayerStatus = statusShieldResolution.health;
+    const statusDamageActuallyTaken = statusShieldResolution.damageTaken;
     const activeHelmetEffects = getActiveEquipmentSpecialEffects(
       helmetAbility,
       healthAfterPlayerStatus,
-      effectiveAbilities.health
+      effectiveAbilities.health,
+      battle.turn
+    );
+    const activeChestEffects = getActiveEquipmentSpecialEffects(
+      chestAbility,
+      healthAfterPlayerStatus,
+      effectiveAbilities.health,
+      battle.turn,
+      battle.galeStacks ?? 0
     );
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
@@ -4170,11 +4229,16 @@ export default function Home() {
       : selectedSkill?.effectType === "buff"
         ? false
         : Math.random() < targetMonsterDodgeRate / 100;
-    const criticalHit =
+    const attackCanCrit =
       !actionLocked &&
-      !isMage &&
       !monsterDodges &&
-      Math.random() < effectiveCombatStats.critRate / 100;
+      selectedSkill?.effectType !== "buff";
+    const guaranteedCounterCritical =
+      Boolean(battle.nextAttackGuaranteedCrit) && attackCanCrit;
+    const criticalHit =
+      attackCanCrit &&
+      (guaranteedCounterCritical ||
+        (!isMage && Math.random() < effectiveCombatStats.critRate / 100));
     const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
     const basePlayerDamage = isArcher
       ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
@@ -4182,9 +4246,20 @@ export default function Home() {
     const damageBeforeDefense = criticalHit
       ? Math.round((basePlayerDamage * effectiveCombatStats.critDamage) / 100)
       : basePlayerDamage;
+    const counterDamageBonusPercent = battle.nextAttackGuaranteedCrit
+      ? battle.nextAttackDamageBonusPercent ?? 0
+      : 0;
+    const equipmentAttackBonusPercent =
+      activeHelmetEffects.attackDamageBonusPercent +
+      activeChestEffects.attackDamageBonusPercent +
+      counterDamageBonusPercent;
+    const physicalDamageBonusPercent = damageType === "物理"
+      ? activeChestEffects.physicalDamageBonusPercent
+      : 0;
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense *
-        (1 + activeHelmetEffects.attackDamageBonusPercent / 100) *
+        (1 + equipmentAttackBonusPercent / 100) *
+        (1 + physicalDamageBonusPercent / 100) *
         (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
         (1 - physicalDamageReductionPercent / 100)
     );
@@ -4197,6 +4272,7 @@ export default function Home() {
       ? selectedSkill.hitCountMin +
         Math.floor(Math.random() * (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1))
       : 1;
+    const skillCastCount = truthDoubleCastTriggered ? 2 : 1;
     const rawDamageDealt = instantExecute
       ? targetMonsterHealth
       : actionLocked
@@ -4210,7 +4286,7 @@ export default function Home() {
             buffedPlayerDamage,
             targetMonsterDefense,
             selectedSkill
-          ) * skillHitCount
+          ) * skillHitCount * skillCastCount
         : Math.max(
             1,
             buffedPlayerDamage - getDefenseReduction(targetMonsterDefense)
@@ -4301,6 +4377,24 @@ export default function Home() {
       activeHelmetEffects.attackDamageBonusPercent > 0
         ? `【${helmetAbility?.name}】傷害 +${activeHelmetEffects.attackDamageBonusPercent}%`
         : "",
+      activeChestEffects.attackDamageBonusPercent > 0
+        ? `【${chestAbility?.name}】攻擊 +${activeChestEffects.attackDamageBonusPercent}%`
+        : "",
+      activeChestEffects.defenseBonusPercent > 0
+        ? `【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`
+        : "",
+      activeChestEffects.enemyDamageReductionPercent > 0
+        ? `【${chestAbility?.name}】敵人造成的傷害 -${activeChestEffects.enemyDamageReductionPercent}%`
+        : "",
+      activeChestEffects.physicalDamageBonusPercent > 0
+        ? `【${chestAbility?.name}】滿層物理傷害 +${activeChestEffects.physicalDamageBonusPercent}%`
+        : "",
+      truthDoubleCastTriggered
+        ? `【${chestAbility?.name}】真理開悟：技能同回合施放兩次`
+        : "",
+      guaranteedCounterCritical && actualDamageDealt > 0
+        ? `【${chestAbility?.name}】深淵反擊：必定暴擊，傷害 +${counterDamageBonusPercent}%`
+        : "",
       helmetLifestealHealing > 0
         ? `【${helmetAbility?.name}】吸血回復 ${helmetLifestealHealing} 生命`
         : "",
@@ -4345,6 +4439,7 @@ export default function Home() {
         playerHealth: Math.max(0, healedPlayerHealth - reactiveDamageOnDeath),
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
+        divineShield: statusShieldResolution.state,
         monsterStatuses: statusTick.statuses,
         playerStatuses: playerStatusTick.statuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
@@ -4451,7 +4546,8 @@ export default function Home() {
       return;
     }
     const effectivePlayerDodgeRate = (effectiveCombatStats.dodgeRate +
-      (activeBuff?.dodgeRateBonusPercent ?? 0)) *
+      (activeBuff?.dodgeRateBonusPercent ?? 0) +
+      activeChestEffects.dodgeRateBonusPercent) *
       (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
     const playerDodges = statusTick.frozen
       ? false
@@ -4484,15 +4580,20 @@ export default function Home() {
         : Math.round(groupDamage * monsterAttackMultiplier);
     const effectivePlayerDefense = Math.round(
       effectiveAbilities.defense *
-        (1 + activeHelmetEffects.defenseBonusPercent / 100)
+        (1 +
+          (activeHelmetEffects.defenseBonusPercent +
+            activeChestEffects.defenseBonusPercent) /
+            100)
     );
     const reducedDamage = Math.max(
       1,
       incomingBaseDamage - getDefenseReduction(effectivePlayerDefense)
     );
-    const helmetResistancePercent = monsterUsesSkill
-      ? activeHelmetEffects.magicResistancePercent
-      : activeHelmetEffects.physicalResistancePercent;
+    const equipmentResistancePercent = monsterUsesSkill
+      ? activeHelmetEffects.magicResistancePercent +
+        activeChestEffects.magicResistancePercent
+      : activeHelmetEffects.physicalResistancePercent +
+        activeChestEffects.physicalResistancePercent;
     const buffReducedDamage = Math.max(
       1,
       Math.ceil(
@@ -4502,12 +4603,16 @@ export default function Home() {
               80,
               (effectiveCombatStats.damageReductionPercent ?? 0) +
                 (activeBuff?.damageReductionPercent ?? 0) +
-                helmetResistancePercent
+                equipmentResistancePercent +
+                activeHelmetEffects.enemyDamageReductionPercent +
+                activeChestEffects.enemyDamageReductionPercent
             ) /
               100)
       )
     );
-    const incomingDamageTaken = playerDodges
+    const incomingDamageTaken = statusTick.frozen
+      ? 0
+      : playerDodges
       ? 0
       : monsterCritical
         ? Math.ceil(
@@ -4531,7 +4636,51 @@ export default function Home() {
     const burnApplied = Boolean(
       monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
     );
-    const damageTaken = incomingDamageTaken + reflectedDamage;
+    const unmitigatedDamageTaken = incomingDamageTaken + reflectedDamage;
+    const divineShieldResolution = resolveDivineShieldDamage(
+      chestAbility,
+      statusShieldResolution.state,
+      healedPlayerHealth,
+      effectiveAbilities.health,
+      unmitigatedDamageTaken,
+      true
+    );
+    const damageTaken = divineShieldResolution.damageTaken;
+    const divineShieldTriggered =
+      statusShieldResolution.triggered || divineShieldResolution.triggered;
+    const divineShieldAbsorbedDamage =
+      statusShieldResolution.absorbedDamage +
+      divineShieldResolution.absorbedDamage;
+    const nextDodgeCounterState = resolveDodgeCounterState(
+      chestAbility,
+      {
+        guaranteedCrit: Boolean(battle.nextAttackGuaranteedCrit),
+        damageBonusPercent: battle.nextAttackDamageBonusPercent ?? 0,
+      },
+      playerDodges,
+      actualDamageDealt > 0
+    );
+    const nextGaleStacks = chestAbility?.id === "gale-dancer"
+      ? resolveGaleStackCount(
+          battle.galeStacks ?? 0,
+          !selectedSkill && !actionLocked,
+          playerDodges,
+          chestAbility.effects.galeMaxStacks
+        )
+      : battle.galeStacks ?? 0;
+    const oracleStunTriggered = Boolean(
+      chestAbility?.effects.oracleStunEnemiesOnHitAtTurnEnd &&
+        incomingDamageTaken > 0
+    );
+    const monsterStatusesAfterTurn = oracleStunTriggered
+      ? applyBattleStatusEffects(statusTick.statuses, [{
+          kind: "暈眩",
+          element: "奧術",
+          chance: 1,
+          durationTurns: 1,
+          damagePerTurn: 0,
+        }])
+      : statusTick.statuses;
     const lethalProtection = resolveLethalProtection(
       helmetAbility,
       healedPlayerHealth,
@@ -4539,7 +4688,7 @@ export default function Home() {
       Boolean(battle.lethalProtectionUsed)
     );
     const lethalProtectionTriggered = lethalProtection.triggered;
-    const totalDamageTaken = statusDamageTaken +
+    const totalDamageTaken = statusDamageActuallyTaken +
       (lethalProtectionTriggered ? 0 : damageTaken);
     const playerHealth = lethalProtection.health;
     const nextAttackLifestealPercent = lethalProtectionTriggered
@@ -4550,11 +4699,32 @@ export default function Home() {
     const nextLogs = [
       ...logs,
       ...(playerStatusTick.labels.length > 0 ? playerStatusTick.labels : []),
+      ...(statusShieldResolution.absorbedDamage > 0
+        ? [`神聖護盾吸收 ${statusShieldResolution.absorbedDamage} 點持續傷害。`]
+        : []),
+      ...(divineShieldTriggered
+        ? [`【${chestAbility?.name}】神聖護盾觸發，持續 ${chestAbility?.effects.sacredShieldDurationTurns ?? 2} 回合（本場戰鬥僅一次）。`]
+        : []),
+      ...(divineShieldAbsorbedDamage > 0
+        ? [`神聖護盾共吸收 ${divineShieldAbsorbedDamage} 點傷害。`]
+        : []),
+      ...(playerDodges && chestAbility?.id === "abyssal-counter"
+        ? [`【${chestAbility.name}】觸發深淵反擊：下一次成功命中的攻擊必定暴擊並增傷 ${nextDodgeCounterState.damageBonusPercent}%。`]
+        : []),
+      ...(nextGaleStacks > (battle.galeStacks ?? 0)
+        ? [`【${chestAbility?.name}】疾風堆疊 ${nextGaleStacks}/${chestAbility?.effects.galeMaxStacks ?? 5}。`]
+        : []),
+      ...(oracleStunTriggered
+        ? [`【${chestAbility?.name}】神諭庇佑於回合結束時使所有敵人暈眩 1 回合。`]
+        : []),
       ...(activeHelmetEffects.defenseBonusPercent > 0
         ? [`【${helmetAbility?.name}】防禦 +${activeHelmetEffects.defenseBonusPercent}%`]
         : []),
-      ...(helmetResistancePercent > 0 && incomingDamageTaken > 0
-        ? [`【${helmetAbility?.name}】${monsterUsesSkill ? "魔法" : "物理"}傷害抗性 +${helmetResistancePercent}%`]
+      ...(activeChestEffects.defenseBonusPercent > 0
+        ? [`【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`]
+        : []),
+      ...(equipmentResistancePercent > 0 && incomingDamageTaken > 0
+        ? [`${monsterUsesSkill ? "魔法" : "物理"}傷害抗性／減免 +${equipmentResistancePercent}%`]
         : []),
       lethalProtectionTriggered
         ? `致命傷害被【${helmetAbility?.name}】抵銷！下一次成功攻擊將獲得 ${nextAttackLifestealPercent}% 吸血。`
@@ -4587,7 +4757,8 @@ export default function Home() {
           targetMonsterMemberId: nextTargetMonsterMemberId,
           usedSkillIds,
           skillCooldowns: nextSkillCooldowns,
-          monsterStatuses: statusTick.statuses,
+          divineShield: divineShieldResolution.state,
+          monsterStatuses: monsterStatusesAfterTurn,
           playerStatuses: nextPlayerStatuses,
           monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
@@ -4632,7 +4803,8 @@ export default function Home() {
         targetMonsterMemberId: nextTargetMonsterMemberId,
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
-        monsterStatuses: statusTick.statuses,
+        divineShield: divineShieldResolution.state,
+        monsterStatuses: monsterStatusesAfterTurn,
         playerStatuses: nextPlayerStatuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
@@ -4686,7 +4858,11 @@ export default function Home() {
         battle.lethalProtectionUsed || lethalProtectionTriggered
       ),
       nextAttackLifestealPercent,
-      monsterStatuses: statusTick.statuses,
+      nextAttackGuaranteedCrit: nextDodgeCounterState.guaranteedCrit,
+      nextAttackDamageBonusPercent: nextDodgeCounterState.damageBonusPercent,
+      galeStacks: nextGaleStacks,
+      divineShield: divineShieldResolution.state,
+      monsterStatuses: monsterStatusesAfterTurn,
       playerStatuses: nextPlayerStatuses,
       monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
@@ -9018,7 +9194,9 @@ export default function Home() {
                     {status.element}·{status.kind} · {status.turnsRemaining} 回合
                     {status.damagePerTurn > 0
                       ? ` · 每回合 ${status.damagePerTurn} 傷害`
-                      : status.kind === "冰凍" || status.kind === "石化"
+                      : status.kind === "冰凍" ||
+                          status.kind === "石化" ||
+                          status.kind === "暈眩"
                         ? " · 無法反擊"
                         : " · 持續中"}
                   </span>

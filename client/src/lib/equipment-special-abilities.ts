@@ -4,7 +4,13 @@ export type EquipmentSpecialAbilityId =
   | "skill-cooldown"
   | "low-health-resistance"
   | "phoenix-rebirth"
-  | "high-health-dominance";
+  | "high-health-dominance"
+  | "imperial-pressure"
+  | "abyssal-counter"
+  | "truth-awakening"
+  | "sacred-wall"
+  | "gale-dancer"
+  | "oracle-blessing";
 
 export type EquipmentSpecialAbilityEffects = {
   damageBonusBelowHalfHealthPercent?: number;
@@ -16,6 +22,22 @@ export type EquipmentSpecialAbilityEffects = {
   nextAttackLifestealPercent?: number;
   attackBonusAboveHalfHealthPercent?: number;
   defenseBonusAboveHalfHealthPercent?: number;
+  attackBonusAbove70HealthPercent?: number;
+  defenseBonusAbove70HealthPercent?: number;
+  enemyDamageReductionAbove70HealthPercent?: number;
+  guaranteedCritOnNextAttackAfterDodge?: boolean;
+  nextAttackDamageBonusAfterDodgePercent?: number;
+  doubleCastSkillChancePercent?: number;
+  sacredShieldBelowHealthPercent?: number;
+  sacredShieldAbsorbPercentMaxHealth?: number;
+  sacredShieldDurationTurns?: number;
+  galeMaxStacks?: number;
+  galeAttackPercentPerStack?: number;
+  galeDodgePercentPerStack?: number;
+  galePhysicalDamageBonusAtMaxStacks?: number;
+  oracleFirstTurnsDamageReductionPercent?: number;
+  oracleFirstTurnsDuration?: number;
+  oracleStunEnemiesOnHitAtTurnEnd?: boolean;
 };
 
 export type EquipmentSpecialAbility = {
@@ -31,12 +53,35 @@ export type ActiveEquipmentSpecialEffects = {
   lifestealPercent: number;
   physicalResistancePercent: number;
   magicResistancePercent: number;
+  enemyDamageReductionPercent: number;
+  dodgeRateBonusPercent: number;
+  physicalDamageBonusPercent: number;
 };
 
 export type LethalProtectionResolution = {
   triggered: boolean;
   health: number;
   nextAttackLifestealPercent: number;
+};
+
+export type DivineShieldState = {
+  charge: number;
+  remainingAbsorb: number;
+  turnsRemaining: number;
+  used: boolean;
+};
+
+export type DivineShieldResolution = {
+  health: number;
+  damageTaken: number;
+  absorbedDamage: number;
+  triggered: boolean;
+  state: DivineShieldState;
+};
+
+export type DodgeCounterState = {
+  guaranteedCrit: boolean;
+  damageBonusPercent: number;
 };
 
 const legendaryAbilities: Record<
@@ -89,6 +134,66 @@ const legendaryAbilities: Record<
       defenseBonusAboveHalfHealthPercent: 20,
     },
   },
+  "imperial-pressure": {
+    id: "imperial-pressure",
+    name: "帝王威壓",
+    description:
+      "生命值高於 70% 時，攻擊與防禦提高 15%，並使敵人造成的傷害降低 15%。",
+    effects: {
+      attackBonusAbove70HealthPercent: 15,
+      defenseBonusAbove70HealthPercent: 15,
+      enemyDamageReductionAbove70HealthPercent: 15,
+    },
+  },
+  "abyssal-counter": {
+    id: "abyssal-counter",
+    name: "深淵反擊",
+    description: "成功閃避後，下一次成功命中的攻擊必定暴擊，且傷害提高 15%。",
+    effects: {
+      guaranteedCritOnNextAttackAfterDodge: true,
+      nextAttackDamageBonusAfterDodgePercent: 15,
+    },
+  },
+  "truth-awakening": {
+    id: "truth-awakening",
+    name: "真理開悟",
+    description: "施放造成傷害的技能時有 10% 機率使該技能在同一回合施放兩次。",
+    effects: { doubleCastSkillChancePercent: 10 },
+  },
+  "sacred-wall": {
+    id: "sacred-wall",
+    name: "神聖護盾",
+    description:
+      "受到傷害會累積護盾能量；生命值低於 30% 時，自動獲得護盾，吸收相當於最大生命值 25% 的傷害，持續 2 回合，每場戰鬥僅觸發一次。",
+    effects: {
+      sacredShieldBelowHealthPercent: 30,
+      sacredShieldAbsorbPercentMaxHealth: 25,
+      sacredShieldDurationTurns: 2,
+    },
+  },
+  "gale-dancer": {
+    id: "gale-dancer",
+    name: "疾風",
+    description:
+      "每次成功閃避或進行普通攻擊時獲得 1 層疾風（最多 5 層）；每層提升攻擊 3% 與閃避率 2%，滿 5 層時額外提高物理傷害 10%。",
+    effects: {
+      galeMaxStacks: 5,
+      galeAttackPercentPerStack: 3,
+      galeDodgePercentPerStack: 2,
+      galePhysicalDamageBonusAtMaxStacks: 10,
+    },
+  },
+  "oracle-blessing": {
+    id: "oracle-blessing",
+    name: "神諭庇佑",
+    description:
+      "戰鬥前 3 回合受到的物理與魔法傷害降低 20%；受到敵人命中後，於該回合結束時使所有敵人暈眩 1 回合。",
+    effects: {
+      oracleFirstTurnsDamageReductionPercent: 20,
+      oracleFirstTurnsDuration: 3,
+      oracleStunEnemiesOnHitAtTurnEnd: true,
+    },
+  },
 };
 
 const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
@@ -104,6 +209,18 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   "風暴劍魂·傳說盔": "phoenix-rebirth",
   天穹王盔: "high-health-dominance",
   "蒼龍天命·傳說盔": "high-health-dominance",
+  帝王光輝聖甲: "imperial-pressure",
+  "曙光聖衛·傳說胸甲": "imperial-pressure",
+  深淵獵手皮革: "abyssal-counter",
+  "影月獵行·傳說胸甲": "abyssal-counter",
+  真理之門法袍: "truth-awakening",
+  "星界賢者·傳說胸甲": "truth-awakening",
+  神聖守護者之壁: "sacred-wall",
+  "鐵壁巨神·傳說胸甲": "sacred-wall",
+  疾風劍聖法衣: "gale-dancer",
+  "風暴劍魂·傳說胸甲": "gale-dancer",
+  神諭聖甲: "oracle-blessing",
+  "蒼龍天命·傳說胸甲": "oracle-blessing",
 };
 
 export function getEquipmentSpecialAbilityIdByName(
@@ -125,29 +242,157 @@ export function getEquipmentSpecialAbility(
 export function getActiveEquipmentSpecialEffects(
   ability: EquipmentSpecialAbility | undefined,
   health: number,
-  maxHealth: number
+  maxHealth: number,
+  turn = 1,
+  windStacks = 0
 ): ActiveEquipmentSpecialEffects {
   const effects = ability?.effects;
   const belowHalfHealth = health < maxHealth * 0.5;
   const aboveHalfHealth = health > maxHealth * 0.5;
+  const above70Health = health > maxHealth * 0.7;
+  const activeWindStacks = Math.min(
+    effects?.galeMaxStacks ?? 0,
+    Math.max(0, windStacks)
+  );
+  const oracleProtectionActive =
+    turn >= 1 && turn <= (effects?.oracleFirstTurnsDuration ?? 0);
   return {
-    attackDamageBonusPercent: belowHalfHealth
-      ? (effects?.damageBonusBelowHalfHealthPercent ?? 0)
-      : aboveHalfHealth
-        ? (effects?.attackBonusAboveHalfHealthPercent ?? 0)
-        : 0,
-    defenseBonusPercent: aboveHalfHealth
-      ? (effects?.defenseBonusAboveHalfHealthPercent ?? 0)
-      : 0,
+    attackDamageBonusPercent:
+      (belowHalfHealth
+        ? (effects?.damageBonusBelowHalfHealthPercent ?? 0)
+        : aboveHalfHealth
+          ? (effects?.attackBonusAboveHalfHealthPercent ?? 0)
+          : 0) +
+      (above70Health ? (effects?.attackBonusAbove70HealthPercent ?? 0) : 0) +
+      activeWindStacks * (effects?.galeAttackPercentPerStack ?? 0),
+    defenseBonusPercent:
+      (aboveHalfHealth
+        ? (effects?.defenseBonusAboveHalfHealthPercent ?? 0)
+        : 0) +
+      (above70Health ? (effects?.defenseBonusAbove70HealthPercent ?? 0) : 0),
     lifestealPercent: belowHalfHealth
       ? (effects?.lifestealBelowHalfHealthPercent ?? 0)
       : 0,
-    physicalResistancePercent: belowHalfHealth
-      ? (effects?.physicalResistanceBelowHalfHealthPercent ?? 0)
+    physicalResistancePercent:
+      (belowHalfHealth
+        ? (effects?.physicalResistanceBelowHalfHealthPercent ?? 0)
+        : 0) +
+      (oracleProtectionActive
+        ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
+        : 0),
+    magicResistancePercent:
+      (belowHalfHealth
+        ? (effects?.magicResistanceBelowHalfHealthPercent ?? 0)
+        : 0) +
+      (oracleProtectionActive
+        ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
+        : 0),
+    enemyDamageReductionPercent: above70Health
+      ? (effects?.enemyDamageReductionAbove70HealthPercent ?? 0)
       : 0,
-    magicResistancePercent: belowHalfHealth
-      ? (effects?.magicResistanceBelowHalfHealthPercent ?? 0)
-      : 0,
+    dodgeRateBonusPercent:
+      activeWindStacks * (effects?.galeDodgePercentPerStack ?? 0),
+    physicalDamageBonusPercent:
+      activeWindStacks >= (effects?.galeMaxStacks ?? Number.POSITIVE_INFINITY)
+        ? (effects?.galePhysicalDamageBonusAtMaxStacks ?? 0)
+        : 0,
+  };
+}
+
+export function rollTruthDoubleCast(
+  ability: EquipmentSpecialAbility | undefined,
+  randomValue = Math.random()
+): boolean {
+  const chance = ability?.effects.doubleCastSkillChancePercent ?? 0;
+  return chance > 0 && randomValue < chance / 100;
+}
+
+export function resolveDodgeCounterState(
+  ability: EquipmentSpecialAbility | undefined,
+  previousState: DodgeCounterState,
+  successfullyDodged: boolean,
+  attackConnected: boolean
+): DodgeCounterState {
+  if (
+    successfullyDodged &&
+    ability?.effects.guaranteedCritOnNextAttackAfterDodge
+  ) {
+    return {
+      guaranteedCrit: true,
+      damageBonusPercent:
+        ability.effects.nextAttackDamageBonusAfterDodgePercent ?? 0,
+    };
+  }
+  return attackConnected
+    ? { guaranteedCrit: false, damageBonusPercent: 0 }
+    : previousState;
+}
+
+export function resolveGaleStackCount(
+  currentStacks: number,
+  normalAttackMade: boolean,
+  successfullyDodged: boolean,
+  maxStacks = 5
+): number {
+  const stacks = Math.max(0, Math.floor(currentStacks));
+  const gained = Number(normalAttackMade) + Number(successfullyDodged);
+  return Math.min(Math.max(0, maxStacks), stacks + gained);
+}
+
+export function resolveDivineShieldDamage(
+  ability: EquipmentSpecialAbility | undefined,
+  state: DivineShieldState,
+  healthBeforeDamage: number,
+  maxHealth: number,
+  incomingDamage: number,
+  endOfTurn = false
+): DivineShieldResolution {
+  const safeDamage = Math.max(0, incomingDamage);
+  const shieldActive = state.remainingAbsorb > 0 && state.turnsRemaining > 0;
+  const hasShieldPassive = ability?.id === "sacred-wall";
+  const charge =
+    hasShieldPassive && !state.used
+      ? Math.max(0, state.charge) + safeDamage
+      : Math.max(0, state.charge);
+  const trigger = Boolean(
+    !shieldActive &&
+      hasShieldPassive &&
+      !state.used &&
+      charge > 0 &&
+      healthBeforeDamage - safeDamage <
+        maxHealth *
+          ((ability?.effects.sacredShieldBelowHealthPercent ?? 0) / 100)
+  );
+  const shieldCapacity = shieldActive
+    ? state.remainingAbsorb
+    : trigger
+      ? maxHealth *
+        ((ability?.effects.sacredShieldAbsorbPercentMaxHealth ?? 0) / 100)
+      : 0;
+  const absorbedDamage = Math.min(safeDamage, shieldCapacity);
+  const duration = ability?.effects.sacredShieldDurationTurns ?? 0;
+  const turnsRemaining = shieldActive
+    ? Math.max(0, state.turnsRemaining - Number(endOfTurn))
+    : trigger
+      ? Math.max(0, duration - Number(endOfTurn))
+      : 0;
+  const remainingAbsorb = Math.max(0, shieldCapacity - absorbedDamage);
+  const remainsActive = remainingAbsorb > 0 && turnsRemaining > 0;
+  return {
+    health: Math.max(0, healthBeforeDamage - (safeDamage - absorbedDamage)),
+    damageTaken: safeDamage - absorbedDamage,
+    absorbedDamage,
+    triggered: trigger,
+    state: {
+      charge: trigger
+        ? 0
+        : hasShieldPassive && !state.used
+          ? charge
+          : state.charge,
+      remainingAbsorb: remainsActive ? remainingAbsorb : 0,
+      turnsRemaining: remainsActive ? turnsRemaining : 0,
+      used: state.used || trigger,
+    },
   };
 }
 
