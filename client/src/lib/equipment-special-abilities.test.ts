@@ -8,7 +8,7 @@ import {
   resolveLethalProtection,
 } from "./equipment-special-abilities";
 
-describe("legendary and mythic helmet abilities", () => {
+describe("legendary helmet abilities", () => {
   it("assigns the requested passives to all six legendary helmets", () => {
     expect(
       getEquipmentSpecialAbility("阿修羅戰神兜盔", "傳說")?.effects
@@ -39,40 +39,25 @@ describe("legendary and mythic helmet abilities", () => {
     });
   });
 
-  it("gives the corresponding mythic helmets stronger versions", () => {
-    const pairs = [
-      [
-        "阿修羅戰神兜盔",
-        "創世者·秩序之冠",
-        "damageBonusBelowHalfHealthPercent",
-      ],
-      ["夜魔主宰面具", "虛空之主·終焉面具", "lifestealBelowHalfHealthPercent"],
-      ["星辰智者之冠", "全知者·真理之冠", "cooldownReductionOnSkill"],
-      [
-        "永恆山脈巨盔",
-        "滅世巨神·荒古重盔 (極品)",
-        "physicalResistanceBelowHalfHealthPercent",
-      ],
-      [
-        "鳳凰涅槃面具",
-        "末日狂刃·血神之面 (極品)",
-        "nextAttackLifestealPercent",
-      ],
-      ["天穹王盔", "萬象冠冕", "attackBonusAboveHalfHealthPercent"],
+  it("leaves all six mythic helmets without abilities, including stale IDs", () => {
+    const mythicItems = [
+      ["創世者·秩序之冠", "low-health-damage"],
+      ["虛空之主·終焉面具", "low-health-lifesteal"],
+      ["全知者·真理之冠", "skill-cooldown"],
+      ["滅世巨神·荒古重盔 (極品)", "low-health-resistance"],
+      ["末日狂刃·血神之面 (極品)", "phoenix-rebirth"],
+      ["萬象冠冕", "high-health-dominance"],
     ] as const;
 
-    for (const [legendaryName, mythicName, effectName] of pairs) {
-      const legendaryValue = getEquipmentSpecialAbility(legendaryName, "傳說")
-        ?.effects[effectName];
-      const mythicValue = getEquipmentSpecialAbility(mythicName, "神話")
-        ?.effects[effectName];
-      expect(legendaryValue).toBeTypeOf("number");
-      expect(mythicValue).toBeTypeOf("number");
-      expect(mythicValue as number).toBeGreaterThan(legendaryValue as number);
+    for (const [name, staleAbilityId] of mythicItems) {
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBeUndefined();
+      expect(
+        getEquipmentSpecialAbility(name, "神話", staleAbilityId)
+      ).toBeUndefined();
     }
   });
 
-  it("preserves the passive on corresponding legendary and mythic set helmets", () => {
+  it("preserves passives on legendary set helmets only", () => {
     const setHelmetPairs = [
       ["曙光聖衛·傳說盔", "曙光聖衛·神話盔", "low-health-damage"],
       ["影月獵行·傳說盔", "影月獵行·神話盔", "low-health-lifesteal"],
@@ -84,7 +69,7 @@ describe("legendary and mythic helmet abilities", () => {
 
     for (const [legendaryName, mythicName, abilityId] of setHelmetPairs) {
       expect(getEquipmentSpecialAbilityIdByName(legendaryName)).toBe(abilityId);
-      expect(getEquipmentSpecialAbilityIdByName(mythicName)).toBe(abilityId);
+      expect(getEquipmentSpecialAbilityIdByName(mythicName)).toBeUndefined();
       expect(
         RPG_EQUIPMENT_TEMPLATES.find(item => item.name === legendaryName)
           ?.specialAbilityId
@@ -92,7 +77,7 @@ describe("legendary and mythic helmet abilities", () => {
       expect(
         RPG_EQUIPMENT_TEMPLATES.find(item => item.name === mythicName)
           ?.specialAbilityId
-      ).toBe(abilityId);
+      ).toBeUndefined();
     }
   });
 
@@ -111,6 +96,22 @@ describe("legendary and mythic helmet abilities", () => {
     expect(savedItem).toMatchObject({
       kind: "equipment",
       specialAbilityId: "phoenix-rebirth",
+    });
+
+    const savedMythicItem = parseLootItem({
+      id: "saved-mythic-helmet",
+      kind: "equipment",
+      name: "萬象冠冕",
+      rarity: "神話",
+      slot: "頭盔",
+      description: "舊版神話裝備",
+      bonus: "生命 +360",
+      icon: "shield-check",
+      specialAbilityId: "high-health-dominance",
+    });
+    expect(savedMythicItem).toMatchObject({
+      kind: "equipment",
+      specialAbilityId: undefined,
     });
   });
 
@@ -131,13 +132,12 @@ describe("legendary and mythic helmet abilities", () => {
       "末日狂刃·血神之面 (極品)",
       "神話"
     );
-    expect(resolveLethalProtection(mythicAbility, 10, 11, false)).toMatchObject(
-      {
-        triggered: true,
-        health: 10,
-        nextAttackLifestealPercent: 35,
-      }
-    );
+    expect(mythicAbility).toBeUndefined();
+    expect(resolveLethalProtection(mythicAbility, 10, 11, false)).toEqual({
+      triggered: false,
+      health: 0,
+      nextAttackLifestealPercent: 0,
+    });
   });
 
   it("activates health-threshold effects only below or above one half", () => {
