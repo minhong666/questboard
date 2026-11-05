@@ -11,6 +11,12 @@ import {
   resolveLethalProtection,
   rollTruthDoubleCast,
 } from "./equipment-special-abilities";
+import {
+  addCappedStack,
+  advanceWeaponTimedBuffs,
+  getWeaponTimedBuffBonuses,
+  rollPercentChance,
+} from "./equipment-weapon-combat";
 
 describe("legendary helmet abilities", () => {
   it("assigns the requested passives to all six legendary helmets", () => {
@@ -371,5 +377,138 @@ describe("legendary chest armor abilities", () => {
       triggered: false,
       state: { remainingAbsorb: 0, turnsRemaining: 0, used: true },
     });
+  });
+});
+
+describe("legendary weapon abilities", () => {
+  const weaponNames = [
+    "焚星神弓",
+    "傳說·曙光劍",
+    "傳說·鐵衛劍",
+    "傳說·月影劍",
+    "傳說·王道劍",
+    "傳說·星界劍",
+    "傳說·獵影短刀",
+    "傳說·迅牙短刀",
+    "傳說·毒棘短刀",
+    "傳說·幻步短刀",
+    "傳說·虛空短刀",
+    "傳說·林風弓",
+    "傳說·沙羽弓",
+    "傳說·月弦弓",
+    "傳說·天穹弓",
+    "傳說·日輪弓",
+    "傳說·木靈法杖",
+    "傳說·藍晶法杖",
+    "傳說·星語法杖",
+    "傳說·炎脈法杖",
+    "傳說·創世法杖",
+  ];
+
+  it("assigns every requested passive to its matching legendary weapon only", () => {
+    for (const name of weaponNames) {
+      const abilityId = getEquipmentSpecialAbilityIdByName(name);
+      expect(abilityId, name).toBeDefined();
+      expect(
+        RPG_EQUIPMENT_TEMPLATES.find(item => item.name === name)
+          ?.specialAbilityId,
+        name
+      ).toBe(abilityId);
+      expect(
+        getEquipmentSpecialAbility(name, "傳說", abilityId),
+        name
+      ).toBeDefined();
+
+      const mythicName = name.startsWith("傳說·")
+        ? name.replace("傳說·", "神話·")
+        : name;
+      expect(
+        getEquipmentSpecialAbility(mythicName, "神話", abilityId),
+        mythicName
+      ).toBeUndefined();
+      if (name.startsWith("傳說·")) {
+        expect(getEquipmentSpecialAbilityIdByName(mythicName)).toBeUndefined();
+      }
+    }
+  });
+
+  it("keeps requested proc values, durations, counters and damage rules", () => {
+    expect(
+      getEquipmentSpecialAbility("焚星神弓", "傳說")?.effects
+    ).toMatchObject({
+      starfireBurnPercentOfCriticalDamage: 15,
+      starfireDurationTurns: 3,
+      starfireArmorReductionPercent: 10,
+    });
+    expect(
+      getEquipmentSpecialAbility("傳說·曙光劍", "傳說")?.effects
+    ).toMatchObject({
+      dawnProcChancePercent: 20,
+      dawnBonusDamagePercentAttack: 20,
+      dawnHighHealthThresholdPercent: 70,
+      dawnHighHealthDamageMultiplier: 2,
+    });
+    expect(
+      getEquipmentSpecialAbility("傳說·迅牙短刀", "傳說")?.effects
+    ).toMatchObject({
+      swiftfangAttackBonusPercent: 20,
+      swiftfangDodgeRateBonusPercent: 5,
+      swiftfangDurationTurns: 2,
+    });
+    expect(
+      getEquipmentSpecialAbility("傳說·創世法杖", "傳說")?.effects
+    ).toMatchObject({
+      genesisStaffProcChancePercent: 25,
+      genesisStaffBonusMagicDamage: 30,
+      genesisStaffMaxAdditionalTargets: 3,
+      genesisStaffParalysisChancePercent: 15,
+      genesisStaffParalysisDurationTurns: 1,
+    });
+    expect(
+      getEquipmentSpecialAbility("傳說·炎脈法杖", "傳說")?.effects
+    ).toMatchObject({
+      fireVeinMarksToBurst: 5,
+      fireVeinAoeMagicAttackPercent: 100,
+    });
+  });
+
+  it("resolves proc boundaries, capped stacks and timed buff refresh", () => {
+    expect(rollPercentChance(25, 0.249)).toBe(true);
+    expect(rollPercentChance(25, 0.25)).toBe(false);
+    expect(addCappedStack(1, 2)).toBe(2);
+    expect(addCappedStack(2, 2)).toBe(2);
+
+    const active = advanceWeaponTimedBuffs(
+      [],
+      [
+        {
+          id: "swiftfang-dagger",
+          turnsRemaining: 2,
+          attackDamageBonusPercent: 20,
+          dodgeRateBonusPercent: 5,
+        },
+      ]
+    );
+    expect(getWeaponTimedBuffBonuses(active)).toEqual({
+      attackDamageBonusPercent: 20,
+      critRateBonusPercent: 0,
+      dodgeRateBonusPercent: 5,
+    });
+    expect(advanceWeaponTimedBuffs(active)).toMatchObject([
+      { id: "swiftfang-dagger", turnsRemaining: 1 },
+    ]);
+    expect(advanceWeaponTimedBuffs(advanceWeaponTimedBuffs(active))).toEqual(
+      []
+    );
+    expect(
+      advanceWeaponTimedBuffs(active, [
+        {
+          id: "swiftfang-dagger",
+          turnsRemaining: 2,
+          attackDamageBonusPercent: 20,
+          dodgeRateBonusPercent: 5,
+        },
+      ])
+    ).toMatchObject([{ id: "swiftfang-dagger", turnsRemaining: 2 }]);
   });
 });

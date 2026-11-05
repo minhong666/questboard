@@ -81,6 +81,14 @@ import {
   type DivineShieldState,
 } from "../lib/equipment-special-abilities";
 import {
+  INITIAL_WEAPON_PASSIVE_BATTLE_STATE,
+  advanceWeaponTimedBuffs,
+  getWeaponTimedBuffBonuses,
+  rollPercentChance,
+  type WeaponPassiveBattleState,
+  type WeaponTimedBuff,
+} from "../lib/equipment-weapon-combat";
+import {
   applyArcherAttackBonus,
   getArcherEffectiveDodgeRate,
   getArcherTalentBonuses,
@@ -156,6 +164,7 @@ import {
   normalizeDailyMonsterId,
 } from "../lib/daily-monster-ids";
 import {
+  applyMonsterGroupAreaDamage,
   applyMonsterGroupDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
@@ -244,8 +253,12 @@ type BattleState = {
   nextAttackLifestealPercent?: number;
   nextAttackGuaranteedCrit?: boolean;
   nextAttackDamageBonusPercent?: number;
+  nextAttackCritRateBonusPercent?: number;
+  nextAttackDefensePiercePercent?: number;
   galeStacks?: number;
   divineShield?: DivineShieldState;
+  weaponPassiveState?: WeaponPassiveBattleState;
+  weaponTimedBuffs?: WeaponTimedBuff[];
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
@@ -271,6 +284,10 @@ type BattleStatus = {
   damageReductionPercent?: number;
   breakDamageThreshold?: number;
   breakDamage?: number;
+  armorReductionPercent?: number;
+  outgoingDamageReductionPercent?: number;
+  healingReceivedReductionPercent?: number;
+  accuracyReductionPercent?: number;
 };
 type BattleFx = {
   id: number;
@@ -299,6 +316,22 @@ function applyBattleStatusEffects(
     if (existing) {
       existing.turnsRemaining = Math.max(existing.turnsRemaining, effect.durationTurns);
       existing.damagePerTurn = Math.max(existing.damagePerTurn, damagePerTurn);
+      existing.armorReductionPercent = Math.max(
+        existing.armorReductionPercent ?? 0,
+        effect.armorReductionPercent ?? 0
+      );
+      existing.outgoingDamageReductionPercent = Math.max(
+        existing.outgoingDamageReductionPercent ?? 0,
+        effect.outgoingDamageReductionPercent ?? 0
+      );
+      existing.healingReceivedReductionPercent = Math.max(
+        existing.healingReceivedReductionPercent ?? 0,
+        effect.healingReceivedReductionPercent ?? 0
+      );
+      existing.accuracyReductionPercent = Math.max(
+        existing.accuracyReductionPercent ?? 0,
+        effect.accuracyReductionPercent ?? 0
+      );
     } else {
       next.push({
         kind: effect.kind,
@@ -308,6 +341,12 @@ function applyBattleStatusEffects(
         damageReductionPercent: effect.damageReductionPercent,
         breakDamageThreshold: effect.breakDamageThreshold,
         breakDamage: effect.breakDamage,
+        armorReductionPercent: effect.armorReductionPercent,
+        outgoingDamageReductionPercent:
+          effect.outgoingDamageReductionPercent,
+        healingReceivedReductionPercent:
+          effect.healingReceivedReductionPercent,
+        accuracyReductionPercent: effect.accuracyReductionPercent,
       });
     }
   }
@@ -317,14 +356,15 @@ function applyBattleStatusEffects(
 function tickBattleStatuses(statuses: BattleStatus[]) {
   let damage = 0;
   let frozen = false;
-  let controlLabel: "冰凍" | "石化" | "暈眩" | null = null;
+  let controlLabel: "冰凍" | "石化" | "暈眩" | "麻痺" | null = null;
   const labels: string[] = [];
   const nextStatuses = statuses
     .map(status => {
       if (
         status.kind === "冰凍" ||
         status.kind === "石化" ||
-        status.kind === "暈眩"
+        status.kind === "暈眩" ||
+        status.kind === "麻痺"
       ) {
         frozen = true;
         controlLabel = status.kind;
@@ -4034,6 +4074,8 @@ export default function Home() {
       nextAttackLifestealPercent: 0,
       nextAttackGuaranteedCrit: false,
       nextAttackDamageBonusPercent: 0,
+      nextAttackCritRateBonusPercent: 0,
+      nextAttackDefensePiercePercent: 0,
       galeStacks: 0,
       divineShield: {
         charge: 0,
@@ -4041,6 +4083,8 @@ export default function Home() {
         turnsRemaining: 0,
         used: false,
       },
+      weaponPassiveState: { ...INITIAL_WEAPON_PASSIVE_BATTLE_STATE },
+      weaponTimedBuffs: [],
       actionLockTurns: 0,
       monsterStatuses: [],
       playerStatuses: [],
@@ -4084,6 +4128,19 @@ export default function Home() {
           chestItem.specialAbilityId
         )
       : undefined;
+    const weaponItem = equippedItems.find(item => item.slot === "武器");
+    const weaponAbility = weaponItem
+      ? getEquipmentSpecialAbility(
+          weaponItem.name,
+          weaponItem.rarity,
+          weaponItem.specialAbilityId
+        )
+      : undefined;
+    const weaponPassiveState = battle.weaponPassiveState ?? {
+      ...INITIAL_WEAPON_PASSIVE_BATTLE_STATE,
+    };
+    const activeWeaponBuffs = battle.weaponTimedBuffs ?? [];
+    const activeWeaponBuffBonuses = getWeaponTimedBuffBonuses(activeWeaponBuffs);
     const mageStaff = isMage
       ? equippedItems.find(item => item.slot === "武器" && item.weaponType === "法杖")
       : undefined;
@@ -4108,6 +4165,18 @@ export default function Home() {
                 : 5,
         }
       : undefined;
+    const arcaneEchoTriggered = Boolean(
+      weaponAbility?.id === "starlight-staff" &&
+        selectedSkill?.effectType === "damage" &&
+        weaponPassiveState.arcaneEchoReady
+    );
+    const moonstringArrowReady = Boolean(
+      weaponAbility?.id === "moonstring-bow" &&
+        (weaponPassiveState.moonstringArrowReady ||
+          battle.turn %
+            (weaponAbility.effects.moonstringChargeIntervalTurns ?? 3) ===
+            0)
+    );
     if (selectedSkill && (battle.skillCooldowns[selectedSkill.id] ?? 0) > 0) {
       showToast(`「${selectedSkill.name}」還要 ${battle.skillCooldowns[selectedSkill.id]} 回合才能使用`);
       return;
@@ -4130,10 +4199,12 @@ export default function Home() {
         (selectedSkill.damageType === "魔法"
           ? Math.floor((effectiveCombatStats.castSpeedPercent ?? 0) / 10)
           : 0) + passiveCooldownReduction;
-      nextSkillCooldowns[selectedSkill.id] = Math.max(
-        passiveCooldownReduction > 0 ? 0 : 1,
-        selectedSkill.cooldownTurns - cooldownReduction
-      );
+      nextSkillCooldowns[selectedSkill.id] = arcaneEchoTriggered
+        ? 0
+        : Math.max(
+            passiveCooldownReduction > 0 ? 0 : 1,
+            selectedSkill.cooldownTurns - cooldownReduction
+          );
     }
     const activeBuff = selectedSkill && (
       selectedSkill.effectType === "buff" ||
@@ -4206,6 +4277,73 @@ export default function Home() {
       monster.requirements
     );
     const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
+    const isDamageAction = Boolean(
+      !actionLocked &&
+        selectedSkill?.effectType !== "buff" &&
+        (!selectedSkill || selectedSkill.damageMultiplier > 0)
+    );
+    const moonstringArrowShot = Boolean(
+      moonstringArrowReady && isArcher && isDamageAction
+    );
+    const targetArmorReductionPercent = Math.min(
+      80,
+      (battle.monsterStatuses ?? []).reduce(
+        (total, status) => total + (status.armorReductionPercent ?? 0),
+        0
+      )
+    );
+    const targetDefenseAfterDebuff = Math.max(
+      0,
+      targetMonsterDefense * (1 - targetArmorReductionPercent / 100)
+    );
+    const targetIsFrozen = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "冰凍"
+    );
+    const forestwindDamageBonusPercent =
+      weaponAbility?.id === "forestwind-bow"
+        ? Math.min(
+            weaponAbility.effects.forestwindMaxDamageBonusPercent ?? 30,
+            battle.turn *
+              (weaponAbility.effects.forestwindDamageBonusPerTurnPercent ?? 5)
+          )
+        : 0;
+    const hunterCritBonusPercent =
+      weaponAbility?.id === "hunter-dagger"
+        ? weaponPassiveState.hunterCritStacks *
+          (weaponAbility.effects.hunterCritRateBonusPerCriticalPercent ?? 15)
+        : 0;
+    const hunterCritDamageBonusPercent =
+      weaponAbility?.id === "hunter-dagger"
+        ? weaponPassiveState.hunterCritStacks *
+          (weaponAbility.effects.hunterCritDamageBonusPerCriticalPercent ?? 15)
+        : 0;
+    const kingSwordCritDamageBonusPercent =
+      weaponAbility?.id === "kings-sword" &&
+      targetMonsterHealth <
+        targetMonsterMaxHealth *
+          ((weaponAbility.effects.kingsSwordTargetHealthBelowPercent ?? 50) / 100)
+        ? weaponAbility.effects.kingsSwordCritDamageBonusPercent ?? 25
+        : 0;
+    const pendingAttackCritRateBonusPercent =
+      battle.nextAttackCritRateBonusPercent ?? 0;
+    const effectiveCritRate = Math.min(
+      100,
+      effectiveCombatStats.critRate +
+        activeWeaponBuffBonuses.critRateBonusPercent +
+        hunterCritBonusPercent +
+        pendingAttackCritRateBonusPercent
+    );
+    const effectiveCritDamage =
+      effectiveCombatStats.critDamage +
+      hunterCritDamageBonusPercent +
+      kingSwordCritDamageBonusPercent;
+    const extraDefensePiercePercent = Math.min(
+      100,
+      (battle.nextAttackDefensePiercePercent ?? 0) +
+        (moonstringArrowShot
+          ? weaponAbility?.effects.moonstringDefensePiercePercent ?? 25
+          : 0)
+    );
     const physicalDamageReductionPercent = damageType === "物理"
       ? Math.min(
           80,
@@ -4229,6 +4367,14 @@ export default function Home() {
       : selectedSkill?.effectType === "buff"
         ? false
         : Math.random() < targetMonsterDodgeRate / 100;
+    const dawnProcTriggered = Boolean(
+      weaponAbility?.id === "dawn-sword" &&
+        isDamageAction &&
+        !monsterDodges &&
+        rollPercentChance(
+          weaponAbility.effects.dawnProcChancePercent ?? 20
+        )
+    );
     const attackCanCrit =
       !actionLocked &&
       !monsterDodges &&
@@ -4238,28 +4384,38 @@ export default function Home() {
     const criticalHit =
       attackCanCrit &&
       (guaranteedCounterCritical ||
-        (!isMage && Math.random() < effectiveCombatStats.critRate / 100));
+        (!isMage && Math.random() < effectiveCritRate / 100));
     const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
     const basePlayerDamage = isArcher
       ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
       : rawPlayerDamage;
     const damageBeforeDefense = criticalHit
-      ? Math.round((basePlayerDamage * effectiveCombatStats.critDamage) / 100)
+      ? Math.round((basePlayerDamage * effectiveCritDamage) / 100)
       : basePlayerDamage;
-    const counterDamageBonusPercent = battle.nextAttackGuaranteedCrit
-      ? battle.nextAttackDamageBonusPercent ?? 0
-      : 0;
+    const counterDamageBonusPercent = battle.nextAttackDamageBonusPercent ?? 0;
     const equipmentAttackBonusPercent =
       activeHelmetEffects.attackDamageBonusPercent +
       activeChestEffects.attackDamageBonusPercent +
-      counterDamageBonusPercent;
+      counterDamageBonusPercent +
+      activeWeaponBuffBonuses.attackDamageBonusPercent +
+      forestwindDamageBonusPercent +
+      (arcaneEchoTriggered
+        ? weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30
+        : 0);
     const physicalDamageBonusPercent = damageType === "物理"
       ? activeChestEffects.physicalDamageBonusPercent
       : 0;
+    const frozenTargetDamageBonusPercent =
+      damageType === "魔法" &&
+      targetIsFrozen &&
+      weaponAbility?.id === "sapphire-staff"
+        ? weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20
+        : 0;
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense *
         (1 + equipmentAttackBonusPercent / 100) *
         (1 + physicalDamageBonusPercent / 100) *
+        (1 + frozenTargetDamageBonusPercent / 100) *
         (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
         (1 - physicalDamageReductionPercent / 100)
     );
@@ -4273,7 +4429,16 @@ export default function Home() {
         Math.floor(Math.random() * (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1))
       : 1;
     const skillCastCount = truthDoubleCastTriggered ? 2 : 1;
-    const rawDamageDealt = instantExecute
+    const skillWithWeaponPierce = selectedSkill
+      ? {
+          ...selectedSkill,
+          defensePiercePercent: Math.min(
+            100,
+            selectedSkill.defensePiercePercent + extraDefensePiercePercent
+          ),
+        }
+      : undefined;
+    const baseRawDamageDealt = instantExecute
       ? targetMonsterHealth
       : actionLocked
       ? 0
@@ -4284,13 +4449,40 @@ export default function Home() {
       : selectedSkill
         ? calculateSpecialSkillDamage(
             buffedPlayerDamage,
-            targetMonsterDefense,
-            selectedSkill
+            targetDefenseAfterDebuff,
+            skillWithWeaponPierce ?? selectedSkill
           ) * skillHitCount * skillCastCount
         : Math.max(
             1,
-            buffedPlayerDamage - getDefenseReduction(targetMonsterDefense)
+            buffedPlayerDamage -
+              getDefenseReduction(
+                targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+              )
           );
+    const dawnBonusDamage = dawnProcTriggered
+      ? Math.round(
+          basePlayerDamage *
+            ((weaponAbility?.effects.dawnBonusDamagePercentAttack ?? 20) / 100) *
+            (targetMonsterHealth >
+            targetMonsterMaxHealth *
+              ((weaponAbility?.effects.dawnHighHealthThresholdPercent ?? 70) / 100)
+              ? weaponAbility?.effects.dawnHighHealthDamageMultiplier ?? 2
+              : 1)
+        )
+      : 0;
+    const firmamentBonusDamage =
+      criticalHit &&
+      isDamageAction &&
+      weaponAbility?.id === "firmament-bow"
+        ? Math.round(
+            effectiveAbilities.strength *
+              ((weaponAbility.effects.firmamentBonusDamagePercentStrength ?? 50) / 100)
+          )
+        : 0;
+    const rawDamageDealt =
+      baseRawDamageDealt > 0 && !instantExecute
+        ? baseRawDamageDealt + dawnBonusDamage + firmamentBonusDamage
+        : baseRawDamageDealt;
     const resistancePercent = damageType === "魔法"
       ? Math.max(
           0,
@@ -4303,11 +4495,266 @@ export default function Home() {
       : rawDamageDealt === 0
       ? 0
       : Math.max(1, Math.round(rawDamageDealt * (1 - resistancePercent / 100)));
+    const weaponHitLanded = isDamageAction && damageDealt > 0;
+    const moonshadowTriggered = Boolean(
+      weaponAbility?.id === "moonshadow-sword" &&
+        criticalHit &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.moonshadowProcChancePercent ?? 30
+        )
+    );
+    const swiftfangTriggered = Boolean(
+      weaponAbility?.id === "swiftfang-dagger" && criticalHit && weaponHitLanded
+    );
+    const hunterCriticalTriggered = Boolean(
+      weaponAbility?.id === "hunter-dagger" && criticalHit && weaponHitLanded
+    );
+    const starrealmCritStacks =
+      weaponAbility?.id === "starrealm-sword" && criticalHit && weaponHitLanded
+        ? (weaponPassiveState.starrealmCritStacks + 1) %
+          (weaponAbility.effects.starrealmMaxStacks ?? 3)
+        : weaponPassiveState.starrealmCritStacks;
+    const starrealmBurstTriggered = Boolean(
+      weaponAbility?.id === "starrealm-sword" &&
+        criticalHit &&
+        weaponHitLanded &&
+        weaponPassiveState.starrealmCritStacks + 1 >=
+          (weaponAbility.effects.starrealmMaxStacks ?? 3)
+    );
+    const fireVeinMarkCount =
+      weaponAbility?.id === "fire-vein-staff" &&
+      selectedSkill?.effectType === "damage" &&
+      weaponHitLanded
+        ? weaponPassiveState.fireVeinMarks + 1
+        : weaponPassiveState.fireVeinMarks;
+    const fireVeinBurstTriggered = Boolean(
+      weaponAbility?.id === "fire-vein-staff" &&
+        fireVeinMarkCount >=
+          (weaponAbility.effects.fireVeinMarksToBurst ?? 5)
+    );
+    const genesisChainTriggered = Boolean(
+      weaponAbility?.id === "genesis-staff" &&
+        mageStaff?.element === "雷電" &&
+        selectedSkill?.damageType === "魔法" &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.genesisStaffProcChancePercent ?? 25
+        )
+    );
+    const sunwheelTriggered = Boolean(
+      weaponAbility?.id === "sunwheel-bow" &&
+        weaponHitLanded &&
+        rollPercentChance(weaponAbility.effects.sunwheelProcChancePercent ?? 30)
+    );
+    const natureHealTriggered = Boolean(
+      weaponAbility?.id === "nature-staff" &&
+        selectedSkill &&
+        !actionLocked &&
+        rollPercentChance(weaponAbility.effects.natureStaffHealChancePercent ?? 35)
+    );
+    const triggeredWeaponTimedBuffs: WeaponTimedBuff[] = [];
+    if (swiftfangTriggered) {
+      triggeredWeaponTimedBuffs.push({
+        id: "swiftfang-dagger",
+        turnsRemaining: weaponAbility?.effects.swiftfangDurationTurns ?? 2,
+        attackDamageBonusPercent:
+          weaponAbility?.effects.swiftfangAttackBonusPercent ?? 20,
+        dodgeRateBonusPercent:
+          weaponAbility?.effects.swiftfangDodgeRateBonusPercent ?? 5,
+      });
+    }
+    if (sunwheelTriggered) {
+      triggeredWeaponTimedBuffs.push({
+        id: "sunwheel-bow",
+        turnsRemaining: weaponAbility?.effects.sunwheelDurationTurns ?? 2,
+        critRateBonusPercent:
+          weaponAbility?.effects.sunwheelCritRateBonusPercent ?? 10,
+      });
+    }
+    const weaponStatusEffects: SkillStatusEffect[] = [];
+    if (
+      weaponAbility?.id === "starfire-bow" &&
+      criticalHit &&
+      weaponHitLanded
+    ) {
+      weaponStatusEffects.push({
+        kind: "燃燒",
+        element: "火焰",
+        chance: 1,
+        durationTurns: weaponAbility.effects.starfireDurationTurns ?? 3,
+        damagePerTurn: Math.max(
+          1,
+          Math.round(
+            damageDealt *
+              ((weaponAbility.effects.starfireBurnPercentOfCriticalDamage ?? 15) / 100)
+          )
+        ),
+        armorReductionPercent:
+          weaponAbility.effects.starfireArmorReductionPercent ?? 10,
+      });
+    }
+    if (
+      weaponAbility?.id === "poison-thorn-dagger" &&
+      criticalHit &&
+      weaponHitLanded
+    ) {
+      weaponStatusEffects.push({
+        kind: "中毒",
+        element: "自然",
+        chance: 1,
+        durationTurns: weaponAbility.effects.poisonThornDurationTurns ?? 3,
+        damagePerTurn: Math.max(
+          1,
+          Math.round(
+            damageDealt *
+              ((weaponAbility.effects.poisonThornDamagePercentOfHit ?? 3) / 100)
+          )
+        ),
+        healingReceivedReductionPercent:
+          weaponAbility.effects.poisonThornHealingReceivedReductionPercent ?? 15,
+      });
+    }
+    if (
+      weaponAbility?.id === "void-dagger" &&
+      criticalHit &&
+      weaponHitLanded &&
+      rollPercentChance(weaponAbility.effects.voidDaggerProcChancePercent ?? 25)
+    ) {
+      weaponStatusEffects.push({
+        kind: "虛弱",
+        element: "奧術",
+        chance: 1,
+        durationTurns: weaponAbility.effects.voidDaggerDurationTurns ?? 2,
+        damagePerTurn: 0,
+        outgoingDamageReductionPercent:
+          weaponAbility.effects.voidDaggerOutgoingDamageReductionPercent ?? 15,
+      });
+    }
+    if (
+      weaponAbility?.id === "sandfeather-bow" &&
+      weaponHitLanded &&
+      rollPercentChance(weaponAbility.effects.sandfeatherProcChancePercent ?? 25)
+    ) {
+      weaponStatusEffects.push({
+        kind: "致盲",
+        element: "自然",
+        chance: 1,
+        durationTurns: weaponAbility.effects.sandfeatherDurationTurns ?? 2,
+        damagePerTurn: 0,
+        accuracyReductionPercent:
+          weaponAbility.effects.sandfeatherAccuracyReductionPercent ?? 25,
+      });
+    }
+    if (sunwheelTriggered) {
+      weaponStatusEffects.push({
+        kind: "燃燒",
+        element: "火焰",
+        chance: 1,
+        durationTurns: weaponAbility?.effects.sunwheelDurationTurns ?? 2,
+        damagePerTurn: Math.max(
+          1,
+          Math.round(
+            basePlayerDamage *
+              ((weaponAbility?.effects.sunwheelBurnPercentAttack ?? 5) / 100)
+          )
+        ),
+      });
+    }
+    if (
+      weaponAbility?.id === "sapphire-staff" &&
+      weaponHitLanded &&
+      rollPercentChance(
+        weaponAbility.effects.sapphireStaffFreezeChancePercent ?? 20
+      )
+    ) {
+      weaponStatusEffects.push({
+        kind: "冰凍",
+        element: "冰霜",
+        chance: 1,
+        durationTurns:
+          weaponAbility.effects.sapphireStaffFreezeDurationTurns ?? 2,
+        damagePerTurn: 0,
+      });
+    }
+    if (genesisChainTriggered) {
+      const livingChainTargets = battle.groupMembers
+        ? getLivingMonsterGroupMembers(battle.groupMembers).length
+        : 1;
+      const chainTargetCount = Math.min(
+        livingChainTargets,
+        1 + (weaponAbility?.effects.genesisStaffMaxAdditionalTargets ?? 3)
+      );
+      for (let index = 0; index < chainTargetCount; index += 1) {
+        if (
+          rollPercentChance(
+            weaponAbility?.effects.genesisStaffParalysisChancePercent ?? 15
+          )
+        ) {
+          weaponStatusEffects.push({
+            kind: "麻痺",
+            element: "雷電",
+            chance: 1,
+            durationTurns:
+              weaponAbility?.effects.genesisStaffParalysisDurationTurns ?? 1,
+            damagePerTurn: 0,
+          });
+          break;
+        }
+      }
+    }
+    const arcaneSkillCastThisTurn = Boolean(
+      weaponAbility?.id === "starlight-staff" &&
+        selectedSkill &&
+        !actionLocked
+    );
+    const arcaneNextCastCount = weaponPassiveState.arcaneSkillCastsSinceEcho +
+      (arcaneSkillCastThisTurn && !arcaneEchoTriggered ? 1 : 0);
+    const weaponPassiveStateAfterPlayerAction: WeaponPassiveBattleState = {
+      ...weaponPassiveState,
+      moonstringArrowReady:
+        weaponAbility?.id === "moonstring-bow"
+          ? moonstringArrowShot
+            ? false
+            : moonstringArrowReady
+          : weaponPassiveState.moonstringArrowReady,
+      hunterCritStacks:
+        weaponPassiveState.hunterCritStacks + (hunterCriticalTriggered ? 1 : 0),
+      starrealmCritStacks,
+      arcaneSkillCastsSinceEcho: weaponAbility?.id === "starlight-staff"
+        ? arcaneEchoTriggered
+          ? 0
+          : arcaneNextCastCount >=
+            (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+            ? 0
+            : arcaneNextCastCount
+        : weaponPassiveState.arcaneSkillCastsSinceEcho,
+      arcaneEchoReady: weaponAbility?.id === "starlight-staff"
+        ? arcaneEchoTriggered
+          ? false
+          : arcaneNextCastCount >=
+            (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+            ? true
+            : weaponPassiveState.arcaneEchoReady
+        : weaponPassiveState.arcaneEchoReady,
+      fireVeinMarks: weaponAbility?.id === "fire-vein-staff"
+        ? fireVeinBurstTriggered
+          ? 0
+          : fireVeinMarkCount
+        : weaponPassiveState.fireVeinMarks,
+    };
+    const weaponTimedBuffsAfterPlayerAction = advanceWeaponTimedBuffs(
+      activeWeaponBuffs,
+      triggeredWeaponTimedBuffs
+    );
     const nextMonsterStatuses = applyBattleStatusEffects(
       battle.monsterStatuses,
-      damageDealt > 0 && damageType === "魔法"
-        ? [selectedSkill?.statusEffect, staffStatusEffect]
-        : [],
+      [
+        ...(damageDealt > 0 && damageType === "魔法"
+          ? [selectedSkill?.statusEffect, staffStatusEffect]
+          : []),
+        ...weaponStatusEffects,
+      ],
       damageDealt
     );
     const petrifyBroken = damageDealt > 200 && nextMonsterStatuses.some(
@@ -4329,13 +4776,69 @@ export default function Home() {
           battle.targetMonsterMemberId
         )
       : undefined;
-    const nextGroupMembers = groupDamageResult?.members;
-    const appliedGroupDamage = groupDamageResult?.totalDamageApplied;
-    const appliedDamage = appliedGroupDamage ?? damageDealt + statusDamage;
+    let nextGroupMembers = groupDamageResult?.members;
+    const primaryAppliedDamage =
+      groupDamageResult?.totalDamageApplied ?? damageDealt + statusDamage;
+    const weaponAreaDamageType =
+      fireVeinBurstTriggered || genesisChainTriggered ? "魔法" : "物理";
+    const weaponAreaRawDamage = starrealmBurstTriggered
+      ? Math.round(
+          basePlayerDamage *
+            ((weaponAbility?.effects.starrealmAoeAttackPercent ?? 80) / 100)
+        )
+      : fireVeinBurstTriggered
+        ? Math.round(
+            basePlayerDamage *
+              ((weaponAbility?.effects.fireVeinAoeMagicAttackPercent ?? 100) / 100)
+          )
+        : genesisChainTriggered
+          ? weaponAbility?.effects.genesisStaffBonusMagicDamage ?? 30
+          : 0;
+    const weaponAreaResistancePercent = weaponAreaDamageType === "魔法"
+      ? Math.max(
+          0,
+          targetMagicResistance -
+            (effectiveCombatStats.magicPenetrationPercent ?? 0)
+        )
+      : targetPhysicalResistance;
+    const weaponAreaDamagePerTarget = weaponAreaRawDamage > 0
+      ? Math.max(
+          1,
+          Math.round(
+            Math.max(
+              1,
+              weaponAreaRawDamage - getDefenseReduction(targetDefenseAfterDebuff)
+            ) *
+              (1 - weaponAreaResistancePercent / 100)
+          )
+        )
+      : 0;
+    const weaponAreaTargetLimit = genesisChainTriggered
+      ? Math.min(
+          Number.POSITIVE_INFINITY,
+          1 + (weaponAbility?.effects.genesisStaffMaxAdditionalTargets ?? 3)
+        )
+      : Number.POSITIVE_INFINITY;
+    let weaponAreaDamageApplied = 0;
+    if (weaponAreaDamagePerTarget > 0 && nextGroupMembers) {
+      const areaDamageResult = applyMonsterGroupAreaDamage(
+        nextGroupMembers,
+        weaponAreaDamagePerTarget,
+        weaponAreaTargetLimit
+      );
+      nextGroupMembers = areaDamageResult.members;
+      weaponAreaDamageApplied = areaDamageResult.totalDamageApplied;
+    } else if (weaponAreaDamagePerTarget > 0 && !battle.groupMembers) {
+      weaponAreaDamageApplied = Math.min(
+        weaponAreaDamagePerTarget,
+        Math.max(0, battle.monsterHealth - primaryAppliedDamage)
+      );
+    }
+    const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied;
     const actualDamageDealt = groupDamageResult
-      ? Math.min(damageDealt, appliedDamage)
+      ? Math.min(damageDealt, primaryAppliedDamage)
       : damageDealt;
-    const actualStatusDamage = appliedDamage - actualDamageDealt;
+    const actualStatusDamage = primaryAppliedDamage - actualDamageDealt;
     const nextTargetMonsterMemberId = nextGroupMembers
       ?.find(member => member.id === battle.targetMonsterMemberId && member.health > 0)?.id
       ?? nextGroupMembers?.find(member => member.health > 0)?.id;
@@ -4353,18 +4856,13 @@ export default function Home() {
       ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
     ];
     const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
-    const targetLifestealHealing = actualDamageDealt > 0
-      ? Math.floor(
-          actualDamageDealt * (targetGroupMember?.lifestealPercent ?? monster.lifestealPercent ?? 0) / 100
-        )
-      : 0;
     const pendingAttackLifestealPercent = battle.nextAttackLifestealPercent ?? 0;
     const helmetLifestealPercent = activeHelmetEffects.lifestealPercent +
       (actualDamageDealt > 0 ? pendingAttackLifestealPercent : 0);
     const helmetLifestealHealing = actualDamageDealt > 0
       ? Math.floor(actualDamageDealt * helmetLifestealPercent / 100)
       : 0;
-    const lifestealHealing = targetLifestealHealing + helmetLifestealHealing;
+    const lifestealHealing = helmetLifestealHealing;
     const reflectedDamage = actualDamageDealt > 0
       ? targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0
       : 0;
@@ -4373,6 +4871,15 @@ export default function Home() {
     const activeBuffHealing = Math.floor(
       effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
     );
+    const natureHealing = natureHealTriggered
+      ? Math.max(
+          1,
+          Math.floor(
+            effectiveAbilities.intelligence *
+              ((weaponAbility?.effects.natureStaffHealPercentIntelligence ?? 30) / 100)
+          )
+        )
+      : 0;
     const specialAbilityActionLogs = [
       activeHelmetEffects.attackDamageBonusPercent > 0
         ? `【${helmetAbility?.name}】傷害 +${activeHelmetEffects.attackDamageBonusPercent}%`
@@ -4402,13 +4909,51 @@ export default function Home() {
         (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
         ? `【${helmetAbility?.name}】技能冷卻額外減少 ${helmetAbility?.effects.cooldownReductionOnSkill} 回合`
         : "",
+      dawnProcTriggered
+        ? `【${weaponAbility?.name}】額外造成 ${dawnBonusDamage} 點曙光傷害`
+        : "",
+      firmamentBonusDamage > 0
+        ? `【${weaponAbility?.name}】天穹之箭額外造成 ${firmamentBonusDamage} 點傷害`
+        : "",
+      moonshadowTriggered
+        ? `【${weaponAbility?.name}】月影隱匿：閃避 +${weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10}%，下次攻擊傷害 +${weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20}%`
+        : "",
+      swiftfangTriggered
+        ? `【${weaponAbility?.name}】攻擊 +${weaponAbility?.effects.swiftfangAttackBonusPercent ?? 20}%、閃避 +${weaponAbility?.effects.swiftfangDodgeRateBonusPercent ?? 5}%`
+        : "",
+      hunterCriticalTriggered
+        ? `【${weaponAbility?.name}】暴擊率與暴擊傷害永久各提高 ${weaponAbility?.effects.hunterCritRateBonusPerCriticalPercent ?? 15}%（本場戰鬥）`
+        : "",
+      starrealmBurstTriggered
+        ? `【${weaponAbility?.name}】星界能量滿層，範圍造成 ${weaponAreaDamageApplied} 點傷害`
+        : "",
+      fireVeinBurstTriggered
+        ? `【${weaponAbility?.name}】五層灼燒印記爆發，造成 ${weaponAreaDamageApplied} 點範圍傷害`
+        : weaponAbility?.id === "fire-vein-staff" && weaponHitLanded && selectedSkill?.effectType === "damage"
+          ? `【${weaponAbility.name}】灼燒印記 ${fireVeinMarkCount}/${weaponAbility.effects.fireVeinMarksToBurst ?? 5}`
+          : "",
+      genesisChainTriggered
+        ? `【${weaponAbility?.name}】彈跳雷擊造成 ${weaponAreaDamageApplied} 點傷害`
+        : "",
+      arcaneEchoTriggered
+        ? `【${weaponAbility?.name}】星語共鳴：本次技能傷害 +${weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30}%，不進入冷卻`
+        : "",
+      moonstringArrowShot
+        ? `【${weaponAbility?.name}】月華穿透：無視防禦 ${weaponAbility?.effects.moonstringDefensePiercePercent ?? 25}%，敵人下次攻擊命中率降低`
+        : "",
+      natureHealing > 0
+        ? `【${weaponAbility?.name}】自然復甦恢復 ${natureHealing} 生命`
+        : "",
     ].filter(Boolean);
     const specialAbilityActionLog = specialAbilityActionLogs.length > 0
       ? `；${specialAbilityActionLogs.join("；")}`
       : "";
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
-      healthAfterPlayerStatus + lifestealHealing + activeBuffHealing
+      healthAfterPlayerStatus +
+        lifestealHealing +
+        activeBuffHealing +
+        natureHealing
     );
     const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
@@ -4439,6 +4984,23 @@ export default function Home() {
         playerHealth: Math.max(0, healedPlayerHealth - reactiveDamageOnDeath),
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
+        nextAttackGuaranteedCrit:
+          actualDamageDealt > 0 ? false : Boolean(battle.nextAttackGuaranteedCrit),
+        nextAttackDamageBonusPercent:
+          (actualDamageDealt > 0 ? 0 : battle.nextAttackDamageBonusPercent ?? 0) +
+          (moonshadowTriggered
+            ? weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20
+            : 0),
+        nextAttackCritRateBonusPercent:
+          actualDamageDealt > 0
+            ? 0
+            : battle.nextAttackCritRateBonusPercent ?? 0,
+        nextAttackDefensePiercePercent:
+          actualDamageDealt > 0
+            ? 0
+            : battle.nextAttackDefensePiercePercent ?? 0,
+        weaponPassiveState: weaponPassiveStateAfterPlayerAction,
+        weaponTimedBuffs: weaponTimedBuffsAfterPlayerAction,
         divineShield: statusShieldResolution.state,
         monsterStatuses: statusTick.statuses,
         playerStatuses: playerStatusTick.statuses,
@@ -4449,8 +5011,9 @@ export default function Home() {
         logs: [
           ...logs,
           `${monster.name}倒下了！獲得 ${xpReward} XP。`,
-          lifestealHealing ? `怪物吸血回復 ${lifestealHealing} 生命。` : "",
+          lifestealHealing ? `吸血回復 ${lifestealHealing} 生命。` : "",
           activeBuffHealing ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。` : "",
+          natureHealing ? `【${weaponAbility?.name}】恢復 ${natureHealing} 生命。` : "",
           monster.explosionDamage ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！` : "",
           reflectedDamage ? `受到 ${reflectedDamage} 點反傷。` : "",
           lootDrop
@@ -4469,7 +5032,7 @@ export default function Home() {
         action: selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
         playerDamage: reactiveDamageOnDeath,
-        healing: lifestealHealing + activeBuffHealing,
+        healing: lifestealHealing + activeBuffHealing + natureHealing,
         critical: criticalHit,
         monsterDodged: false,
         playerDodged: false,
@@ -4545,9 +5108,36 @@ export default function Home() {
       );
       return;
     }
-    const effectivePlayerDodgeRate = (effectiveCombatStats.dodgeRate +
-      (activeBuff?.dodgeRateBonusPercent ?? 0) +
-      activeChestEffects.dodgeRateBonusPercent) *
+    const targetAccuracyReductionPercent = Math.min(
+      80,
+      statusesBeforeTick.reduce(
+        (total, status) => total + (status.accuracyReductionPercent ?? 0),
+        0
+      )
+    );
+    const currentEnemyAttackDodgeBonusPercent =
+      weaponPassiveState.nextEnemyAttackDodgeBonusPercent +
+      (moonshadowTriggered
+        ? weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10
+        : 0) +
+      (swiftfangTriggered
+        ? weaponAbility?.effects.swiftfangDodgeRateBonusPercent ?? 5
+        : 0);
+    const currentEnemyAccuracyReductionPercent =
+      weaponPassiveState.enemyAccuracyReductionNextPercent +
+      (moonstringArrowShot
+        ? weaponAbility?.effects.moonstringNextEnemyAccuracyReductionPercent ?? 15
+        : 0);
+    const effectivePlayerDodgeRate = Math.min(
+      100,
+      effectiveCombatStats.dodgeRate +
+        (activeBuff?.dodgeRateBonusPercent ?? 0) +
+        activeChestEffects.dodgeRateBonusPercent +
+        activeWeaponBuffBonuses.dodgeRateBonusPercent +
+        targetAccuracyReductionPercent +
+        currentEnemyAccuracyReductionPercent +
+        currentEnemyAttackDodgeBonusPercent
+    ) *
       (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
     const playerDodges = statusTick.frozen
       ? false
@@ -4594,6 +5184,18 @@ export default function Home() {
         activeChestEffects.magicResistancePercent
       : activeHelmetEffects.physicalResistancePercent +
         activeChestEffects.physicalResistancePercent;
+    const targetOutgoingDamageReductionPercent = Math.min(
+      80,
+      statusesBeforeTick.reduce(
+        (total, status) =>
+          total + (status.outgoingDamageReductionPercent ?? 0),
+        0
+      )
+    );
+    const ironGuardDamageReductionPercent = !monsterUsesSkill
+      ? weaponPassiveState.ironGuardStacks *
+        (weaponAbility?.effects.ironGuardDamageReductionPercentPerStack ?? 10)
+      : 0;
     const buffReducedDamage = Math.max(
       1,
       Math.ceil(
@@ -4605,7 +5207,9 @@ export default function Home() {
                 (activeBuff?.damageReductionPercent ?? 0) +
                 equipmentResistancePercent +
                 activeHelmetEffects.enemyDamageReductionPercent +
-                activeChestEffects.enemyDamageReductionPercent
+                activeChestEffects.enemyDamageReductionPercent +
+                targetOutgoingDamageReductionPercent +
+                ironGuardDamageReductionPercent
             ) /
               100)
       )
@@ -4619,6 +5223,41 @@ export default function Home() {
             (buffReducedDamage * (targetGroupMember?.critDamage ?? monster.critDamage)) / 100
           )
         : buffReducedDamage;
+    const targetHealingReceivedReductionPercent = Math.min(
+      100,
+      statusesBeforeTick.reduce(
+        (total, status) =>
+          total + (status.healingReceivedReductionPercent ?? 0),
+        0
+      )
+    );
+    const lifestealMonster = nextGroupMembers?.find(member => member.health > 0);
+    const monsterLifestealPercent =
+      lifestealMonster?.lifestealPercent ??
+      targetGroupMember?.lifestealPercent ??
+      monster.lifestealPercent ??
+      0;
+    const monsterLifestealHealing = incomingDamageTaken > 0
+      ? Math.floor(
+          incomingDamageTaken *
+            (monsterLifestealPercent / 100) *
+            (1 - targetHealingReceivedReductionPercent / 100)
+        )
+      : 0;
+    const monsterGroupMemberToHealId = nextGroupMembers?.find(
+      member => member.id === targetGroupMember?.id && member.health > 0
+    )?.id ?? lifestealMonster?.id;
+    const groupMembersAfterLifesteal = nextGroupMembers?.map(member =>
+      member.id === monsterGroupMemberToHealId
+        ? {
+            ...member,
+            health: Math.min(member.maxHealth, member.health + monsterLifestealHealing),
+          }
+        : member
+    );
+    const monsterHealthAfterLifesteal = groupMembersAfterLifesteal
+      ? groupMembersAfterLifesteal.reduce((total, member) => total + member.health, 0)
+      : Math.min(monster.health, monsterHealth + monsterLifestealHealing);
     const nextPlayerStatuses = applyBattleStatusEffects(
       playerStatusTick.statuses,
       monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
@@ -4668,6 +5307,58 @@ export default function Home() {
           chestAbility.effects.galeMaxStacks
         )
       : battle.galeStacks ?? 0;
+    const phantomStepTriggered = Boolean(
+      weaponAbility?.id === "phantom-step-dagger" && playerDodges
+    );
+    const enemyAttackResolved = !statusTick.frozen;
+    const ironGuardActionUsed = Boolean(
+      weaponAbility?.id === "iron-guard-sword" &&
+        !actionLocked &&
+        (!selectedSkill ||
+          (selectedSkill.effectType === "damage" &&
+            selectedSkill.damageType === "物理"))
+    );
+    const ironGuardStacksAfterHit =
+      !monsterUsesSkill && incomingDamageTaken > 0
+        ? 0
+        : weaponPassiveState.ironGuardStacks;
+    const nextWeaponPassiveState: WeaponPassiveBattleState = {
+      ...weaponPassiveStateAfterPlayerAction,
+      ironGuardStacks: ironGuardActionUsed
+        ? Math.min(
+            weaponAbility?.effects.ironGuardMaxStacks ?? 2,
+            ironGuardStacksAfterHit + 1
+          )
+        : ironGuardStacksAfterHit,
+      enemyAccuracyReductionNextPercent: enemyAttackResolved
+        ? 0
+        : weaponPassiveState.enemyAccuracyReductionNextPercent +
+          (moonstringArrowShot
+            ? weaponAbility?.effects.moonstringNextEnemyAccuracyReductionPercent ?? 15
+            : 0),
+      nextEnemyAttackDodgeBonusPercent: enemyAttackResolved
+        ? 0
+        : weaponPassiveState.nextEnemyAttackDodgeBonusPercent +
+          (moonshadowTriggered
+            ? weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10
+            : 0),
+    };
+    const nextAttackCritRateBonusPercent =
+      (actualDamageDealt > 0 ? 0 : battle.nextAttackCritRateBonusPercent ?? 0) +
+      (phantomStepTriggered
+        ? weaponAbility?.effects.phantomStepNextAttackCritRateBonusPercent ?? 50
+        : 0);
+    const nextAttackDefensePiercePercent =
+      (actualDamageDealt > 0 ? 0 : battle.nextAttackDefensePiercePercent ?? 0) +
+      (phantomStepTriggered
+        ? weaponAbility?.effects.phantomStepDefensePiercePercent ?? 20
+        : 0);
+    const nextAttackDamageBonusPercent =
+      nextDodgeCounterState.damageBonusPercent +
+      (moonshadowTriggered
+        ? weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20
+        : 0);
+    const nextWeaponTimedBuffs = weaponTimedBuffsAfterPlayerAction;
     const oracleStunTriggered = Boolean(
       chestAbility?.effects.oracleStunEnemiesOnHitAtTurnEnd &&
         incomingDamageTaken > 0
@@ -4717,6 +5408,9 @@ export default function Home() {
       ...(oracleStunTriggered
         ? [`【${chestAbility?.name}】神諭庇佑於回合結束時使所有敵人暈眩 1 回合。`]
         : []),
+      ...(natureHealing > 0
+        ? [`【${weaponAbility?.name}】自然復甦，恢復 ${natureHealing} 生命。`]
+        : []),
       ...(activeHelmetEffects.defenseBonusPercent > 0
         ? [`【${helmetAbility?.name}】防禦 +${activeHelmetEffects.defenseBonusPercent}%`]
         : []),
@@ -4732,7 +5426,7 @@ export default function Home() {
         ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
         : playerDodges
         ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
-        : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${reflectedDamage ? `；反傷 ${reflectedDamage}` : ""}${lifestealHealing ? `；吸血回復 ${lifestealHealing}` : ""}${archerTalentLog}`,
+        : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${monsterLifestealHealing ? `；吸血回復 ${monsterLifestealHealing} 生命` : ""}${archerTalentLog}`,
     ];
     const nextDamageTaken = battle.damageTaken + totalDamageTaken;
     if (playerHealth <= 0) {
@@ -4740,7 +5434,7 @@ export default function Home() {
         action: selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
         playerDamage: totalDamageTaken,
-        healing: lifestealHealing + activeBuffHealing,
+        healing: lifestealHealing + activeBuffHealing + natureHealing,
         critical: criticalHit || monsterCritical,
         monsterDodged: monsterDodges,
         playerDodged: playerDodges,
@@ -4752,11 +5446,17 @@ export default function Home() {
         setBattle({
           ...battle,
           playerHealth: 0,
-          monsterHealth,
-          groupMembers: nextGroupMembers,
+          monsterHealth: monsterHealthAfterLifesteal,
+          groupMembers: groupMembersAfterLifesteal,
           targetMonsterMemberId: nextTargetMonsterMemberId,
           usedSkillIds,
           skillCooldowns: nextSkillCooldowns,
+          nextAttackGuaranteedCrit: nextDodgeCounterState.guaranteedCrit,
+          nextAttackDamageBonusPercent,
+          nextAttackCritRateBonusPercent,
+          nextAttackDefensePiercePercent,
+          weaponPassiveState: nextWeaponPassiveState,
+          weaponTimedBuffs: nextWeaponTimedBuffs,
           divineShield: divineShieldResolution.state,
           monsterStatuses: monsterStatusesAfterTurn,
           playerStatuses: nextPlayerStatuses,
@@ -4798,11 +5498,17 @@ export default function Home() {
       setBattle({
         ...battle,
         playerHealth: 0,
-        monsterHealth,
-        groupMembers: nextGroupMembers,
+        monsterHealth: monsterHealthAfterLifesteal,
+        groupMembers: groupMembersAfterLifesteal,
         targetMonsterMemberId: nextTargetMonsterMemberId,
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
+        nextAttackGuaranteedCrit: nextDodgeCounterState.guaranteedCrit,
+        nextAttackDamageBonusPercent,
+        nextAttackCritRateBonusPercent,
+        nextAttackDefensePiercePercent,
+        weaponPassiveState: nextWeaponPassiveState,
+        weaponTimedBuffs: nextWeaponTimedBuffs,
         divineShield: divineShieldResolution.state,
         monsterStatuses: monsterStatusesAfterTurn,
         playerStatuses: nextPlayerStatuses,
@@ -4839,7 +5545,7 @@ export default function Home() {
       action: selectedSkill ? "skill" : "attack",
       monsterDamage: appliedDamage,
       playerDamage: totalDamageTaken,
-      healing: lifestealHealing + activeBuffHealing,
+      healing: lifestealHealing + activeBuffHealing + natureHealing,
       critical: criticalHit || monsterCritical,
       monsterDodged: monsterDodges,
       playerDodged: playerDodges,
@@ -4849,8 +5555,8 @@ export default function Home() {
     setBattle({
       ...battle,
       playerHealth,
-      monsterHealth,
-      groupMembers: nextGroupMembers,
+      monsterHealth: monsterHealthAfterLifesteal,
+      groupMembers: groupMembersAfterLifesteal,
       targetMonsterMemberId: nextTargetMonsterMemberId,
       usedSkillIds,
       skillCooldowns: nextSkillCooldowns,
@@ -4859,7 +5565,11 @@ export default function Home() {
       ),
       nextAttackLifestealPercent,
       nextAttackGuaranteedCrit: nextDodgeCounterState.guaranteedCrit,
-      nextAttackDamageBonusPercent: nextDodgeCounterState.damageBonusPercent,
+      nextAttackDamageBonusPercent,
+      nextAttackCritRateBonusPercent,
+      nextAttackDefensePiercePercent,
+      weaponPassiveState: nextWeaponPassiveState,
+      weaponTimedBuffs: nextWeaponTimedBuffs,
       galeStacks: nextGaleStacks,
       divineShield: divineShieldResolution.state,
       monsterStatuses: monsterStatusesAfterTurn,
@@ -9196,9 +9906,33 @@ export default function Home() {
                       ? ` · 每回合 ${status.damagePerTurn} 傷害`
                       : status.kind === "冰凍" ||
                           status.kind === "石化" ||
-                          status.kind === "暈眩"
-                        ? " · 無法反擊"
-                        : " · 持續中"}
+                          status.kind === "暈眩" ||
+                          status.kind === "麻痺"
+                        ? " · 無法行動"
+                        : ""}
+                    {status.armorReductionPercent
+                      ? ` · 護甲 -${status.armorReductionPercent}%`
+                      : ""}
+                    {status.outgoingDamageReductionPercent
+                      ? ` · 造成傷害 -${status.outgoingDamageReductionPercent}%`
+                      : ""}
+                    {status.healingReceivedReductionPercent
+                      ? ` · 受到治療 -${status.healingReceivedReductionPercent}%`
+                      : ""}
+                    {status.accuracyReductionPercent
+                      ? ` · 命中率 -${status.accuracyReductionPercent}%`
+                      : ""}
+                    {status.damagePerTurn <= 0 &&
+                    !status.armorReductionPercent &&
+                    !status.outgoingDamageReductionPercent &&
+                    !status.healingReceivedReductionPercent &&
+                    !status.accuracyReductionPercent &&
+                    status.kind !== "冰凍" &&
+                    status.kind !== "石化" &&
+                    status.kind !== "暈眩" &&
+                    status.kind !== "麻痺"
+                      ? " · 持續中"
+                      : ""}
                   </span>
                 ))}
               </div>
@@ -9237,6 +9971,93 @@ export default function Home() {
                     )}
                   </span>
                 )}
+                {(battle.weaponTimedBuffs ?? []).map(buff => (
+                  <span className="battle-effect battle-effect-buff" key={buff.id}>
+                    <strong>
+                      {buff.id === "swiftfang-dagger" ? "迅捷牙襲" : "日輪灼燒"}
+                    </strong>
+                    <small>{buff.turnsRemaining} 回合</small>
+                    {buff.attackDamageBonusPercent ? (
+                      <small>攻擊 +{buff.attackDamageBonusPercent}%</small>
+                    ) : null}
+                    {buff.critRateBonusPercent ? (
+                      <small>暴擊率 +{buff.critRateBonusPercent}%</small>
+                    ) : null}
+                    {buff.dodgeRateBonusPercent ? (
+                      <small>閃避 +{buff.dodgeRateBonusPercent}%</small>
+                    ) : null}
+                  </span>
+                ))}
+                {(battle.weaponPassiveState?.ironGuardStacks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>鐵壁防禦</strong>
+                    <small>{battle.weaponPassiveState?.ironGuardStacks} 層</small>
+                    <small>
+                      物理減傷 +
+                      {(battle.weaponPassiveState?.ironGuardStacks ?? 0) * 10}%
+                    </small>
+                  </span>
+                )}
+                {(battle.weaponPassiveState?.starrealmCritStacks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>星界能量</strong>
+                    <small>
+                      {battle.weaponPassiveState?.starrealmCritStacks}/3 層
+                    </small>
+                  </span>
+                )}
+                {(battle.weaponPassiveState?.fireVeinMarks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>炎脈印記</strong>
+                    <small>{battle.weaponPassiveState?.fireVeinMarks}/5 層</small>
+                  </span>
+                )}
+                {(battle.weaponPassiveState?.hunterCritStacks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>獵影本能</strong>
+                    <small>
+                      暴擊率、暴擊傷害各 +
+                      {(battle.weaponPassiveState?.hunterCritStacks ?? 0) * 15}%
+                    </small>
+                  </span>
+                )}
+                {battle.weaponPassiveState?.moonstringArrowReady && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>月華穿透已充能</strong>
+                    <small>等待下一次弓類攻擊</small>
+                  </span>
+                )}
+                {battle.weaponPassiveState?.arcaneEchoReady && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>星語共鳴已準備</strong>
+                    <small>下一次技能傷害 +30%，不進入冷卻</small>
+                  </span>
+                )}
+                {(battle.weaponPassiveState?.enemyAccuracyReductionNextPercent ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>月華迷矢</strong>
+                    <small>
+                      敵人下次攻擊命中率 -
+                      {battle.weaponPassiveState?.enemyAccuracyReductionNextPercent}%
+                    </small>
+                  </span>
+                )}
+                {(battle.nextAttackDamageBonusPercent ?? 0) > 0 ||
+                (battle.nextAttackCritRateBonusPercent ?? 0) > 0 ||
+                (battle.nextAttackDefensePiercePercent ?? 0) > 0 ? (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>下一擊強化</strong>
+                    {(battle.nextAttackDamageBonusPercent ?? 0) > 0 && (
+                      <small>傷害 +{battle.nextAttackDamageBonusPercent}%</small>
+                    )}
+                    {(battle.nextAttackCritRateBonusPercent ?? 0) > 0 && (
+                      <small>暴擊率 +{battle.nextAttackCritRateBonusPercent}%</small>
+                    )}
+                    {(battle.nextAttackDefensePiercePercent ?? 0) > 0 && (
+                      <small>防禦穿透 +{battle.nextAttackDefensePiercePercent}%</small>
+                    )}
+                  </span>
+                ) : null}
                 {(battle.actionLockTurns ?? 0) > 0 && (
                   <span className="battle-effect battle-effect-debuff">
                     <strong>終焉狙殺反噬</strong>
@@ -9253,6 +10074,17 @@ export default function Home() {
                   </span>
                 )}
                 {!temporaryBattleBuff &&
+                  !(battle.weaponTimedBuffs ?? []).length &&
+                  !(battle.weaponPassiveState?.ironGuardStacks ?? 0) &&
+                  !(battle.weaponPassiveState?.starrealmCritStacks ?? 0) &&
+                  !(battle.weaponPassiveState?.fireVeinMarks ?? 0) &&
+                  !(battle.weaponPassiveState?.hunterCritStacks ?? 0) &&
+                  !battle.weaponPassiveState?.moonstringArrowReady &&
+                  !battle.weaponPassiveState?.arcaneEchoReady &&
+                  !(battle.weaponPassiveState?.enemyAccuracyReductionNextPercent ?? 0) &&
+                  !(battle.nextAttackDamageBonusPercent ?? 0) &&
+                  !(battle.nextAttackCritRateBonusPercent ?? 0) &&
+                  !(battle.nextAttackDefensePiercePercent ?? 0) &&
                   (battle.actionLockTurns ?? 0) === 0 &&
                   (!isArcher || state.archerDodgeFailStacks === 0) && (
                     <span className="battle-effects-empty">目前沒有增益或負面效果</span>

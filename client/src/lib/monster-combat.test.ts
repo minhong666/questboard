@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyMonsterGroupAreaDamage,
   applyMonsterGroupDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
@@ -9,8 +10,12 @@ describe("monster group combat", () => {
   it("creates three living members with the full shared health pool", () => {
     const members = createMonsterGroupMembers("swarm", 100);
     expect(members).toHaveLength(3);
-    expect(members.every(member => member.health === member.maxHealth)).toBe(true);
-    expect(members.reduce((total, member) => total + member.health, 0)).toBe(100);
+    expect(members.every(member => member.health === member.maxHealth)).toBe(
+      true
+    );
+    expect(members.reduce((total, member) => total + member.health, 0)).toBe(
+      100
+    );
   });
 
   it("sets each swarm member to half of the monster card values", () => {
@@ -72,5 +77,34 @@ describe("monster group combat", () => {
     expect(afterDeath.members.map(member => member.health)).toEqual([0, 0, 20]);
     expect(afterDeath.targetMemberId).toBe("swarm-member-2");
     expect(afterDeath.totalDamageApplied).toBe(20);
+  });
+
+  it("applies area damage to each living member, respecting a target limit and HP caps", () => {
+    const members = [
+      { id: "a", health: 0, maxHealth: 10 },
+      { id: "b", health: 12, maxHealth: 12 },
+      { id: "c", health: 30, maxHealth: 30 },
+      { id: "d", health: 25, maxHealth: 25 },
+    ];
+    const result = applyMonsterGroupAreaDamage(members, 20, 2);
+
+    expect(result.members.map(member => member.health)).toEqual([0, 0, 10, 25]);
+    expect(result.damageByMember).toEqual({ b: 12, c: 20 });
+    expect(result.totalDamageApplied).toBe(32);
+    expect(result.targetMemberId).toBe("b");
+    expect(members.map(member => member.health)).toEqual([0, 12, 30, 25]);
+  });
+
+  it("does not damage defeated members or accept negative area damage", () => {
+    const members = [
+      { id: "a", health: 0, maxHealth: 10 },
+      { id: "b", health: 20, maxHealth: 20 },
+    ];
+    expect(applyMonsterGroupAreaDamage(members, -5).totalDamageApplied).toBe(0);
+    expect(
+      applyMonsterGroupAreaDamage(members, 10).members.map(
+        member => member.health
+      )
+    ).toEqual([0, 10]);
   });
 });

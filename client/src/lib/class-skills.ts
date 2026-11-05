@@ -2,7 +2,7 @@ export type SkillJobClass = "warrior" | "archer" | "mage" | "rogue";
 export type SpecialSkillDamageType = "物理" | "魔法";
 export type SpecialSkillEffectType = "damage" | "buff" | "passive";
 export type SkillTargetMode = "single" | "two" | "all";
-export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "石化" | "災厄" | "暈眩";
+export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "石化" | "災厄" | "暈眩" | "麻痺" | "致盲" | "虛弱";
 export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
 export type SkillStatusEffect = {
   kind: SkillStatusKind;
@@ -14,6 +14,10 @@ export type SkillStatusEffect = {
   damageReductionPercent?: number;
   breakDamageThreshold?: number;
   breakDamage?: number;
+  armorReductionPercent?: number;
+  outgoingDamageReductionPercent?: number;
+  healingReceivedReductionPercent?: number;
+  accuracyReductionPercent?: number;
 };
 
 export type SpecialCombatSkill = {

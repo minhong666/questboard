@@ -13,7 +13,10 @@ export type MonsterGroupMember = {
   reflectDamage?: number;
   explosionDamage?: number;
 };
-export type MonsterGroupMemberStats = Omit<MonsterGroupMember, "id" | "health" | "maxHealth">;
+export type MonsterGroupMemberStats = Omit<
+  MonsterGroupMember,
+  "id" | "health" | "maxHealth"
+>;
 
 export type MonsterGroupDamageResult = {
   members: MonsterGroupMember[];
@@ -66,9 +69,10 @@ export function applyMonsterGroupDamage(
 ): MonsterGroupDamageResult {
   const nextMembers = members.map(member => ({ ...member }));
   const damageByMember: Record<string, number> = {};
-  const target = nextMembers.find(
-    member => member.health > 0 && member.id === targetMemberId
-  ) ?? nextMembers.find(member => member.health > 0);
+  const target =
+    nextMembers.find(
+      member => member.health > 0 && member.id === targetMemberId
+    ) ?? nextMembers.find(member => member.health > 0);
   const applied = target
     ? Math.min(target.health, Math.max(0, Math.floor(damage)))
     : 0;
@@ -85,6 +89,38 @@ export function applyMonsterGroupDamage(
   };
 }
 
-export function getLivingMonsterGroupMembers(members: MonsterGroupMember[]): MonsterGroupMember[] {
+export function applyMonsterGroupAreaDamage(
+  members: MonsterGroupMember[],
+  damagePerTarget: number,
+  maxTargets = Number.POSITIVE_INFINITY
+): MonsterGroupDamageResult {
+  const nextMembers = members.map(member => ({ ...member }));
+  const damageByMember: Record<string, number> = {};
+  const targetLimit = Math.max(0, Math.floor(maxTargets));
+  let targetsHit = 0;
+  let totalDamageApplied = 0;
+  const safeDamage = Math.max(0, Math.floor(damagePerTarget));
+
+  for (const member of nextMembers) {
+    if (member.health <= 0 || targetsHit >= targetLimit) continue;
+    const applied = Math.min(member.health, safeDamage);
+    if (applied <= 0) continue;
+    member.health -= applied;
+    damageByMember[member.id] = applied;
+    totalDamageApplied += applied;
+    targetsHit += 1;
+  }
+
+  return {
+    members: nextMembers,
+    damageByMember,
+    targetMemberId: Object.keys(damageByMember)[0],
+    totalDamageApplied,
+  };
+}
+
+export function getLivingMonsterGroupMembers(
+  members: MonsterGroupMember[]
+): MonsterGroupMember[] {
   return members.filter(member => member.health > 0);
 }

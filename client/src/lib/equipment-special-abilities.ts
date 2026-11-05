@@ -1,3 +1,8 @@
+import {
+  getLegendaryWeaponAbility,
+  getLegendaryWeaponAbilityIdByName,
+} from "./equipment-weapon-abilities";
+
 export type EquipmentSpecialAbilityId =
   | "low-health-damage"
   | "low-health-lifesteal"
@@ -10,7 +15,28 @@ export type EquipmentSpecialAbilityId =
   | "truth-awakening"
   | "sacred-wall"
   | "gale-dancer"
-  | "oracle-blessing";
+  | "oracle-blessing"
+  | "starfire-bow"
+  | "dawn-sword"
+  | "iron-guard-sword"
+  | "moonshadow-sword"
+  | "kings-sword"
+  | "starrealm-sword"
+  | "hunter-dagger"
+  | "swiftfang-dagger"
+  | "poison-thorn-dagger"
+  | "phantom-step-dagger"
+  | "void-dagger"
+  | "forestwind-bow"
+  | "sandfeather-bow"
+  | "moonstring-bow"
+  | "firmament-bow"
+  | "sunwheel-bow"
+  | "nature-staff"
+  | "sapphire-staff"
+  | "starlight-staff"
+  | "fire-vein-staff"
+  | "genesis-staff";
 
 export type EquipmentSpecialAbilityEffects = {
   damageBonusBelowHalfHealthPercent?: number;
@@ -38,6 +64,62 @@ export type EquipmentSpecialAbilityEffects = {
   oracleFirstTurnsDamageReductionPercent?: number;
   oracleFirstTurnsDuration?: number;
   oracleStunEnemiesOnHitAtTurnEnd?: boolean;
+  starfireBurnPercentOfCriticalDamage?: number;
+  starfireDurationTurns?: number;
+  starfireArmorReductionPercent?: number;
+  dawnProcChancePercent?: number;
+  dawnBonusDamagePercentAttack?: number;
+  dawnHighHealthThresholdPercent?: number;
+  dawnHighHealthDamageMultiplier?: number;
+  ironGuardDamageReductionPercentPerStack?: number;
+  ironGuardMaxStacks?: number;
+  moonshadowProcChancePercent?: number;
+  moonshadowDodgeRateBonusPercent?: number;
+  moonshadowNextAttackDamageBonusPercent?: number;
+  kingsSwordTargetHealthBelowPercent?: number;
+  kingsSwordCritDamageBonusPercent?: number;
+  starrealmMaxStacks?: number;
+  starrealmAoeAttackPercent?: number;
+  hunterCritRateBonusPerCriticalPercent?: number;
+  hunterCritDamageBonusPerCriticalPercent?: number;
+  swiftfangAttackBonusPercent?: number;
+  swiftfangDodgeRateBonusPercent?: number;
+  swiftfangDurationTurns?: number;
+  poisonThornDamagePercentOfHit?: number;
+  poisonThornHealingReceivedReductionPercent?: number;
+  poisonThornDurationTurns?: number;
+  phantomStepNextAttackCritRateBonusPercent?: number;
+  phantomStepDefensePiercePercent?: number;
+  voidDaggerProcChancePercent?: number;
+  voidDaggerOutgoingDamageReductionPercent?: number;
+  voidDaggerDurationTurns?: number;
+  forestwindDamageBonusPerTurnPercent?: number;
+  forestwindMaxDamageBonusPercent?: number;
+  sandfeatherProcChancePercent?: number;
+  sandfeatherAccuracyReductionPercent?: number;
+  sandfeatherDurationTurns?: number;
+  moonstringChargeIntervalTurns?: number;
+  moonstringDefensePiercePercent?: number;
+  moonstringNextEnemyAccuracyReductionPercent?: number;
+  firmamentBonusDamagePercentStrength?: number;
+  sunwheelProcChancePercent?: number;
+  sunwheelBurnPercentAttack?: number;
+  sunwheelDurationTurns?: number;
+  sunwheelCritRateBonusPercent?: number;
+  natureStaffHealChancePercent?: number;
+  natureStaffHealPercentIntelligence?: number;
+  sapphireStaffFreezeChancePercent?: number;
+  sapphireStaffFreezeDurationTurns?: number;
+  sapphireStaffDamageBonusVsFrozenPercent?: number;
+  starlightStaffCastsPerEcho?: number;
+  starlightStaffEchoDamageBonusPercent?: number;
+  fireVeinMarksToBurst?: number;
+  fireVeinAoeMagicAttackPercent?: number;
+  genesisStaffProcChancePercent?: number;
+  genesisStaffBonusMagicDamage?: number;
+  genesisStaffMaxAdditionalTargets?: number;
+  genesisStaffParalysisChancePercent?: number;
+  genesisStaffParalysisDurationTurns?: number;
 };
 
 export type EquipmentSpecialAbility = {
@@ -84,9 +166,8 @@ export type DodgeCounterState = {
   damageBonusPercent: number;
 };
 
-const legendaryAbilities: Record<
-  EquipmentSpecialAbilityId,
-  EquipmentSpecialAbility
+const legendaryAbilities: Partial<
+  Record<EquipmentSpecialAbilityId, EquipmentSpecialAbility>
 > = {
   "low-health-damage": {
     id: "low-health-damage",
@@ -226,7 +307,10 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
 export function getEquipmentSpecialAbilityIdByName(
   equipmentName: string
 ): EquipmentSpecialAbilityId | undefined {
-  return abilityIdsByEquipmentName[equipmentName];
+  return (
+    abilityIdsByEquipmentName[equipmentName] ??
+    getLegendaryWeaponAbilityIdByName(equipmentName)
+  );
 }
 
 export function getEquipmentSpecialAbility(
@@ -236,7 +320,7 @@ export function getEquipmentSpecialAbility(
 ): EquipmentSpecialAbility | undefined {
   const id = abilityId ?? getEquipmentSpecialAbilityIdByName(equipmentName);
   if (!id || rarity !== "傳說") return undefined;
-  return legendaryAbilities[id];
+  return legendaryAbilities[id] ?? getLegendaryWeaponAbility(id);
 }
 
 export function getActiveEquipmentSpecialEffects(
