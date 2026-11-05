@@ -8,6 +8,22 @@ export const weaponAbilityIdsByEquipmentName: Record<
   EquipmentSpecialAbilityId
 > = {
   焚星神弓: "starfire-bow",
+  "曙光聖衛·傳說劍": "dawn-warden-sword",
+  "曙光聖衛·傳說短刀": "dawn-warden-dagger",
+  "曙光聖衛·傳說弓": "dawn-warden-bow",
+  "曙光聖衛·傳說法杖": "dawn-warden-staff",
+  "影月獵行·傳說劍": "moon-stalker-sword",
+  "影月獵行·傳說短刀": "moon-stalker-dagger",
+  "影月獵行·傳說弓": "moon-stalker-bow",
+  "影月獵行·傳說法杖": "moon-stalker-staff",
+  "曙光聖衛·傳說劍武器": "dawn-warden-sword",
+  "曙光聖衛·傳說短刀武器": "dawn-warden-dagger",
+  "曙光聖衛·傳說弓武器": "dawn-warden-bow",
+  "曙光聖衛·傳說法杖武器": "dawn-warden-staff",
+  "影月獵行·傳說劍武器": "moon-stalker-sword",
+  "影月獵行·傳說短刀武器": "moon-stalker-dagger",
+  "影月獵行·傳說弓武器": "moon-stalker-bow",
+  "影月獵行·傳說法杖武器": "moon-stalker-staff",
   "傳說·曙光劍": "dawn-sword",
   "傳說·鐵衛劍": "iron-guard-sword",
   "傳說·月影劍": "moonshadow-sword",
@@ -42,6 +58,96 @@ export const legendaryWeaponAbilities: Partial<
       starfireBurnPercentOfCriticalDamage: 15,
       starfireDurationTurns: 3,
       starfireArmorReductionPercent: 10,
+    },
+  },
+  "dawn-warden-sword": {
+    id: "dawn-warden-sword",
+    name: "裁決重擊",
+    description:
+      "普通攻擊有 20% 機率召喚巨型光劍，對所有敵人造成相當於攻擊力 150% 的範圍傷害並暈眩 1 回合。",
+    effects: {
+      dawnWardenSwordProcChancePercent: 20,
+      dawnWardenSwordAoeDamagePercentAttack: 150,
+      dawnWardenSwordStunDurationTurns: 1,
+    },
+  },
+  "dawn-warden-dagger": {
+    id: "dawn-warden-dagger",
+    name: "光束殘影",
+    description:
+      "攻擊時有 25% 機率留下光束殘影；殘影於 1 回合後爆炸，造成相當於攻擊力 50% 的真實傷害。",
+    effects: {
+      dawnWardenDaggerProcChancePercent: 25,
+      dawnWardenDaggerEchoDamagePercentAttack: 50,
+    },
+  },
+  "dawn-warden-bow": {
+    id: "dawn-warden-bow",
+    name: "追光箭矢",
+    description:
+      "攻擊必定命中所有敵人；攻擊力按敵人數量分攤，每命中一名敵人後後續傷害提高 10%，最多提高 30%。",
+    effects: {
+      dawnWardenBowDamageBonusPerTargetPercent: 10,
+      dawnWardenBowMaxDamageBonusPercent: 30,
+    },
+  },
+  "dawn-warden-staff": {
+    id: "dawn-warden-staff",
+    name: "聖光陣界",
+    description:
+      "施放技能時使敵人每回合受到最大生命值 5% 的光系傷害，並使其造成的傷害降低 20%，持續 3 回合。",
+    effects: {
+      dawnWardenStaffDotMaxHealthPercent: 5,
+      dawnWardenStaffDotDurationTurns: 3,
+      dawnWardenStaffDamageReductionPercent: 20,
+    },
+  },
+  "moon-stalker-sword": {
+    id: "moon-stalker-sword",
+    name: "月刃突襲",
+    description:
+      "成功閃避後以 120% 力量反擊，並使目標流血 3 回合（每回合反擊傷害 10%），受到治療降低 50%。",
+    effects: {
+      moonStalkerSwordCounterDamagePercentStrength: 120,
+      moonStalkerSwordBleedPercentCounterDamage: 10,
+      moonStalkerSwordHealingReductionPercent: 50,
+      moonStalkerEffectDurationTurns: 3,
+    },
+  },
+  "moon-stalker-dagger": {
+    id: "moon-stalker-dagger",
+    name: "迅牙撕裂",
+    description:
+      "暴擊時有 35% 機率追加一次相當於原傷害 50% 的物理傷害，並無視目標 15% 防禦。",
+    effects: {
+      moonStalkerDaggerDoubleStrikeChancePercent: 35,
+      moonStalkerDaggerBonusDamagePercent: 50,
+      moonStalkerDaggerDefensePiercePercent: 15,
+    },
+  },
+  "moon-stalker-bow": {
+    id: "moon-stalker-bow",
+    name: "沙風獵殺",
+    description:
+      "遠程暴擊時使所有敵人命中率降低 20%，並使自身接下來 3 次攻擊必定命中、暴擊率提高 10%。",
+    effects: {
+      moonStalkerBowBlindAccuracyReductionPercent: 20,
+      moonStalkerBowGuaranteedHits: 3,
+      moonStalkerBowCritRateBonusPercent: 10,
+    },
+  },
+  "moon-stalker-staff": {
+    id: "moon-stalker-staff",
+    name: "霜月凍結",
+    description:
+      "技能命中時有 50% 機率凍結目標 2 回合，使其攻擊降低 20%、防禦提高 20%；自身後續傷害提高 30%，持續 2 回合。",
+    effects: {
+      moonStalkerStaffFreezeChancePercent: 50,
+      moonStalkerStaffFreezeDurationTurns: 2,
+      moonStalkerStaffEnemyDamageReductionPercent: 20,
+      moonStalkerStaffEnemyDefenseBonusPercent: 20,
+      moonStalkerStaffBonusDamagePercent: 30,
+      moonStalkerEffectDurationTurns: 2,
     },
   },
   "dawn-sword": {

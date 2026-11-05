@@ -374,6 +374,10 @@ const sixSetEquipmentTemplates: EquipmentDatabaseTemplate[] =
       ...template,
       setId: `${theme.id}-${template.rarity}`,
       name: `${theme.name}·${template.rarity}${pieceName}`,
+      specialAbilityId:
+        getEquipmentSpecialAbilityIdByName(
+          `${theme.name}·${template.rarity}${pieceName}`
+        ) ?? template.specialAbilityId,
       description: `「${theme.name}·${template.rarity}${pieceName}」承載${theme.story}的傳承；${setSlotStories[template.slot]}。`,
     };
   });

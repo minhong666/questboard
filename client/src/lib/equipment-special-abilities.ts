@@ -36,7 +36,35 @@ export type EquipmentSpecialAbilityId =
   | "sapphire-staff"
   | "starlight-staff"
   | "fire-vein-staff"
-  | "genesis-staff";
+  | "genesis-staff"
+  | "asura-leggings"
+  | "night-leggings"
+  | "astral-leggings"
+  | "mountain-leggings"
+  | "gale-leggings"
+  | "shadowmoon-leggings"
+  | "solar-eye"
+  | "medusa-eye"
+  | "leviathan-heart"
+  | "hunter-king-fang"
+  | "spacetime-crystal"
+  | "eternal-star-core"
+  | "dawn-guardian-vision"
+  | "dawn-guardian-armor"
+  | "dawn-guardian-step"
+  | "dawn-guardian-sunmark"
+  | "dawn-warden-sword"
+  | "dawn-warden-dagger"
+  | "dawn-warden-bow"
+  | "dawn-warden-staff"
+  | "moon-stalker-vision"
+  | "moon-stalker-chest"
+  | "moon-stalker-leggings"
+  | "moon-stalker-amulet"
+  | "moon-stalker-sword"
+  | "moon-stalker-dagger"
+  | "moon-stalker-bow"
+  | "moon-stalker-staff";
 
 export type EquipmentSpecialAbilityEffects = {
   damageBonusBelowHalfHealthPercent?: number;
@@ -120,6 +148,85 @@ export type EquipmentSpecialAbilityEffects = {
   genesisStaffMaxAdditionalTargets?: number;
   genesisStaffParalysisChancePercent?: number;
   genesisStaffParalysisDurationTurns?: number;
+  asuraPhysicalDamageBonusPerCritPercent?: number;
+  asuraMaxCritStacks?: number;
+  asuraCritStackDurationTurns?: number;
+  nightDodgeBelowHalfHealthPercent?: number;
+  nightDefenseBelowHalfHealthPercent?: number;
+  astralSkillHealChancePercent?: number;
+  astralSkillHealMaxHealthPercent?: number;
+  astralNextSkillCritRateBonusPercent?: number;
+  mountainDefenseBelowHalfHealthPercent?: number;
+  mountainPhysicalResistanceBelowHalfHealthPercent?: number;
+  mountainMagicResistanceBelowHalfHealthPercent?: number;
+  galeNextAttackBonusPercentStrength?: number;
+  shadowmoonDodgeRateBonusAtBattleStartPercent?: number;
+  shadowmoonLethalEvasionChancePercent?: number;
+  solarEyeProcChancePercent?: number;
+  solarEyeHybridDamagePercent?: number;
+  solarEyeAccuracyReductionPercent?: number;
+  solarEyeAccuracyReductionDurationTurns?: number;
+  medusaEyeProcChancePercent?: number;
+  medusaEyeDamageBonusVsPetrifiedPercent?: number;
+  leviathanHealIntervalTurns?: number;
+  leviathanHealMaxHealthPercent?: number;
+  leviathanLowHealthThresholdPercent?: number;
+  leviathanLowHealthHealMultiplier?: number;
+  leviathanLowHealthResistancePercent?: number;
+  hunterFangHighHealthThresholdPercent?: number;
+  hunterFangCritRateBonusPercent?: number;
+  hunterFangDefensePiercePercent?: number;
+  hunterFangCooldownReductionOnKill?: number;
+  spacetimeReversalChancePercent?: number;
+  starCoreShieldPercentIntelligence?: number;
+  starCoreMagicDamageBonusPercent?: number;
+  dawnGuardianDefensePiercePercent?: number;
+  dawnGuardianResistancePiercePercent?: number;
+  dawnArmorDamageReductionPercentPerStack?: number;
+  dawnArmorMaxStacks?: number;
+  dawnArmorHealingReceivedPercentPerStack?: number;
+  dawnArmorFullStackHealMaxHealthPercent?: number;
+  dawnStepDodgeRateBonusPercent?: number;
+  dawnStepDisarmChancePercent?: number;
+  dawnMarkDamageBonusPercent?: number;
+  dawnMarkLifestealPercent?: number;
+  dawnWardenSwordProcChancePercent?: number;
+  dawnWardenSwordAoeDamagePercentAttack?: number;
+  dawnWardenSwordStunDurationTurns?: number;
+  dawnWardenDaggerProcChancePercent?: number;
+  dawnWardenDaggerEchoDamagePercentAttack?: number;
+  dawnWardenBowDamageBonusPerTargetPercent?: number;
+  dawnWardenBowMaxDamageBonusPercent?: number;
+  dawnWardenStaffDotMaxHealthPercent?: number;
+  dawnWardenStaffDotDurationTurns?: number;
+  dawnWardenStaffDamageReductionPercent?: number;
+  moonStalkerEnemyAttackStealPercent?: number;
+  moonStalkerAttackBonusPercent?: number;
+  moonStalkerCriticalDamageBonusPercent?: number;
+  moonStalkerEffectDurationTurns?: number;
+  moonStalkerDodgeHealMaxHealthPercent?: number;
+  moonStalkerAfterimageDamageReductionPercent?: number;
+  moonStalkerLeggingsHealthThresholdPercent?: number;
+  moonStalkerStealthDamageTakenBonusPercent?: number;
+  moonStalkerStealthDamageBonusPercent?: number;
+  moonStalkerStealthDodgeBonusPercent?: number;
+  moonStalkerMarkChancePercent?: number;
+  moonStalkerMarkDefensePiercePercent?: number;
+  moonStalkerMarkCritRateBonusPercent?: number;
+  moonStalkerSwordCounterDamagePercentStrength?: number;
+  moonStalkerSwordBleedPercentCounterDamage?: number;
+  moonStalkerSwordHealingReductionPercent?: number;
+  moonStalkerDaggerDoubleStrikeChancePercent?: number;
+  moonStalkerDaggerBonusDamagePercent?: number;
+  moonStalkerDaggerDefensePiercePercent?: number;
+  moonStalkerBowBlindAccuracyReductionPercent?: number;
+  moonStalkerBowGuaranteedHits?: number;
+  moonStalkerBowCritRateBonusPercent?: number;
+  moonStalkerStaffFreezeChancePercent?: number;
+  moonStalkerStaffFreezeDurationTurns?: number;
+  moonStalkerStaffEnemyDamageReductionPercent?: number;
+  moonStalkerStaffEnemyDefenseBonusPercent?: number;
+  moonStalkerStaffBonusDamagePercent?: number;
 };
 
 export type EquipmentSpecialAbility = {
@@ -128,6 +235,37 @@ export type EquipmentSpecialAbility = {
   description: string;
   effects: EquipmentSpecialAbilityEffects;
 };
+
+export type ActiveLegendaryEquipmentSetBonuses = {
+  asura: boolean;
+  night: boolean;
+  astral: boolean;
+  mountain: boolean;
+  gale: boolean;
+};
+
+export function getActiveLegendaryEquipmentSetBonuses(
+  helmetAbilityId?: EquipmentSpecialAbilityId,
+  chestAbilityId?: EquipmentSpecialAbilityId,
+  leggingsAbilityId?: EquipmentSpecialAbilityId
+): ActiveLegendaryEquipmentSetBonuses {
+  return {
+    asura:
+      helmetAbilityId === "low-health-damage" &&
+      leggingsAbilityId === "asura-leggings",
+    night:
+      helmetAbilityId === "low-health-lifesteal" &&
+      leggingsAbilityId === "night-leggings",
+    astral:
+      helmetAbilityId === "skill-cooldown" &&
+      leggingsAbilityId === "astral-leggings",
+    mountain:
+      helmetAbilityId === "low-health-resistance" &&
+      leggingsAbilityId === "mountain-leggings",
+    gale:
+      chestAbilityId === "gale-dancer" && leggingsAbilityId === "gale-leggings",
+  };
+}
 
 export type ActiveEquipmentSpecialEffects = {
   attackDamageBonusPercent: number;
@@ -169,6 +307,215 @@ export type DodgeCounterState = {
 const legendaryAbilities: Partial<
   Record<EquipmentSpecialAbilityId, EquipmentSpecialAbility>
 > = {
+  "asura-leggings": {
+    id: "asura-leggings",
+    name: "阿修羅戰意",
+    description:
+      "每次造成暴擊時，物理傷害提高 8%，最多 3 層；每層持續 3 回合。",
+    effects: {
+      asuraPhysicalDamageBonusPerCritPercent: 8,
+      asuraMaxCritStacks: 3,
+      asuraCritStackDurationTurns: 3,
+    },
+  },
+  "night-leggings": {
+    id: "night-leggings",
+    name: "夜魔幻步",
+    description: "生命值低於 50% 時，閃避率提高 12%，防禦提高 15%。",
+    effects: {
+      nightDodgeBelowHalfHealthPercent: 12,
+      nightDefenseBelowHalfHealthPercent: 15,
+    },
+  },
+  "astral-leggings": {
+    id: "astral-leggings",
+    name: "星辰啟示",
+    description:
+      "施放主動技能後有 30% 機率恢復最大生命值的 8%，並使下一次傷害技能暴擊率提高 10%。",
+    effects: {
+      astralSkillHealChancePercent: 30,
+      astralSkillHealMaxHealthPercent: 8,
+      astralNextSkillCritRateBonusPercent: 10,
+    },
+  },
+  "mountain-leggings": {
+    id: "mountain-leggings",
+    name: "山脈壁壘",
+    description:
+      "生命值低於 50% 時，防禦提高 20%，物理與魔法傷害抗性各提高 10%。",
+    effects: {
+      mountainDefenseBelowHalfHealthPercent: 20,
+      mountainPhysicalResistanceBelowHalfHealthPercent: 10,
+      mountainMagicResistanceBelowHalfHealthPercent: 10,
+    },
+  },
+  "gale-leggings": {
+    id: "gale-leggings",
+    name: "疾風追擊",
+    description: "成功閃避後，下一次物理攻擊附加相當於自身力量 120% 的傷害。",
+    effects: { galeNextAttackBonusPercentStrength: 120 },
+  },
+  "shadowmoon-leggings": {
+    id: "shadowmoon-leggings",
+    name: "影月庇佑",
+    description:
+      "進入戰鬥時閃避率提高 10%；受到致命傷害時有 20% 機率閃避該次攻擊。",
+    effects: {
+      shadowmoonDodgeRateBonusAtBattleStartPercent: 10,
+      shadowmoonLethalEvasionChancePercent: 20,
+    },
+  },
+  "solar-eye": {
+    id: "solar-eye",
+    name: "太陽神裁決",
+    description:
+      "造成傷害時有 25% 機率觸發雙修爆發，額外造成力量與智力總和 50% 的傷害，並使目標命中率降低 15%，持續 2 回合。",
+    effects: {
+      solarEyeProcChancePercent: 25,
+      solarEyeHybridDamagePercent: 50,
+      solarEyeAccuracyReductionPercent: 15,
+      solarEyeAccuracyReductionDurationTurns: 2,
+    },
+  },
+  "medusa-eye": {
+    id: "medusa-eye",
+    name: "美杜莎凝視",
+    description:
+      "攻擊命中或成功閃避時有 20% 機率使目標石化 1 回合；攻擊已石化目標時傷害提高 25%。",
+    effects: {
+      medusaEyeProcChancePercent: 20,
+      medusaEyeDamageBonusVsPetrifiedPercent: 25,
+    },
+  },
+  "leviathan-heart": {
+    id: "leviathan-heart",
+    name: "利維坦回生",
+    description:
+      "每 3 回合恢復最大生命值 4%；生命低於 30% 時恢復量翻倍，並獲得 20% 物理與魔法抗性。",
+    effects: {
+      leviathanHealIntervalTurns: 3,
+      leviathanHealMaxHealthPercent: 4,
+      leviathanLowHealthThresholdPercent: 30,
+      leviathanLowHealthHealMultiplier: 2,
+      leviathanLowHealthResistancePercent: 20,
+    },
+  },
+  "hunter-king-fang": {
+    id: "hunter-king-fang",
+    name: "獵王追擊",
+    description:
+      "攻擊生命高於 70% 的目標時，暴擊率提高 15%、護甲穿透提高 20%；擊殺目標後所有傷害技能冷卻減少 1 回合。",
+    effects: {
+      hunterFangHighHealthThresholdPercent: 70,
+      hunterFangCritRateBonusPercent: 15,
+      hunterFangDefensePiercePercent: 20,
+      hunterFangCooldownReductionOnKill: 1,
+    },
+  },
+  "spacetime-crystal": {
+    id: "spacetime-crystal",
+    name: "時空逆轉",
+    description:
+      "每場戰鬥首次受到致命傷害時有 30% 機率免疫該次傷害，並將戰鬥狀態回溯至本回合開始前。",
+    effects: { spacetimeReversalChancePercent: 30 },
+  },
+  "eternal-star-core": {
+    id: "eternal-star-core",
+    name: "星核共鳴",
+    description:
+      "施放技能時獲得相當於智力 50% 的護盾；護盾存在時魔法傷害提高 15%。",
+    effects: {
+      starCoreShieldPercentIntelligence: 50,
+      starCoreMagicDamageBonusPercent: 15,
+    },
+  },
+  "dawn-guardian-vision": {
+    id: "dawn-guardian-vision",
+    name: "神聖視界",
+    description: "攻擊時無視敵人 15% 防禦與物理／魔法抗性。",
+    effects: {
+      dawnGuardianDefensePiercePercent: 15,
+      dawnGuardianResistancePiercePercent: 15,
+    },
+  },
+  "dawn-guardian-armor": {
+    id: "dawn-guardian-armor",
+    name: "曙光鎧甲",
+    description:
+      "每次受到傷害累積 1 層聖光能量（最多 5 層），每層提供 3% 減傷與 2% 額外受療；滿層時每回合恢復最大生命值的 3%。",
+    effects: {
+      dawnArmorDamageReductionPercentPerStack: 3,
+      dawnArmorMaxStacks: 5,
+      dawnArmorHealingReceivedPercentPerStack: 2,
+      dawnArmorFullStackHealMaxHealthPercent: 3,
+    },
+  },
+  "dawn-guardian-step": {
+    id: "dawn-guardian-step",
+    name: "聖衛步伐",
+    description:
+      "閃避率提高 10%；受到近戰傷害時有 25% 機率使攻擊者繳械 1 回合。",
+    effects: {
+      dawnStepDodgeRateBonusPercent: 10,
+      dawnStepDisarmChancePercent: 25,
+    },
+  },
+  "dawn-guardian-sunmark": {
+    id: "dawn-guardian-sunmark",
+    name: "太陽印記",
+    description:
+      "命中時為目標施加太陽印記；攻擊帶有印記的目標時傷害提高 12%，並將造成傷害的 10% 轉化為生命。",
+    effects: {
+      dawnMarkDamageBonusPercent: 12,
+      dawnMarkLifestealPercent: 10,
+    },
+  },
+  "moon-stalker-vision": {
+    id: "moon-stalker-vision",
+    name: "夜魔視界",
+    description:
+      "命中時竊取目標 10% 攻擊力並轉為自身攻擊加成，持續 3 回合；暴擊傷害提高 20%。",
+    effects: {
+      moonStalkerEnemyAttackStealPercent: 10,
+      moonStalkerAttackBonusPercent: 10,
+      moonStalkerCriticalDamageBonusPercent: 20,
+      moonStalkerEffectDurationTurns: 3,
+    },
+  },
+  "moon-stalker-chest": {
+    id: "moon-stalker-chest",
+    name: "深淵護體",
+    description:
+      "成功閃避時恢復最大生命值的 3%，並獲得持續 1 回合、使下一次受傷降低 30% 的暗影殘像。",
+    effects: {
+      moonStalkerDodgeHealMaxHealthPercent: 3,
+      moonStalkerAfterimageDamageReductionPercent: 30,
+      moonStalkerEffectDurationTurns: 1,
+    },
+  },
+  "moon-stalker-leggings": {
+    id: "moon-stalker-leggings",
+    name: "夜魔遁術",
+    description:
+      "生命低於 40% 時每場戰鬥首次進入暗影潛行：閃避 +25%、傷害 +50%，但受到傷害 +30%。",
+    effects: {
+      moonStalkerLeggingsHealthThresholdPercent: 40,
+      moonStalkerStealthDamageTakenBonusPercent: 30,
+      moonStalkerStealthDamageBonusPercent: 50,
+      moonStalkerStealthDodgeBonusPercent: 25,
+    },
+  },
+  "moon-stalker-amulet": {
+    id: "moon-stalker-amulet",
+    name: "月蝕印記",
+    description:
+      "造成傷害時有 20% 機率標記目標；攻擊被標記目標時穿透 20% 防禦並提高暴擊率 15%。",
+    effects: {
+      moonStalkerMarkChancePercent: 20,
+      moonStalkerMarkDefensePiercePercent: 20,
+      moonStalkerMarkCritRateBonusPercent: 15,
+    },
+  },
   "low-health-damage": {
     id: "low-health-damage",
     name: "阿修羅戰意",
@@ -279,9 +626,9 @@ const legendaryAbilities: Partial<
 
 const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   阿修羅戰神兜盔: "low-health-damage",
-  "曙光聖衛·傳說盔": "low-health-damage",
+  "曙光聖衛·傳說盔": "dawn-guardian-vision",
   夜魔主宰面具: "low-health-lifesteal",
-  "影月獵行·傳說盔": "low-health-lifesteal",
+  "影月獵行·傳說盔": "moon-stalker-vision",
   星辰智者之冠: "skill-cooldown",
   "星界賢者·傳說盔": "skill-cooldown",
   永恆山脈巨盔: "low-health-resistance",
@@ -291,9 +638,9 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   天穹王盔: "high-health-dominance",
   "蒼龍天命·傳說盔": "high-health-dominance",
   帝王光輝聖甲: "imperial-pressure",
-  "曙光聖衛·傳說胸甲": "imperial-pressure",
+  "曙光聖衛·傳說胸甲": "dawn-guardian-armor",
   深淵獵手皮革: "abyssal-counter",
-  "影月獵行·傳說胸甲": "abyssal-counter",
+  "影月獵行·傳說胸甲": "moon-stalker-chest",
   真理之門法袍: "truth-awakening",
   "星界賢者·傳說胸甲": "truth-awakening",
   神聖守護者之壁: "sacred-wall",
@@ -302,6 +649,26 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   "風暴劍魂·傳說胸甲": "gale-dancer",
   神諭聖甲: "oracle-blessing",
   "蒼龍天命·傳說胸甲": "oracle-blessing",
+  阿修羅戰神護腿: "asura-leggings",
+  "曙光聖衛·傳說護腿": "dawn-guardian-step",
+  夜魔主宰護腿: "night-leggings",
+  "影月獵行·傳說護腿": "moon-stalker-leggings",
+  星辰智者長褲: "astral-leggings",
+  "星界賢者·傳說護腿": "astral-leggings",
+  永恆山脈護腿: "mountain-leggings",
+  "鐵壁巨神·傳說護腿": "mountain-leggings",
+  疾風劍聖護腿: "gale-leggings",
+  "風暴劍魂·傳說護腿": "gale-leggings",
+  影月護腿: "shadowmoon-leggings",
+  "蒼龍天命·傳說護腿": "shadowmoon-leggings",
+  太陽神之眼: "solar-eye",
+  美杜莎之瞳: "medusa-eye",
+  利維坦之心: "leviathan-heart",
+  獵王之牙: "hunter-king-fang",
+  時空交界水晶: "spacetime-crystal",
+  永恆星核: "eternal-star-core",
+  "曙光聖衛·傳說徽記": "dawn-guardian-sunmark",
+  "影月獵行·傳說徽記": "moon-stalker-amulet",
 };
 
 export function getEquipmentSpecialAbilityIdByName(
@@ -328,7 +695,8 @@ export function getActiveEquipmentSpecialEffects(
   health: number,
   maxHealth: number,
   turn = 1,
-  windStacks = 0
+  windStacks = 0,
+  asuraCritStacks = 0
 ): ActiveEquipmentSpecialEffects {
   const effects = ability?.effects;
   const belowHalfHealth = health < maxHealth * 0.5;
@@ -337,6 +705,10 @@ export function getActiveEquipmentSpecialEffects(
   const activeWindStacks = Math.min(
     effects?.galeMaxStacks ?? 0,
     Math.max(0, windStacks)
+  );
+  const activeAsuraCritStacks = Math.min(
+    effects?.asuraMaxCritStacks ?? 0,
+    Math.max(0, asuraCritStacks)
   );
   const oracleProtectionActive =
     turn >= 1 && turn <= (effects?.oracleFirstTurnsDuration ?? 0);
@@ -350,6 +722,10 @@ export function getActiveEquipmentSpecialEffects(
       (above70Health ? (effects?.attackBonusAbove70HealthPercent ?? 0) : 0) +
       activeWindStacks * (effects?.galeAttackPercentPerStack ?? 0),
     defenseBonusPercent:
+      (belowHalfHealth
+        ? (effects?.nightDefenseBelowHalfHealthPercent ?? 0) +
+          (effects?.mountainDefenseBelowHalfHealthPercent ?? 0)
+        : 0) +
       (aboveHalfHealth
         ? (effects?.defenseBonusAboveHalfHealthPercent ?? 0)
         : 0) +
@@ -359,14 +735,16 @@ export function getActiveEquipmentSpecialEffects(
       : 0,
     physicalResistancePercent:
       (belowHalfHealth
-        ? (effects?.physicalResistanceBelowHalfHealthPercent ?? 0)
+        ? (effects?.physicalResistanceBelowHalfHealthPercent ?? 0) +
+          (effects?.mountainPhysicalResistanceBelowHalfHealthPercent ?? 0)
         : 0) +
       (oracleProtectionActive
         ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
         : 0),
     magicResistancePercent:
       (belowHalfHealth
-        ? (effects?.magicResistanceBelowHalfHealthPercent ?? 0)
+        ? (effects?.magicResistanceBelowHalfHealthPercent ?? 0) +
+          (effects?.mountainMagicResistanceBelowHalfHealthPercent ?? 0)
         : 0) +
       (oracleProtectionActive
         ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
@@ -375,11 +753,206 @@ export function getActiveEquipmentSpecialEffects(
       ? (effects?.enemyDamageReductionAbove70HealthPercent ?? 0)
       : 0,
     dodgeRateBonusPercent:
+      (belowHalfHealth ? (effects?.nightDodgeBelowHalfHealthPercent ?? 0) : 0) +
+      (effects?.shadowmoonDodgeRateBonusAtBattleStartPercent ?? 0) +
+      (effects?.dawnStepDodgeRateBonusPercent ?? 0) +
       activeWindStacks * (effects?.galeDodgePercentPerStack ?? 0),
     physicalDamageBonusPercent:
-      activeWindStacks >= (effects?.galeMaxStacks ?? Number.POSITIVE_INFINITY)
+      (activeWindStacks >= (effects?.galeMaxStacks ?? Number.POSITIVE_INFINITY)
         ? (effects?.galePhysicalDamageBonusAtMaxStacks ?? 0)
-        : 0,
+        : 0) +
+      activeAsuraCritStacks *
+        (effects?.asuraPhysicalDamageBonusPerCritPercent ?? 0),
+  };
+}
+
+export function advanceAsuraCritStackTurns(
+  currentStackTurns: number[],
+  criticalHit: boolean,
+  maxStacks = 3,
+  durationTurns = 3
+): number[] {
+  const nextStacks = currentStackTurns
+    .map(turns => Math.max(0, Math.floor(turns) - 1))
+    .filter(turns => turns > 0)
+    .slice(0, Math.max(0, Math.floor(maxStacks)));
+  if (criticalHit && nextStacks.length < maxStacks && durationTurns > 0) {
+    nextStacks.push(Math.floor(durationTurns));
+  }
+  return nextStacks;
+}
+
+export type AstralLeggingsSkillResolution = {
+  triggered: boolean;
+  healing: number;
+  nextSkillCritRateBonusPercent: number;
+};
+
+export function resolveAstralLeggingsSkillEffect(
+  ability: EquipmentSpecialAbility | undefined,
+  maxHealth: number,
+  activeSkillCast: boolean,
+  randomValue = Math.random()
+): AstralLeggingsSkillResolution {
+  const chance = ability?.effects.astralSkillHealChancePercent ?? 0;
+  const triggered = Boolean(
+    ability?.id === "astral-leggings" &&
+      activeSkillCast &&
+      chance > 0 &&
+      randomValue < chance / 100
+  );
+  return {
+    triggered,
+    healing: triggered
+      ? Math.max(
+          1,
+          Math.floor(
+            maxHealth *
+              ((ability?.effects.astralSkillHealMaxHealthPercent ?? 8) / 100)
+          )
+        )
+      : 0,
+    nextSkillCritRateBonusPercent: triggered
+      ? (ability?.effects.astralNextSkillCritRateBonusPercent ?? 10)
+      : 0,
+  };
+}
+
+export type ShadowmoonEvasionResolution = {
+  triggered: boolean;
+  damageTaken: number;
+};
+
+export function resolveShadowmoonLethalEvasion(
+  ability: EquipmentSpecialAbility | undefined,
+  healthBeforeDamage: number,
+  incomingDamage: number,
+  randomValue = Math.random()
+): ShadowmoonEvasionResolution {
+  const chance = ability?.effects.shadowmoonLethalEvasionChancePercent ?? 0;
+  const isLethal =
+    healthBeforeDamage > 0 && incomingDamage >= healthBeforeDamage;
+  const triggered = Boolean(
+    ability?.id === "shadowmoon-leggings" &&
+      isLethal &&
+      chance > 0 &&
+      randomValue < chance / 100
+  );
+  return {
+    triggered,
+    damageTaken: triggered ? 0 : Math.max(0, incomingDamage),
+  };
+}
+
+export function rollSolarEyeProc(
+  ability: EquipmentSpecialAbility | undefined,
+  dealtDamage: boolean,
+  randomValue = Math.random()
+): boolean {
+  const chance = ability?.effects.solarEyeProcChancePercent ?? 0;
+  return Boolean(
+    ability?.id === "solar-eye" &&
+      dealtDamage &&
+      chance > 0 &&
+      randomValue < chance / 100
+  );
+}
+
+export function rollMedusaEyeProc(
+  ability: EquipmentSpecialAbility | undefined,
+  attackHitOrDodged: boolean,
+  randomValue = Math.random()
+): boolean {
+  const chance = ability?.effects.medusaEyeProcChancePercent ?? 0;
+  return Boolean(
+    ability?.id === "medusa-eye" &&
+      attackHitOrDodged &&
+      chance > 0 &&
+      randomValue < chance / 100
+  );
+}
+
+export function getLeviathanHealing(
+  ability: EquipmentSpecialAbility | undefined,
+  maxHealth: number,
+  currentHealth: number,
+  turn: number
+): number {
+  const interval = ability?.effects.leviathanHealIntervalTurns ?? 0;
+  if (
+    ability?.id !== "leviathan-heart" ||
+    interval <= 0 ||
+    turn % interval !== 0
+  )
+    return 0;
+  const isLowHealth =
+    currentHealth <
+    maxHealth *
+      ((ability.effects.leviathanLowHealthThresholdPercent ?? 30) / 100);
+  const multiplier = isLowHealth
+    ? (ability.effects.leviathanLowHealthHealMultiplier ?? 2)
+    : 1;
+  return Math.max(
+    1,
+    Math.floor(
+      maxHealth *
+        ((ability.effects.leviathanHealMaxHealthPercent ?? 4) / 100) *
+        multiplier
+    )
+  );
+}
+
+export function rollSpacetimeReversal(
+  ability: EquipmentSpecialAbility | undefined,
+  healthBeforeDamage: number,
+  incomingDamage: number,
+  alreadyUsed: boolean,
+  randomValue = Math.random()
+): boolean {
+  const chance = ability?.effects.spacetimeReversalChancePercent ?? 0;
+  return Boolean(
+    ability?.id === "spacetime-crystal" &&
+      !alreadyUsed &&
+      healthBeforeDamage > 0 &&
+      incomingDamage >= healthBeforeDamage &&
+      chance > 0 &&
+      randomValue < chance / 100
+  );
+}
+
+export function getStarCoreShieldGain(
+  ability: EquipmentSpecialAbility | undefined,
+  intelligence: number,
+  skillCast: boolean
+): number {
+  return ability?.id === "eternal-star-core" && skillCast
+    ? Math.max(
+        1,
+        Math.floor(
+          intelligence *
+            ((ability.effects.starCoreShieldPercentIntelligence ?? 50) / 100)
+        )
+      )
+    : 0;
+}
+
+export type StarCoreShieldResolution = {
+  shieldRemaining: number;
+  damageRemaining: number;
+  absorbedDamage: number;
+};
+
+export function resolveStarCoreShieldDamage(
+  currentShield: number,
+  incomingDamage: number
+): StarCoreShieldResolution {
+  const shield = Math.max(0, currentShield);
+  const damage = Math.max(0, incomingDamage);
+  const absorbedDamage = Math.min(shield, damage);
+  return {
+    shieldRemaining: shield - absorbedDamage,
+    damageRemaining: damage - absorbedDamage,
+    absorbedDamage,
   };
 }
 

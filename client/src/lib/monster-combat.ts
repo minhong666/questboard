@@ -119,6 +119,33 @@ export function applyMonsterGroupAreaDamage(
   };
 }
 
+export function applyMonsterGroupMappedAreaDamage(
+  members: MonsterGroupMember[],
+  damageForMember: (member: MonsterGroupMember) => number,
+  excludedMemberId?: string
+): MonsterGroupDamageResult {
+  const nextMembers = members.map(member => ({ ...member }));
+  const damageByMember: Record<string, number> = {};
+  let totalDamageApplied = 0;
+
+  for (const member of nextMembers) {
+    if (member.health <= 0 || member.id === excludedMemberId) continue;
+    const damage = Math.max(0, Math.floor(damageForMember(member)));
+    const applied = Math.min(member.health, damage);
+    if (applied <= 0) continue;
+    member.health -= applied;
+    damageByMember[member.id] = applied;
+    totalDamageApplied += applied;
+  }
+
+  return {
+    members: nextMembers,
+    damageByMember,
+    targetMemberId: Object.keys(damageByMember)[0],
+    totalDamageApplied,
+  };
+}
+
 export function getLivingMonsterGroupMembers(
   members: MonsterGroupMember[]
 ): MonsterGroupMember[] {

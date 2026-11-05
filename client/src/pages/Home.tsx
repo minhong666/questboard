@@ -71,12 +71,22 @@ import {
 import { clampCurrentHealth } from "../lib/health";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
+  advanceAsuraCritStackTurns,
+  getActiveLegendaryEquipmentSetBonuses,
   getActiveEquipmentSpecialEffects,
   getEquipmentSpecialAbility,
+  getLeviathanHealing,
+  getStarCoreShieldGain,
+  resolveStarCoreShieldDamage,
   resolveDivineShieldDamage,
   resolveDodgeCounterState,
   resolveGaleStackCount,
+  resolveAstralLeggingsSkillEffect,
   resolveLethalProtection,
+  resolveShadowmoonLethalEvasion,
+  rollMedusaEyeProc,
+  rollSolarEyeProc,
+  rollSpacetimeReversal,
   rollTruthDoubleCast,
   type DivineShieldState,
 } from "../lib/equipment-special-abilities";
@@ -165,6 +175,7 @@ import {
 } from "../lib/daily-monster-ids";
 import {
   applyMonsterGroupAreaDamage,
+  applyMonsterGroupMappedAreaDamage,
   applyMonsterGroupDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
@@ -234,6 +245,10 @@ type Monster = {
   isBoss?: boolean;
   levelGate?: "player" | "soul";
 };
+type LeggingPassiveBattleState = {
+  asuraCritStackTurns: number[];
+  nextGaleAttackBonusDamage: number;
+};
 type BattleState = {
   monsterId: string;
   monsterSnapshot: Monster;
@@ -255,10 +270,23 @@ type BattleState = {
   nextAttackDamageBonusPercent?: number;
   nextAttackCritRateBonusPercent?: number;
   nextAttackDefensePiercePercent?: number;
+  nextSkillCritRateBonusPercent?: number;
   galeStacks?: number;
   divineShield?: DivineShieldState;
   weaponPassiveState?: WeaponPassiveBattleState;
   weaponTimedBuffs?: WeaponTimedBuff[];
+  leggingsPassiveState?: LeggingPassiveBattleState;
+  galeSetLastEvasionTurn?: number;
+  timeReversalUsed?: boolean;
+  starCoreShield?: number;
+  dawnArmorStacks?: number;
+  shadowmoonAttackBonusPercent?: number;
+  shadowmoonAttackBonusTurns?: number;
+  shadowmoonAfterimageTurns?: number;
+  shadowmoonStealthUsed?: boolean;
+  shadowmoonStealthActive?: boolean;
+  moonStalkerGuaranteedHitsRemaining?: number;
+  moonStalkerStaffDamageTurns?: number;
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
@@ -285,6 +313,7 @@ type BattleStatus = {
   breakDamageThreshold?: number;
   breakDamage?: number;
   armorReductionPercent?: number;
+  defenseBonusPercent?: number;
   outgoingDamageReductionPercent?: number;
   healingReceivedReductionPercent?: number;
   accuracyReductionPercent?: number;
@@ -310,15 +339,25 @@ function applyBattleStatusEffects(
   for (const effect of effects) {
     if (!effect || Math.random() > effect.chance) continue;
     const damagePerTurn = effect.damagePercentOfSkill
-      ? Math.max(1, Math.round(sourceDamage * effect.damagePercentOfSkill / 100))
+      ? Math.max(
+          1,
+          Math.round((sourceDamage * effect.damagePercentOfSkill) / 100)
+        )
       : effect.damagePerTurn;
     const existing = next.find(status => status.kind === effect.kind);
     if (existing) {
-      existing.turnsRemaining = Math.max(existing.turnsRemaining, effect.durationTurns);
+      existing.turnsRemaining = Math.max(
+        existing.turnsRemaining,
+        effect.durationTurns
+      );
       existing.damagePerTurn = Math.max(existing.damagePerTurn, damagePerTurn);
       existing.armorReductionPercent = Math.max(
         existing.armorReductionPercent ?? 0,
         effect.armorReductionPercent ?? 0
+      );
+      existing.defenseBonusPercent = Math.max(
+        existing.defenseBonusPercent ?? 0,
+        effect.defenseBonusPercent ?? 0
       );
       existing.outgoingDamageReductionPercent = Math.max(
         existing.outgoingDamageReductionPercent ?? 0,
@@ -342,10 +381,9 @@ function applyBattleStatusEffects(
         breakDamageThreshold: effect.breakDamageThreshold,
         breakDamage: effect.breakDamage,
         armorReductionPercent: effect.armorReductionPercent,
-        outgoingDamageReductionPercent:
-          effect.outgoingDamageReductionPercent,
-        healingReceivedReductionPercent:
-          effect.healingReceivedReductionPercent,
+        defenseBonusPercent: effect.defenseBonusPercent,
+        outgoingDamageReductionPercent: effect.outgoingDamageReductionPercent,
+        healingReceivedReductionPercent: effect.healingReceivedReductionPercent,
         accuracyReductionPercent: effect.accuracyReductionPercent,
       });
     }
@@ -364,14 +402,17 @@ function tickBattleStatuses(statuses: BattleStatus[]) {
         status.kind === "冰凍" ||
         status.kind === "石化" ||
         status.kind === "暈眩" ||
-        status.kind === "麻痺"
+        status.kind === "麻痺" ||
+        status.kind === "霜月遲緩"
       ) {
         frozen = true;
-        controlLabel = status.kind;
+        controlLabel = status.kind === "霜月遲緩" ? "冰凍" : status.kind;
       }
       if (status.damagePerTurn > 0) {
         damage += status.damagePerTurn;
-        labels.push(`${status.element}·${status.kind}造成 ${status.damagePerTurn} 傷害`);
+        labels.push(
+          `${status.element}·${status.kind}造成 ${status.damagePerTurn} 傷害`
+        );
       } else {
         labels.push(`${status.element}·${status.kind}持續中`);
       }
@@ -583,7 +624,8 @@ const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
 const SHARED_ACHIEVEMENTS_STORAGE_KEY = "questboard-shared-achievements-v1";
 const NOTIFICATION_SETTINGS_KEY = "questboard-notification-settings-v1";
-const NOTIFICATION_LAST_REMINDER_KEY = "questboard-notification-last-reminder-v1";
+const NOTIFICATION_LAST_REMINDER_KEY =
+  "questboard-notification-last-reminder-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
 const ACTIVE_PROFILE_KEY = "questboard-active-profile-v1";
 const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
@@ -656,7 +698,8 @@ function advancePomodoroRuntime(
       phase: longBreak ? "longBreak" : "shortBreak",
       phaseStartedAt: now,
       phaseDurationSeconds:
-        (longBreak ? settings.longBreakMinutes : settings.shortBreakMinutes) * 60,
+        (longBreak ? settings.longBreakMinutes : settings.shortBreakMinutes) *
+        60,
       completedRounds,
       focusSecondsAccumulated:
         runtime.focusSecondsAccumulated + runtime.phaseDurationSeconds,
@@ -685,9 +728,8 @@ function getTodayFocusSeconds(
   if (running?.activityId !== activity.id) return stoppedSeconds;
   if (!running.pomodoro) return getTimerTodaySeconds(activity, running, now);
   const runtime = running.pomodoro;
-  const focusBeforeToday = running.startedAt >= dayStart
-    ? runtime.focusSecondsAccumulated
-    : 0;
+  const focusBeforeToday =
+    running.startedAt >= dayStart ? runtime.focusSecondsAccumulated : 0;
   const currentFocus =
     runtime.phase === "focus" ? getPomodoroPhaseElapsed(runtime, now) : 0;
   return stoppedSeconds + focusBeforeToday + currentFocus;
@@ -701,9 +743,14 @@ function normalizeAchievementIds(value: unknown): string[] {
 
 function normalizeDailyQuestChestClaims(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((milestone): milestone is number =>
-    milestone === 3 || milestone === 6 || milestone === 9
-  ))];
+  return [
+    ...new Set(
+      value.filter(
+        (milestone): milestone is number =>
+          milestone === 3 || milestone === 6 || milestone === 9
+      )
+    ),
+  ];
 }
 
 const defaultNotificationSettings: NotificationSettings = {
@@ -727,7 +774,9 @@ function loadNotificationSettings(): NotificationSettings {
 }
 
 function getNotificationPermission(): NotificationPermission | "unsupported" {
-  return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  return typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
 }
 
 async function showQuestNotification(
@@ -736,7 +785,10 @@ async function showQuestNotification(
   tag: string,
   extraOptions: NotificationOptions = {}
 ) {
-  if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+  if (
+    typeof Notification === "undefined" ||
+    Notification.permission !== "granted"
+  ) {
     return false;
   }
   const options: NotificationOptions = {
@@ -997,18 +1049,18 @@ function generateDailyMonsters(
           : {}),
         risk:
           level <= playerLevel - 5
-          ? "低風險"
-          : level <= playerLevel + 3
-            ? "中風險"
-            : "高風險",
+            ? "低風險"
+            : level <= playerLevel + 3
+              ? "中風險"
+              : "高風險",
         requirements: {
           health: scaleStat(100 + level * 8),
           strength: scaleStat(Math.max(5, Math.round(level * 1.2))),
           defense: scaleStat(Math.max(5, Math.round(level * 1.05))),
         },
-      icon: Skull,
-      tone: dailyMonsterTones[index % dailyMonsterTones.length],
-    };
+        icon: Skull,
+        tone: dailyMonsterTones[index % dailyMonsterTones.length],
+      };
     }
   );
 }
@@ -1128,7 +1180,8 @@ const bosses: Monster[] = [
   {
     id: "boss-abyss-dragon",
     name: "深淵古龍",
-    description: "盤踞在高階區域的終極守門者，會交替施展普通攻擊與火焰灼燒技能。",
+    description:
+      "盤踞在高階區域的終極守門者，會交替施展普通攻擊與火焰灼燒技能。",
     level: 75,
     health: 1600,
     reward: 900,
@@ -1172,7 +1225,8 @@ const bosses: Monster[] = [
   {
     id: "boss-final",
     name: "最終魔王",
-    description: "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
+    description:
+      "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
     level: 200,
     health: 3000,
     reward: 3000,
@@ -1185,7 +1239,12 @@ const bosses: Monster[] = [
     physicalResistancePercent: 30,
     magicResistancePercent: 30,
     risk: "終焉風險",
-    requirements: { health: 1800, strength: 270, defense: 270, intelligence: 270 },
+    requirements: {
+      health: 1800,
+      strength: 270,
+      defense: 270,
+      intelligence: 270,
+    },
     icon: Skull,
     tone: "crimson",
     isBoss: true,
@@ -1220,12 +1279,16 @@ function tripleRegionalBossStats(boss: Monster): Monster {
     reward: boss.reward * 2,
     damage: boss.damage * 3,
     defense: boss.defense * 3,
-    intelligence: boss.intelligence === undefined ? undefined : boss.intelligence * 3,
+    intelligence:
+      boss.intelligence === undefined ? undefined : boss.intelligence * 3,
     critRate: boss.critRate,
     critDamage: boss.critDamage,
     dodgeRate: boss.dodgeRate,
     requirements: Object.fromEntries(
-      Object.entries(boss.requirements).map(([key, value]) => [key, (value ?? 0) * 3])
+      Object.entries(boss.requirements).map(([key, value]) => [
+        key,
+        (value ?? 0) * 3,
+      ])
     ) as MonsterRequirements,
     physicalResistancePercent: boss.physicalResistancePercent,
     magicResistancePercent: boss.magicResistancePercent,
@@ -1280,7 +1343,9 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   for (const item of items) {
     const bonus = item.bonus;
     const value = (label: string) =>
-      Number(bonus.match(new RegExp(`${label} \\+(\\d+(?:\\.\\d+)?)`))?.[1] ?? 0);
+      Number(
+        bonus.match(new RegExp(`${label} \\+(\\d+(?:\\.\\d+)?)`))?.[1] ?? 0
+      );
     if (bonus.includes("全能力")) {
       const all = value("全能力");
       abilities.health += all;
@@ -1299,7 +1364,8 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
     if (bonus.includes("閃避率"))
       combat.dodgeRate = (combat.dodgeRate ?? 0) + value("閃避率");
     if (bonus.includes("施法速度"))
-      combat.castSpeedPercent = (combat.castSpeedPercent ?? 0) + value("施法速度");
+      combat.castSpeedPercent =
+        (combat.castSpeedPercent ?? 0) + value("施法速度");
     if (bonus.includes("魔法穿透"))
       combat.magicPenetrationPercent =
         (combat.magicPenetrationPercent ?? 0) + value("魔法穿透");
@@ -1323,9 +1389,11 @@ function getEquipmentBonuses(items: EquipmentItem[]) {
   combat.castSpeedPercent =
     (combat.castSpeedPercent ?? 0) + setBonuses.combat.castSpeedPercent;
   combat.damageReductionPercent =
-    (combat.damageReductionPercent ?? 0) + setBonuses.combat.damageReductionPercent;
+    (combat.damageReductionPercent ?? 0) +
+    setBonuses.combat.damageReductionPercent;
   combat.magicPenetrationPercent =
-    (combat.magicPenetrationPercent ?? 0) + setBonuses.combat.magicPenetrationPercent;
+    (combat.magicPenetrationPercent ?? 0) +
+    setBonuses.combat.magicPenetrationPercent;
   return { abilities, combat, activeSets: setBonuses.activeSets };
 }
 
@@ -1342,8 +1410,12 @@ function getEffectiveHealthCap(
   );
   const classHealthBonus = (jobClasses[jobClass] ?? jobClasses.warrior).bonuses
     .health;
-  const equipmentHealthBonus = getEquipmentBonuses(equippedItems).abilities.health;
-  return Math.max(1, abilities.health + classHealthBonus + equipmentHealthBonus);
+  const equipmentHealthBonus =
+    getEquipmentBonuses(equippedItems).abilities.health;
+  return Math.max(
+    1,
+    abilities.health + classHealthBonus + equipmentHealthBonus
+  );
 }
 
 function getExperienceBonusPercent(intelligence: number) {
@@ -1476,7 +1548,8 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
       health: state.abilities.health + growth.abilities.health,
       strength: state.abilities.strength + growth.abilities.strength,
       defense: state.abilities.defense + growth.abilities.defense,
-      intelligence: state.abilities.intelligence + growth.abilities.intelligence,
+      intelligence:
+        state.abilities.intelligence + growth.abilities.intelligence,
     },
     combatStats: {
       ...state.combatStats,
@@ -1484,7 +1557,8 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
         100,
         state.combatStats.critRate + (growth.combat.critRate ?? 0)
       ),
-      critDamage: state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
+      critDamage:
+        state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
     },
     currentHealth: state.currentHealth + growth.abilities.health,
     weeklyStats,
@@ -1786,7 +1860,9 @@ function loadState(): AppState {
       skillUpgradeLevels,
       specialization,
       achievementClaimedIds: Array.isArray(parsed.achievementClaimedIds)
-        ? parsed.achievementClaimedIds.filter((id): id is string => typeof id === "string")
+        ? parsed.achievementClaimedIds.filter(
+            (id): id is string => typeof id === "string"
+          )
         : [],
       dailyResetMinutes,
       pomodoroSettings: normalizePomodoroSettings(parsed.pomodoroSettings),
@@ -2132,10 +2208,7 @@ function LootProbabilityGuide({
       label: `區域魔王 Lv.${level}`,
       summary: getLootProbabilitySummary({ level, isBoss: true }),
     }));
-  const rows = [
-    ...levelRows,
-    ...bossRows,
-  ];
+  const rows = [...levelRows, ...bossRows];
   const summaryCards = [
     {
       label: "普通小怪 · 單次挑戰",
@@ -2200,7 +2273,10 @@ function LootProbabilityGuide({
   );
 
   return (
-    <section className="loot-probability-panel panel-card" aria-labelledby="loot-probability-title">
+    <section
+      className="loot-probability-panel panel-card"
+      aria-labelledby="loot-probability-title"
+    >
       <div className="loot-probability-heading">
         <div>
           <div className="section-kicker">
@@ -2255,7 +2331,9 @@ function LootProbabilityGuide({
 }
 
 export default function Home() {
-  const [state, setState] = useState<AppState>(() => normalizeProfileLoot(loadState()));
+  const [state, setState] = useState<AppState>(() =>
+    normalizeProfileLoot(loadState())
+  );
   const [profiles, setProfiles] = useState<SaveProfile[]>(() => loadProfiles());
   const [sharedAchievementClaimedIds, setSharedAchievementClaimedIds] =
     useState<string[]>(() => loadSharedAchievementClaimedIds());
@@ -2307,7 +2385,9 @@ export default function Home() {
     const currentProfileId = activeProfileIdRef.current;
     const currentState = stateRef.current;
     return getStoredProfiles().map(profile =>
-      profile.id === currentProfileId ? { ...profile, state: currentState } : profile
+      profile.id === currentProfileId
+        ? { ...profile, state: currentState }
+        : profile
     );
   };
   const [toast, setToast] = useState<string | null>(null);
@@ -2328,10 +2408,14 @@ export default function Home() {
   const [selectedEquipmentForComparison, setSelectedEquipmentForComparison] =
     useState<EquipmentItem | null>(null);
   const [codexRarity, setCodexRarity] = useState<"all" | LootRarity>("all");
-  const [codexSlot, setCodexSlot] = useState<"all" | (typeof EQUIPMENT_SLOTS)[number]>("all");
+  const [codexSlot, setCodexSlot] = useState<
+    "all" | (typeof EQUIPMENT_SLOTS)[number]
+  >("all");
   const [monsterCodexSearch, setMonsterCodexSearch] = useState("");
   const [monsterCodexRegion, setMonsterCodexRegion] = useState("all");
-  const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>([]);
+  const [selectedFusionItemIds, setSelectedFusionItemIds] = useState<string[]>(
+    []
+  );
   const [saveNameDraft, setSaveNameDraft] = useState("");
   const [setupName, setSetupName] = useState("");
   const [setupJobClass, setSetupJobClass] = useState<JobClass>("warrior");
@@ -2392,18 +2476,19 @@ export default function Home() {
     0
   );
   const todayTimerDayStart = getTimerDayStart(currentTime);
-  const todayPomodoroRounds = state.timerActivities.reduce(
-    (total, activity) =>
-      total +
-      activity.sessions.reduce(
-        (sessionTotal, session) =>
-          session.startedAt >= todayTimerDayStart
-            ? sessionTotal + (session.pomodoroRoundsCompleted ?? 0)
-            : sessionTotal,
-        0
-      ),
-    0
-  ) + (state.runningTimer?.pomodoro?.completedRounds ?? 0);
+  const todayPomodoroRounds =
+    state.timerActivities.reduce(
+      (total, activity) =>
+        total +
+        activity.sessions.reduce(
+          (sessionTotal, session) =>
+            session.startedAt >= todayTimerDayStart
+              ? sessionTotal + (session.pomodoroRoundsCompleted ?? 0)
+              : sessionTotal,
+          0
+        ),
+      0
+    ) + (state.runningTimer?.pomodoro?.completedRounds ?? 0);
   const totalTimerAbilityPoints = state.timerActivities.reduce(
     (total, activity) => total + activity.abilityPointsEarned,
     0
@@ -2413,16 +2498,18 @@ export default function Home() {
     0
   );
   const runningTimerActivity = state.runningTimer
-    ? state.timerActivities.find(
+    ? (state.timerActivities.find(
         activity => activity.id === state.runningTimer?.activityId
-      ) ?? null
+      ) ?? null)
     : null;
   const activeTimerProfile = profiles.find(
     profile => profile.state.runningTimer !== null
   );
-  const activeTimerProfileActivity = activeTimerProfile?.state.timerActivities.find(
-    activity => activity.id === activeTimerProfile.state.runningTimer?.activityId
-  );
+  const activeTimerProfileActivity =
+    activeTimerProfile?.state.timerActivities.find(
+      activity =>
+        activity.id === activeTimerProfile.state.runningTimer?.activityId
+    );
   const anyProfileTimerRunning = Boolean(activeTimerProfile);
   const smallMonsterRefreshKey = useMemo(
     () => getSmallMonsterRefreshKey(new Date(currentTime)),
@@ -2442,10 +2529,12 @@ export default function Home() {
   );
   const activeBosses = useMemo(
     () =>
-      bosses.map(boss => ({
-        ...tripleRegionalBossStats(boss),
-        id: `${boss.id}-${weeklyBossRefreshKey}`,
-      })).sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
+      bosses
+        .map(boss => ({
+          ...tripleRegionalBossStats(boss),
+          id: `${boss.id}-${weeklyBossRefreshKey}`,
+        }))
+        .sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
     [weeklyBossRefreshKey]
   );
   const activeSoulTrialBosses = useMemo(
@@ -2541,53 +2630,113 @@ export default function Home() {
           item => item.slot === selectedEquipmentForComparison.slot
         );
         const replacementItems = [
-          ...equippedItems.filter(item => item.slot !== selectedEquipmentForComparison.slot),
+          ...equippedItems.filter(
+            item => item.slot !== selectedEquipmentForComparison.slot
+          ),
           selectedEquipmentForComparison,
         ];
         const currentBonuses = getEquipmentBonuses(equippedItems);
         const replacementBonuses = getEquipmentBonuses(replacementItems);
-        const abilitiesWith = (bonuses: ReturnType<typeof getEquipmentBonuses>) => ({
+        const abilitiesWith = (
+          bonuses: ReturnType<typeof getEquipmentBonuses>
+        ) => ({
           health: state.abilities.health + bonuses.abilities.health,
           strength: state.abilities.strength + bonuses.abilities.strength,
           defense: state.abilities.defense + bonuses.abilities.defense,
-          intelligence: state.abilities.intelligence + bonuses.abilities.intelligence,
+          intelligence:
+            state.abilities.intelligence + bonuses.abilities.intelligence,
         });
         const currentAbilities = abilitiesWith(currentBonuses);
         const replacementAbilities = abilitiesWith(replacementBonuses);
         const currentCombat = {
-          critRate: (state.combatStats.critRate ?? 0) + (currentBonuses.combat.critRate ?? 0),
-          critDamage: (state.combatStats.critDamage ?? 0) + (currentBonuses.combat.critDamage ?? 0),
-          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (currentBonuses.combat.dodgeRate ?? 0),
+          critRate:
+            (state.combatStats.critRate ?? 0) +
+            (currentBonuses.combat.critRate ?? 0),
+          critDamage:
+            (state.combatStats.critDamage ?? 0) +
+            (currentBonuses.combat.critDamage ?? 0),
+          dodgeRate:
+            (state.combatStats.dodgeRate ?? 0) +
+            (currentBonuses.combat.dodgeRate ?? 0),
         };
         const replacementCombat = {
-          critRate: (state.combatStats.critRate ?? 0) + (replacementBonuses.combat.critRate ?? 0),
-          critDamage: (state.combatStats.critDamage ?? 0) + (replacementBonuses.combat.critDamage ?? 0),
-          dodgeRate: (state.combatStats.dodgeRate ?? 0) + (replacementBonuses.combat.dodgeRate ?? 0),
+          critRate:
+            (state.combatStats.critRate ?? 0) +
+            (replacementBonuses.combat.critRate ?? 0),
+          critDamage:
+            (state.combatStats.critDamage ?? 0) +
+            (replacementBonuses.combat.critDamage ?? 0),
+          dodgeRate:
+            (state.combatStats.dodgeRate ?? 0) +
+            (replacementBonuses.combat.dodgeRate ?? 0),
         };
         const currentMagicPenetration = Number(
           currentItem?.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
         );
         const replacementMagicPenetration = Number(
-          selectedEquipmentForComparison.bonus.match(/魔法穿透 \+(\d+(?:\.\d+)?)%?/)?.[1] ?? 0
+          selectedEquipmentForComparison.bonus.match(
+            /魔法穿透 \+(\d+(?:\.\d+)?)%?/
+          )?.[1] ?? 0
         );
         return {
           currentItem,
           stats: [
-            { label: "物理攻擊", unit: "", current: getPhysicalAttackDamage(currentAbilities), replacement: getPhysicalAttackDamage(replacementAbilities) },
-            { label: "魔法攻擊", unit: "", current: getMagicAttackDamage(currentAbilities), replacement: getMagicAttackDamage(replacementAbilities) },
-            { label: "生命", unit: "", current: currentAbilities.health, replacement: replacementAbilities.health },
-            { label: "防禦", unit: "", current: currentAbilities.defense, replacement: replacementAbilities.defense },
-            { label: "暴擊率", unit: "%", current: currentCombat.critRate, replacement: replacementCombat.critRate },
-            { label: "暴擊傷害", unit: "%", current: currentCombat.critDamage, replacement: replacementCombat.critDamage },
-            { label: "閃避率", unit: "%", current: currentCombat.dodgeRate, replacement: replacementCombat.dodgeRate },
-            { label: "魔法穿透", unit: "%", current: currentMagicPenetration, replacement: replacementMagicPenetration },
+            {
+              label: "物理攻擊",
+              unit: "",
+              current: getPhysicalAttackDamage(currentAbilities),
+              replacement: getPhysicalAttackDamage(replacementAbilities),
+            },
+            {
+              label: "魔法攻擊",
+              unit: "",
+              current: getMagicAttackDamage(currentAbilities),
+              replacement: getMagicAttackDamage(replacementAbilities),
+            },
+            {
+              label: "生命",
+              unit: "",
+              current: currentAbilities.health,
+              replacement: replacementAbilities.health,
+            },
+            {
+              label: "防禦",
+              unit: "",
+              current: currentAbilities.defense,
+              replacement: replacementAbilities.defense,
+            },
+            {
+              label: "暴擊率",
+              unit: "%",
+              current: currentCombat.critRate,
+              replacement: replacementCombat.critRate,
+            },
+            {
+              label: "暴擊傷害",
+              unit: "%",
+              current: currentCombat.critDamage,
+              replacement: replacementCombat.critDamage,
+            },
+            {
+              label: "閃避率",
+              unit: "%",
+              current: currentCombat.dodgeRate,
+              replacement: replacementCombat.dodgeRate,
+            },
+            {
+              label: "魔法穿透",
+              unit: "%",
+              current: currentMagicPenetration,
+              replacement: replacementMagicPenetration,
+            },
           ],
         };
       })()
     : null;
-  const codexItems = RPG_EQUIPMENT_TEMPLATES.filter(item =>
-    (codexRarity === "all" || item.rarity === codexRarity) &&
-    (codexSlot === "all" || item.slot === codexSlot)
+  const codexItems = RPG_EQUIPMENT_TEMPLATES.filter(
+    item =>
+      (codexRarity === "all" || item.rarity === codexRarity) &&
+      (codexSlot === "all" || item.slot === codexSlot)
   );
   const codexProfileStates = [
     state,
@@ -2679,9 +2828,12 @@ export default function Home() {
     monster => monster.discovered
   ).length;
   const selectedFusionItems = selectedFusionItemIds
-    .map(id => inventory.find((item): item is EquipmentItem =>
-      item.id === id && item.kind === "equipment"
-    ))
+    .map(id =>
+      inventory.find(
+        (item): item is EquipmentItem =>
+          item.id === id && item.kind === "equipment"
+      )
+    )
     .filter(
       (item): item is EquipmentItem =>
         item !== undefined && !equippedItemIds.includes(item.id)
@@ -2696,10 +2848,60 @@ export default function Home() {
   const classDefinition = jobClasses[state.jobClass] ?? jobClasses.warrior;
   const isMage = state.jobClass === "mage";
   const isArcher = state.jobClass === "archer";
+  const getEquippedSpecialAbility = (slot: EquipmentItem["slot"]) => {
+    const item = equippedItems.find(equippedItem => equippedItem.slot === slot);
+    return item
+      ? getEquipmentSpecialAbility(
+          item.name,
+          item.rarity,
+          item.specialAbilityId
+        )
+      : undefined;
+  };
+  const equippedHelmetAbility = getEquippedSpecialAbility("頭盔");
+  const equippedChestAbility = getEquippedSpecialAbility("胸甲");
+  const equippedLeggingsAbility = getEquippedSpecialAbility("護腿");
+  const activeLegendarySetBonuses = getActiveLegendaryEquipmentSetBonuses(
+    equippedHelmetAbility?.id,
+    equippedChestAbility?.id,
+    equippedLeggingsAbility?.id
+  );
+  const activeLegendarySpecialSetEntries = [
+    {
+      active: activeLegendarySetBonuses.asura,
+      name: "阿修羅戰神套裝",
+      description: "受到傷害 +20% · 吸血 +20%",
+    },
+    {
+      active: activeLegendarySetBonuses.night,
+      name: "夜魔主宰套裝",
+      description: "閃避率 +10% · 每 3 回合追加自身攻擊力 × 當前閃避率的傷害",
+    },
+    {
+      active: activeLegendarySetBonuses.astral,
+      name: "星辰智者套裝",
+      description: "智力 +10% · 技能冷卻額外減少 1 回合",
+    },
+    {
+      active: activeLegendarySetBonuses.mountain,
+      name: "永恆山脈套裝",
+      description:
+        "受到傷害減少 35% · 物理／魔法抗性 +50% · 每回合恢復最大生命 2%",
+    },
+    {
+      active: activeLegendarySetBonuses.gale,
+      name: "疾風劍聖套裝",
+      description: "每 5 回合必定閃避一次傷害，並使下次攻擊傷害 +50%",
+    },
+  ].filter(set => set.active);
   const equipmentBonuses = useMemo(
     () => getEquipmentBonuses(equippedItems),
     [equippedItems]
   );
+  const intelligenceBeforeLegendarySet =
+    state.abilities.intelligence +
+    classDefinition.bonuses.intelligence +
+    equipmentBonuses.abilities.intelligence;
   const effectiveAbilities: CharacterAbilities = {
     health:
       state.abilities.health +
@@ -2714,9 +2916,10 @@ export default function Home() {
       classDefinition.bonuses.defense +
       equipmentBonuses.abilities.defense,
     intelligence:
-      state.abilities.intelligence +
-      classDefinition.bonuses.intelligence +
-      equipmentBonuses.abilities.intelligence,
+      intelligenceBeforeLegendarySet +
+      (activeLegendarySetBonuses.astral
+        ? Math.floor(intelligenceBeforeLegendarySet * 0.1)
+        : 0),
   };
   const archerTalentBonuses = getArcherTalentBonuses(
     state.archerDodgeFailStacks
@@ -2726,7 +2929,8 @@ export default function Home() {
     state.jobClass,
     state.specialization
   );
-  const currentSpecializationVisual = specializationVisuals[currentSpecialization.id];
+  const currentSpecializationVisual =
+    specializationVisuals[currentSpecialization.id];
   const specializationUnlocked = player.level >= 50;
   const specializationSelected = specializationUnlocked;
   const unlockedSpecializationSkillsForStats = specializationUnlocked
@@ -2746,11 +2950,11 @@ export default function Home() {
     combatStatsBase(state.combatStats).dodgeRate +
     (classDefinition.combat.dodgeRate ?? 0) +
     (equipmentBonuses.combat.dodgeRate ?? 0) +
+    (activeLegendarySetBonuses.night ? 10 : 0) +
     specializationPassiveBonuses.dodgeRate;
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
-      ? 30 +
-        (skillUpgradeLevels["archer-5"] ?? 0) * 5
+      ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
       : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
@@ -2822,12 +3026,18 @@ export default function Home() {
         )
       : []),
   ];
-  const battleSpecialSkills = [...unlockedSpecialSkills, ...specializationSkills];
+  const battleSpecialSkills = [
+    ...unlockedSpecialSkills,
+    ...specializationSkills,
+  ];
   const achievementContext: AchievementContext = {
     completedTasks: state.tasks.filter(task => task.completed).length,
     totalXp: state.totalXp,
     timerSeconds:
-      state.timerActivities.reduce((total, activity) => total + activity.totalSeconds, 0) +
+      state.timerActivities.reduce(
+        (total, activity) => total + activity.totalSeconds,
+        0
+      ) +
       (state.runningTimer
         ? getTimerElapsedSeconds(0, state.runningTimer.startedAt, currentTime)
         : 0),
@@ -3096,7 +3306,8 @@ export default function Home() {
       ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
       : rawPlayerDamage;
     const buffedPlayerDamage = Math.round(
-      basePlayerDamage * (1 + (battle?.activeBuff?.damageBonusPercent ?? 0) / 100)
+      basePlayerDamage *
+        (1 + (battle?.activeBuff?.damageBonusPercent ?? 0) / 100)
     );
     const normalDamage = calculateSpecialSkillDamage(
       buffedPlayerDamage,
@@ -3121,7 +3332,7 @@ export default function Home() {
             (skillPreviewMonster.magicResistancePercent ?? 0) -
               (effectiveCombatStats.magicPenetrationPercent ?? 0)
           )
-        : skillPreviewMonster.physicalResistancePercent ?? 0;
+        : (skillPreviewMonster.physicalResistancePercent ?? 0);
     const afterResistance = (damage: number) =>
       Math.max(1, Math.round(damage * (1 - resistancePercent / 100)));
     const minimumDamage = Math.min(normalDamage, criticalDamage);
@@ -3131,7 +3342,7 @@ export default function Home() {
       penetration:
         skill.defensePiercePercent +
         (skill.damageType === "魔法"
-          ? effectiveCombatStats.magicPenetrationPercent ?? 0
+          ? (effectiveCombatStats.magicPenetrationPercent ?? 0)
           : 0),
       resistancePercent,
       minimumDamage,
@@ -3183,7 +3394,8 @@ export default function Home() {
       setInstallPrompt(event as BeforeInstallPromptEvent);
     };
     window.addEventListener("beforeinstallprompt", captureInstallPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+    return () =>
+      window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
   }, []);
 
   useEffect(() => {
@@ -3197,8 +3409,15 @@ export default function Home() {
     const date = new Date(currentTime);
     const currentMinute = date.getHours() * 60 + date.getMinutes();
     if (currentMinute !== state.dailyResetMinutes) return;
-    const reminderKey = getRepeatPeriodKey("daily", date, state.dailyResetMinutes);
-    if (window.localStorage.getItem(NOTIFICATION_LAST_REMINDER_KEY) === reminderKey) {
+    const reminderKey = getRepeatPeriodKey(
+      "daily",
+      date,
+      state.dailyResetMinutes
+    );
+    if (
+      window.localStorage.getItem(NOTIFICATION_LAST_REMINDER_KEY) ===
+      reminderKey
+    ) {
       return;
     }
     showQuestNotification(
@@ -3208,7 +3427,11 @@ export default function Home() {
         : "今日任務已刷新，準備開始新的冒險吧。",
       "daily-task-reminder"
     ).then(sent => {
-      if (sent) window.localStorage.setItem(NOTIFICATION_LAST_REMINDER_KEY, reminderKey);
+      if (sent)
+        window.localStorage.setItem(
+          NOTIFICATION_LAST_REMINDER_KEY,
+          reminderKey
+        );
     });
   }, [
     currentTime,
@@ -3308,10 +3531,7 @@ export default function Home() {
     let acquiring = false;
     const acquireForRunningTimer = async () => {
       if (cancelled || acquiring) return;
-      if (
-        timerLeaseRef.current &&
-        timerLeaseRunIdRef.current === lockId
-      ) {
+      if (timerLeaseRef.current && timerLeaseRunIdRef.current === lockId) {
         setTimerLockOwned(true);
         return;
       }
@@ -3354,10 +3574,7 @@ export default function Home() {
     };
 
     void acquireForRunningTimer();
-    const retry = window.setInterval(
-      () => void acquireForRunningTimer(),
-      5000
-    );
+    const retry = window.setInterval(() => void acquireForRunningTimer(), 5000);
     return () => {
       cancelled = true;
       window.clearInterval(retry);
@@ -3379,7 +3596,8 @@ export default function Home() {
       !running ||
       !timerLockOwned ||
       !timerLeaseRef.current ||
-      timerLeaseRunIdRef.current !== `${running.activityId}:${running.startedAt}`
+      timerLeaseRunIdRef.current !==
+        `${running.activityId}:${running.startedAt}`
     )
       return;
     const activity = state.timerActivities.find(
@@ -3394,12 +3612,13 @@ export default function Home() {
       ? activity.totalSeconds +
         pomodoro.focusSecondsAccumulated +
         (pomodoro.phase === "focus" ? phaseElapsed : 0)
-      : getTimerElapsedSeconds(activity.totalSeconds, running.startedAt, currentTime);
+      : getTimerElapsedSeconds(
+          activity.totalSeconds,
+          running.startedAt,
+          currentTime
+        );
     const targetCompletedMinutes = getCompletedTimerMinutes(elapsedTotal);
-    const pendingXp = Math.max(
-      0,
-      targetCompletedMinutes - activity.xpEarned
-    );
+    const pendingXp = Math.max(0, targetCompletedMinutes - activity.xpEarned);
     const pendingRewardChecks = Math.max(
       0,
       targetCompletedMinutes - activity.rewardChecks
@@ -3410,7 +3629,8 @@ export default function Home() {
     const shouldAdvancePhase = Boolean(
       pomodoro && phaseComplete && state.pomodoroSettings.autoStartNextPhase
     );
-    if (pendingXp === 0 && pendingRewardChecks === 0 && !shouldAdvancePhase) return;
+    if (pendingXp === 0 && pendingRewardChecks === 0 && !shouldAdvancePhase)
+      return;
     const rewardOutcomes = rollAbilityPointOutcomes(pendingRewardChecks);
     const awardedPoints = rewardOutcomes.filter(Boolean).length;
 
@@ -3449,16 +3669,16 @@ export default function Home() {
       );
       const latestPendingXp = Math.max(
         0,
-        getCompletedTimerMinutes(latestElapsedTotal) -
-          previousActivity.xpEarned
+        getCompletedTimerMinutes(latestElapsedTotal) - previousActivity.xpEarned
       );
       const latestPhaseComplete = Boolean(
-        latestPomodoro && latestPhaseElapsed >= latestPomodoro.phaseDurationSeconds
+        latestPomodoro &&
+          latestPhaseElapsed >= latestPomodoro.phaseDurationSeconds
       );
       const latestShouldAdvance = Boolean(
         latestPomodoro &&
-        latestPhaseComplete &&
-        previous.pomodoroSettings.autoStartNextPhase
+          latestPhaseComplete &&
+          previous.pomodoroSettings.autoStartNextPhase
       );
       if (
         latestPendingChecks !== pendingRewardChecks ||
@@ -3468,7 +3688,9 @@ export default function Home() {
         return previous;
 
       const latestRoundCompleted = Boolean(
-        latestPomodoro && latestPomodoro.phase === "focus" && latestPhaseComplete
+        latestPomodoro &&
+          latestPomodoro.phase === "focus" &&
+          latestPhaseComplete
       );
       const nextState = applyExperienceToState(
         previous,
@@ -3492,8 +3714,7 @@ export default function Home() {
                 ...item,
                 xpEarned: item.xpEarned + pendingXp,
                 rewardChecks: item.rewardChecks + pendingRewardChecks,
-                abilityPointsEarned:
-                  item.abilityPointsEarned + awardedPoints,
+                abilityPointsEarned: item.abilityPointsEarned + awardedPoints,
                 pomodoroRoundsCompleted:
                   (item.pomodoroRoundsCompleted ?? 0) +
                   (latestRoundCompleted ? 1 : 0),
@@ -3503,8 +3724,7 @@ export default function Home() {
         runningTimer: {
           ...previousRunning,
           xpEarned: previousRunning.xpEarned + pendingXp,
-          rewardChecks:
-            previousRunning.rewardChecks + pendingRewardChecks,
+          rewardChecks: previousRunning.rewardChecks + pendingRewardChecks,
           abilityPointsEarned:
             previousRunning.abilityPointsEarned + awardedPoints,
           pomodoro: nextPomodoro,
@@ -3526,7 +3746,11 @@ export default function Home() {
 
     const elapsedSeconds = running.pomodoro
       ? getPomodoroPhaseElapsed(running.pomodoro, currentTime)
-      : getTimerElapsedSeconds(activity.totalSeconds, running.startedAt, currentTime);
+      : getTimerElapsedSeconds(
+          activity.totalSeconds,
+          running.startedAt,
+          currentTime
+        );
     const phaseLabel = running.pomodoro
       ? `${pomodoroPhaseLabel(running.pomodoro.phase)} `
       : "";
@@ -3554,7 +3778,8 @@ export default function Home() {
       )
         return;
       try {
-        wakeLockRef.current = await navigatorWithWakeLock.wakeLock.request("screen");
+        wakeLockRef.current =
+          await navigatorWithWakeLock.wakeLock.request("screen");
         if (disposed) await releaseWakeLock();
       } catch {
         // Some browsers require a user gesture or do not support Wake Lock.
@@ -3708,7 +3933,11 @@ export default function Home() {
     ) {
       setWeeklyReportOpen(true);
     }
-  }, [currentTime, state.weeklyStats.weekKey, state.weeklyStats.reportShownWeekKey]);
+  }, [
+    currentTime,
+    state.weeklyStats.weekKey,
+    state.weeklyStats.reportShownWeekKey,
+  ]);
 
   useEffect(() => {
     const availableIds = new Set(
@@ -3754,7 +3983,10 @@ export default function Home() {
     const savedCurrentProfile = getStoredProfiles().find(
       profile => profile.id === activeProfileIdRef.current
     );
-    if (stateRef.current.runningTimer || savedCurrentProfile?.state.runningTimer) {
+    if (
+      stateRef.current.runningTimer ||
+      savedCurrentProfile?.state.runningTimer
+    ) {
       showToast("請先停止目前的事務計時，再重製角色");
       return;
     }
@@ -3952,9 +4184,12 @@ export default function Home() {
   const fuseSelectedEquipment = () => {
     const selectedIds = selectedFusionItems.map(item => item.id);
     const selectedItems = selectedIds
-      .map(id => inventory.find((item): item is EquipmentItem =>
-        item.id === id && item.kind === "equipment"
-      ))
+      .map(id =>
+        inventory.find(
+          (item): item is EquipmentItem =>
+            item.id === id && item.kind === "equipment"
+        )
+      )
       .filter((item): item is EquipmentItem => Boolean(item));
     const rarity = selectedItems[0]?.rarity;
     if (selectedItems.length !== 3 || !rarity) {
@@ -4017,8 +4252,10 @@ export default function Home() {
     setBattleFx({ ...effect, id: battleFxIdRef.current });
   };
   const startBattle = (monster: Monster) => {
-    if (state.runningTimer?.pomodoro?.phase !== undefined &&
-        state.runningTimer.pomodoro.phase !== "focus") {
+    if (
+      state.runningTimer?.pomodoro?.phase !== undefined &&
+      state.runningTimer.pomodoro.phase !== "focus"
+    ) {
       showToast("番茄鐘休息期間不能開始戰鬥，先回到專注階段吧");
       return;
     }
@@ -4036,20 +4273,21 @@ export default function Home() {
       showToast(`${monster.name} 已被擊倒，金幣獎勵已領取`);
       return;
     }
-    const groupMembers = monster.encounterType === "swarm"
-      ? createMonsterGroupMembers(monster.id, monster.health, 3, {
-          damage: monster.damage,
-          defense: monster.defense,
-          critRate: monster.critRate,
-          critDamage: monster.critDamage,
-          dodgeRate: monster.dodgeRate,
-          physicalResistancePercent: monster.physicalResistancePercent,
-          magicResistancePercent: monster.magicResistancePercent,
-          lifestealPercent: monster.lifestealPercent,
-          reflectDamage: monster.reflectDamage,
-          explosionDamage: monster.explosionDamage,
-        })
-      : undefined;
+    const groupMembers =
+      monster.encounterType === "swarm"
+        ? createMonsterGroupMembers(monster.id, monster.health, 3, {
+            damage: monster.damage,
+            defense: monster.defense,
+            critRate: monster.critRate,
+            critDamage: monster.critDamage,
+            dodgeRate: monster.dodgeRate,
+            physicalResistancePercent: monster.physicalResistancePercent,
+            magicResistancePercent: monster.magicResistancePercent,
+            lifestealPercent: monster.lifestealPercent,
+            reflectDamage: monster.reflectDamage,
+            explosionDamage: monster.explosionDamage,
+          })
+        : undefined;
     setBattle({
       monsterId: monster.id,
       monsterSnapshot: monster,
@@ -4076,6 +4314,7 @@ export default function Home() {
       nextAttackDamageBonusPercent: 0,
       nextAttackCritRateBonusPercent: 0,
       nextAttackDefensePiercePercent: 0,
+      nextSkillCritRateBonusPercent: 0,
       galeStacks: 0,
       divineShield: {
         charge: 0,
@@ -4085,6 +4324,21 @@ export default function Home() {
       },
       weaponPassiveState: { ...INITIAL_WEAPON_PASSIVE_BATTLE_STATE },
       weaponTimedBuffs: [],
+      leggingsPassiveState: {
+        asuraCritStackTurns: [],
+        nextGaleAttackBonusDamage: 0,
+      },
+      galeSetLastEvasionTurn: 0,
+      timeReversalUsed: false,
+      starCoreShield: 0,
+      dawnArmorStacks: 0,
+      shadowmoonAttackBonusPercent: 0,
+      shadowmoonAttackBonusTurns: 0,
+      shadowmoonAfterimageTurns: 0,
+      shadowmoonStealthUsed: false,
+      shadowmoonStealthActive: false,
+      moonStalkerGuaranteedHitsRemaining: 0,
+      moonStalkerStaffDamageTurns: 0,
       actionLockTurns: 0,
       monsterStatuses: [],
       playerStatuses: [],
@@ -4136,13 +4390,36 @@ export default function Home() {
           weaponItem.specialAbilityId
         )
       : undefined;
+    const leggingsItem = equippedItems.find(item => item.slot === "護腿");
+    const leggingsAbility = leggingsItem
+      ? getEquipmentSpecialAbility(
+          leggingsItem.name,
+          leggingsItem.rarity,
+          leggingsItem.specialAbilityId
+        )
+      : undefined;
+    const amuletItem = equippedItems.find(item => item.slot === "護身符");
+    const amuletAbility = amuletItem
+      ? getEquipmentSpecialAbility(
+          amuletItem.name,
+          amuletItem.rarity,
+          amuletItem.specialAbilityId
+        )
+      : undefined;
+    const leggingsPassiveState = battle.leggingsPassiveState ?? {
+      asuraCritStackTurns: [],
+      nextGaleAttackBonusDamage: 0,
+    };
     const weaponPassiveState = battle.weaponPassiveState ?? {
       ...INITIAL_WEAPON_PASSIVE_BATTLE_STATE,
     };
     const activeWeaponBuffs = battle.weaponTimedBuffs ?? [];
-    const activeWeaponBuffBonuses = getWeaponTimedBuffBonuses(activeWeaponBuffs);
+    const activeWeaponBuffBonuses =
+      getWeaponTimedBuffBonuses(activeWeaponBuffs);
     const mageStaff = isMage
-      ? equippedItems.find(item => item.slot === "武器" && item.weaponType === "法杖")
+      ? equippedItems.find(
+          item => item.slot === "武器" && item.weaponType === "法杖"
+        )
       : undefined;
     const staffStatusEffect: SkillStatusEffect | undefined = mageStaff?.element
       ? {
@@ -4178,9 +4455,28 @@ export default function Home() {
             0)
     );
     if (selectedSkill && (battle.skillCooldowns[selectedSkill.id] ?? 0) > 0) {
-      showToast(`「${selectedSkill.name}」還要 ${battle.skillCooldowns[selectedSkill.id]} 回合才能使用`);
+      showToast(
+        `「${selectedSkill.name}」還要 ${battle.skillCooldowns[selectedSkill.id]} 回合才能使用`
+      );
       return;
     }
+    const astralSkillResolution =
+      leggingsAbility?.id === "astral-leggings" && selectedSkill
+        ? resolveAstralLeggingsSkillEffect(
+            leggingsAbility,
+            effectiveAbilities.health,
+            true
+          )
+        : {
+            triggered: false,
+            healing: 0,
+            nextSkillCritRateBonusPercent: 0,
+          };
+    const nextSkillCritRateBonusAfterAction = astralSkillResolution.triggered
+      ? astralSkillResolution.nextSkillCritRateBonusPercent
+      : selectedSkill?.effectType === "damage"
+        ? 0
+        : (battle.nextSkillCritRateBonusPercent ?? 0);
     const truthDoubleCastTriggered = Boolean(
       selectedSkill &&
         selectedSkill.effectType !== "buff" &&
@@ -4190,11 +4486,15 @@ export default function Home() {
     );
     const usedSkillIds = battle.usedSkillIds;
     const nextSkillCooldowns = Object.fromEntries(
-      Object.entries(battle.skillCooldowns).map(([id, turns]) => [id, Math.max(0, turns - 1)])
+      Object.entries(battle.skillCooldowns).map(([id, turns]) => [
+        id,
+        Math.max(0, turns - 1),
+      ])
     );
     if (selectedSkill && selectedSkill.cooldownTurns > 0) {
       const passiveCooldownReduction =
-        helmetAbility?.effects.cooldownReductionOnSkill ?? 0;
+        (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) +
+        (activeLegendarySetBonuses.astral ? 1 : 0);
       const cooldownReduction =
         (selectedSkill.damageType === "魔法"
           ? Math.floor((effectiveCombatStats.castSpeedPercent ?? 0) / 10)
@@ -4206,39 +4506,72 @@ export default function Home() {
             selectedSkill.cooldownTurns - cooldownReduction
           );
     }
-    const activeBuff = selectedSkill && (
-      selectedSkill.effectType === "buff" ||
-      selectedSkill.damageBonusPercent > 0 ||
-      selectedSkill.damageReductionPercent !== 0 ||
-      (selectedSkill.healPercentMaxHealth ?? 0) > 0 ||
-      (selectedSkill.dodgeRateBonusPercent ?? 0) > 0
-    )
-      ? {
-          skillId: selectedSkill.id,
-          turnsRemaining: selectedSkill.durationTurns,
-          damageBonusPercent: selectedSkill.damageBonusPercent,
-          damageReductionPercent: selectedSkill.damageReductionPercent,
-          healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
-          dodgeRateBonusPercent: selectedSkill.dodgeRateBonusPercent ?? 0,
-        }
-      : battle.activeBuff;
-    const nextActiveBuff = activeBuff && activeBuff.turnsRemaining > 1
-      ? { ...activeBuff, turnsRemaining: activeBuff.turnsRemaining - 1 }
-      : null;
+    const activeBuff =
+      selectedSkill &&
+      (selectedSkill.effectType === "buff" ||
+        selectedSkill.damageBonusPercent > 0 ||
+        selectedSkill.damageReductionPercent !== 0 ||
+        (selectedSkill.healPercentMaxHealth ?? 0) > 0 ||
+        (selectedSkill.dodgeRateBonusPercent ?? 0) > 0)
+        ? {
+            skillId: selectedSkill.id,
+            turnsRemaining: selectedSkill.durationTurns,
+            damageBonusPercent: selectedSkill.damageBonusPercent,
+            damageReductionPercent: selectedSkill.damageReductionPercent,
+            healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
+            dodgeRateBonusPercent: selectedSkill.dodgeRateBonusPercent ?? 0,
+          }
+        : battle.activeBuff;
+    const nextActiveBuff =
+      activeBuff && activeBuff.turnsRemaining > 1
+        ? { ...activeBuff, turnsRemaining: activeBuff.turnsRemaining - 1 }
+        : null;
     const monster = activeBattleMonster;
-    const targetGroupMember = battle.groupMembers?.find(
-      member => member.id === battle.targetMonsterMemberId && member.health > 0
-    ) ?? battle.groupMembers?.find(member => member.health > 0);
-    const targetMonsterHealth = targetGroupMember?.health ?? battle.monsterHealth;
-    const targetMonsterMaxHealth = targetGroupMember?.maxHealth ?? monster.health;
+    const targetGroupMember =
+      battle.groupMembers?.find(
+        member =>
+          member.id === battle.targetMonsterMemberId && member.health > 0
+      ) ?? battle.groupMembers?.find(member => member.health > 0);
+    const targetMonsterHealth =
+      targetGroupMember?.health ?? battle.monsterHealth;
+    const targetMonsterMaxHealth =
+      targetGroupMember?.maxHealth ?? monster.health;
     const targetMonsterDefense = targetGroupMember?.defense ?? monster.defense;
-    const targetMonsterDodgeRate = targetGroupMember?.dodgeRate ?? monster.dodgeRate;
+    const targetMonsterDodgeRate =
+      targetGroupMember?.dodgeRate ?? monster.dodgeRate;
     const targetPhysicalResistance =
-      targetGroupMember?.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0;
+      targetGroupMember?.physicalResistancePercent ??
+      monster.physicalResistancePercent ??
+      0;
     const targetMagicResistance =
-      targetGroupMember?.magicResistancePercent ?? monster.magicResistancePercent ?? 0;
+      targetGroupMember?.magicResistancePercent ??
+      monster.magicResistancePercent ??
+      0;
+    const dawnArmorStacksAtStart = Math.min(
+      chestAbility?.effects.dawnArmorMaxStacks ?? 0,
+      battle.dawnArmorStacks ?? 0
+    );
+    const monsterDisarmed = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "繳械"
+    );
     const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
-    const statusDamageTaken = Math.min(playerStatusTick.damage, battle.playerHealth);
+    const statusDamageTaken = Math.min(
+      playerStatusTick.damage,
+      battle.playerHealth
+    );
+    const starCoreStatusShieldResolution = resolveStarCoreShieldDamage(
+      battle.starCoreShield ?? 0,
+      statusDamageTaken
+    );
+    const statusDamageAfterStarCoreShield =
+      starCoreStatusShieldResolution.damageRemaining;
+    const starCoreShieldGain = getStarCoreShieldGain(
+      amuletAbility,
+      effectiveAbilities.intelligence,
+      Boolean(selectedSkill)
+    );
+    const starCoreShieldAfterSkillCast =
+      starCoreStatusShieldResolution.shieldRemaining + starCoreShieldGain;
     const initialDivineShieldState = battle.divineShield ?? {
       charge: 0,
       remainingAbsorb: 0,
@@ -4250,10 +4583,22 @@ export default function Home() {
       initialDivineShieldState,
       battle.playerHealth,
       effectiveAbilities.health,
-      statusDamageTaken
+      statusDamageAfterStarCoreShield
     );
     const healthAfterPlayerStatus = statusShieldResolution.health;
     const statusDamageActuallyTaken = statusShieldResolution.damageTaken;
+    const shadowmoonStealthTriggered = Boolean(
+      leggingsAbility?.id === "moon-stalker-leggings" &&
+        healthAfterPlayerStatus <
+          effectiveAbilities.health *
+            ((leggingsAbility.effects
+              .moonStalkerLeggingsHealthThresholdPercent ?? 40) /
+              100) &&
+        !battle.shadowmoonStealthUsed
+    );
+    const shadowmoonStealthActive = Boolean(
+      battle.shadowmoonStealthActive || shadowmoonStealthTriggered
+    );
     const activeHelmetEffects = getActiveEquipmentSpecialEffects(
       helmetAbility,
       healthAfterPlayerStatus,
@@ -4266,6 +4611,14 @@ export default function Home() {
       effectiveAbilities.health,
       battle.turn,
       battle.galeStacks ?? 0
+    );
+    const activeLeggingsEffects = getActiveEquipmentSpecialEffects(
+      leggingsAbility,
+      healthAfterPlayerStatus,
+      effectiveAbilities.health,
+      battle.turn,
+      0,
+      leggingsPassiveState.asuraCritStackTurns.length
     );
     const requirementAbilities = getAbilityValuesForRequirementCheck(
       monster.levelGate === "soul",
@@ -4292,13 +4645,50 @@ export default function Home() {
         0
       )
     );
+    const targetDefenseBonusPercent = (battle.monsterStatuses ?? []).reduce(
+      (total, status) => total + (status.defenseBonusPercent ?? 0),
+      0
+    );
+    const targetIsMoonMarked = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "月蝕印記"
+    );
     const targetDefenseAfterDebuff = Math.max(
       0,
-      targetMonsterDefense * (1 - targetArmorReductionPercent / 100)
+      targetMonsterDefense *
+        (1 + targetDefenseBonusPercent / 100) *
+        (1 - targetArmorReductionPercent / 100) *
+        (1 -
+          (targetIsMoonMarked
+            ? (amuletAbility?.effects.moonStalkerMarkDefensePiercePercent ?? 20)
+            : 0) /
+            100) *
+        (1 -
+          (helmetAbility?.effects.dawnGuardianDefensePiercePercent ?? 0) / 100)
+    );
+    const targetIsDawnMarked = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "太陽印記"
     );
     const targetIsFrozen = (battle.monsterStatuses ?? []).some(
       status => status.kind === "冰凍"
     );
+    const targetIsPetrified = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "石化"
+    );
+    const hunterFangHighHealthTarget = Boolean(
+      amuletAbility?.id === "hunter-king-fang" &&
+        targetMonsterHealth >
+          targetMonsterMaxHealth *
+            ((amuletAbility.effects.hunterFangHighHealthThresholdPercent ??
+              70) /
+              100)
+    );
+    const hunterFangCritRateBonus = hunterFangHighHealthTarget
+      ? (amuletAbility?.effects.hunterFangCritRateBonusPercent ?? 15)
+      : 0;
+    const medusaEyeDamageBonusPercent =
+      amuletAbility?.id === "medusa-eye" && targetIsPetrified
+        ? (amuletAbility.effects.medusaEyeDamageBonusVsPetrifiedPercent ?? 25)
+        : 0;
     const forestwindDamageBonusPercent =
       weaponAbility?.id === "forestwind-bow"
         ? Math.min(
@@ -4321,8 +4711,13 @@ export default function Home() {
       weaponAbility?.id === "kings-sword" &&
       targetMonsterHealth <
         targetMonsterMaxHealth *
-          ((weaponAbility.effects.kingsSwordTargetHealthBelowPercent ?? 50) / 100)
-        ? weaponAbility.effects.kingsSwordCritDamageBonusPercent ?? 25
+          ((weaponAbility.effects.kingsSwordTargetHealthBelowPercent ?? 50) /
+            100)
+        ? (weaponAbility.effects.kingsSwordCritDamageBonusPercent ?? 25)
+        : 0;
+    const pendingSkillCritRateBonusPercent =
+      selectedSkill?.effectType === "damage"
+        ? (battle.nextSkillCritRateBonusPercent ?? 0)
         : 0;
     const pendingAttackCritRateBonusPercent =
       battle.nextAttackCritRateBonusPercent ?? 0;
@@ -4331,28 +4726,44 @@ export default function Home() {
       effectiveCombatStats.critRate +
         activeWeaponBuffBonuses.critRateBonusPercent +
         hunterCritBonusPercent +
-        pendingAttackCritRateBonusPercent
+        hunterFangCritRateBonus +
+        (targetIsMoonMarked
+          ? (amuletAbility?.effects.moonStalkerMarkCritRateBonusPercent ?? 15)
+          : 0) +
+        (weaponAbility?.id === "moon-stalker-bow" &&
+        (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0
+          ? (weaponAbility.effects.moonStalkerBowCritRateBonusPercent ?? 10)
+          : 0) +
+        pendingAttackCritRateBonusPercent +
+        pendingSkillCritRateBonusPercent
     );
     const effectiveCritDamage =
       effectiveCombatStats.critDamage +
       hunterCritDamageBonusPercent +
-      kingSwordCritDamageBonusPercent;
+      kingSwordCritDamageBonusPercent +
+      (helmetAbility?.id === "moon-stalker-vision"
+        ? (helmetAbility.effects.moonStalkerCriticalDamageBonusPercent ?? 20)
+        : 0);
     const extraDefensePiercePercent = Math.min(
       100,
       (battle.nextAttackDefensePiercePercent ?? 0) +
+        (hunterFangHighHealthTarget
+          ? (amuletAbility?.effects.hunterFangDefensePiercePercent ?? 20)
+          : 0) +
         (moonstringArrowShot
-          ? weaponAbility?.effects.moonstringDefensePiercePercent ?? 25
+          ? (weaponAbility?.effects.moonstringDefensePiercePercent ?? 25)
           : 0)
     );
-    const physicalDamageReductionPercent = damageType === "物理"
-      ? Math.min(
-          80,
-          (battle.playerStatuses ?? []).reduce(
-            (total, status) => total + (status.damageReductionPercent ?? 0),
-            0
+    const physicalDamageReductionPercent =
+      damageType === "物理"
+        ? Math.min(
+            80,
+            (battle.playerStatuses ?? []).reduce(
+              (total, status) => total + (status.damageReductionPercent ?? 0),
+              0
+            )
           )
-        )
-      : 0;
+        : 0;
     const monsterUsesSkill = Boolean(
       monster.elementalAttack && (battle.monsterSkillCooldown ?? 0) <= 0
     );
@@ -4360,35 +4771,77 @@ export default function Home() {
       ? (monster.elementalAttack?.skillDamagePercent ?? 100) / 100
       : 1;
     const nextMonsterSkillCooldown = monsterUsesSkill
-      ? monster.elementalAttack?.cooldownTurns ?? 0
+      ? (monster.elementalAttack?.cooldownTurns ?? 0)
       : Math.max(0, (battle.monsterSkillCooldown ?? 0) - 1);
     const monsterDodges = actionLocked
       ? false
       : selectedSkill?.effectType === "buff"
         ? false
-        : Math.random() < targetMonsterDodgeRate / 100;
+        : weaponAbility?.id === "dawn-warden-bow" ||
+            (weaponAbility?.id === "moon-stalker-bow" &&
+              (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0)
+          ? false
+          : Math.random() < targetMonsterDodgeRate / 100;
+    const dawnWardenSwordTriggered = Boolean(
+      weaponAbility?.id === "dawn-warden-sword" &&
+        !selectedSkill &&
+        isDamageAction &&
+        !monsterDodges &&
+        rollPercentChance(
+          weaponAbility.effects.dawnWardenSwordProcChancePercent ?? 20
+        )
+    );
+    const dawnWardenDaggerTriggered = Boolean(
+      weaponAbility?.id === "dawn-warden-dagger" &&
+        isDamageAction &&
+        !monsterDodges &&
+        rollPercentChance(
+          weaponAbility.effects.dawnWardenDaggerProcChancePercent ?? 25
+        )
+    );
     const dawnProcTriggered = Boolean(
       weaponAbility?.id === "dawn-sword" &&
         isDamageAction &&
         !monsterDodges &&
-        rollPercentChance(
-          weaponAbility.effects.dawnProcChancePercent ?? 20
-        )
+        rollPercentChance(weaponAbility.effects.dawnProcChancePercent ?? 20)
     );
     const attackCanCrit =
-      !actionLocked &&
-      !monsterDodges &&
-      selectedSkill?.effectType !== "buff";
+      !actionLocked && !monsterDodges && selectedSkill?.effectType !== "buff";
     const guaranteedCounterCritical =
       Boolean(battle.nextAttackGuaranteedCrit) && attackCanCrit;
     const criticalHit =
       attackCanCrit &&
       (guaranteedCounterCritical ||
-        (!isMage && Math.random() < effectiveCritRate / 100));
+        ((!isMage || pendingSkillCritRateBonusPercent > 0) &&
+          Math.random() < effectiveCritRate / 100));
     const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
     const basePlayerDamage = isArcher
       ? applyArcherAttackBonus(rawPlayerDamage, state.archerDodgeFailStacks)
       : rawPlayerDamage;
+    const nightSetTargetAccuracyReduction = Math.min(
+      80,
+      (battle.monsterStatuses ?? []).reduce(
+        (total, status) => total + (status.accuracyReductionPercent ?? 0),
+        0
+      )
+    );
+    const nightSetCurrentDodgeRate =
+      Math.min(
+        100,
+        effectiveCombatStats.dodgeRate +
+          (activeBuff?.dodgeRateBonusPercent ?? 0) +
+          activeChestEffects.dodgeRateBonusPercent +
+          activeLeggingsEffects.dodgeRateBonusPercent +
+          activeWeaponBuffBonuses.dodgeRateBonusPercent +
+          nightSetTargetAccuracyReduction +
+          weaponPassiveState.nextEnemyAttackDodgeBonusPercent +
+          weaponPassiveState.enemyAccuracyReductionNextPercent
+      ) *
+      (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
+    const nightSetBonusRawDamage =
+      activeLegendarySetBonuses.night && battle.turn % 3 === 0 && isDamageAction
+        ? Math.round(basePlayerDamage * (nightSetCurrentDodgeRate / 100))
+        : 0;
     const damageBeforeDefense = criticalHit
       ? Math.round((basePlayerDamage * effectiveCritDamage) / 100)
       : basePlayerDamage;
@@ -4398,18 +4851,38 @@ export default function Home() {
       activeChestEffects.attackDamageBonusPercent +
       counterDamageBonusPercent +
       activeWeaponBuffBonuses.attackDamageBonusPercent +
+      (helmetAbility?.id === "moon-stalker-vision" &&
+      (battle.shadowmoonAttackBonusTurns ?? 0) > 0
+        ? (battle.shadowmoonAttackBonusPercent ?? 10)
+        : 0) +
+      (weaponAbility?.id === "moon-stalker-staff" &&
+      (battle.moonStalkerStaffDamageTurns ?? 0) > 0
+        ? (weaponAbility.effects.moonStalkerStaffBonusDamagePercent ?? 30)
+        : 0) +
+      (shadowmoonStealthActive
+        ? (leggingsAbility?.effects.moonStalkerStealthDamageBonusPercent ?? 50)
+        : 0) +
       forestwindDamageBonusPercent +
+      medusaEyeDamageBonusPercent +
+      (targetIsDawnMarked
+        ? (amuletAbility?.effects.dawnMarkDamageBonusPercent ?? 12)
+        : 0) +
+      (damageType === "魔法" && starCoreShieldAfterSkillCast > 0
+        ? (amuletAbility?.effects.starCoreMagicDamageBonusPercent ?? 15)
+        : 0) +
       (arcaneEchoTriggered
-        ? weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30
+        ? (weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30)
         : 0);
-    const physicalDamageBonusPercent = damageType === "物理"
-      ? activeChestEffects.physicalDamageBonusPercent
-      : 0;
+    const physicalDamageBonusPercent =
+      damageType === "物理"
+        ? activeChestEffects.physicalDamageBonusPercent +
+          activeLeggingsEffects.physicalDamageBonusPercent
+        : 0;
     const frozenTargetDamageBonusPercent =
       damageType === "魔法" &&
       targetIsFrozen &&
       weaponAbility?.id === "sapphire-staff"
-        ? weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20
+        ? (weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20)
         : 0;
     const buffedPlayerDamage = Math.round(
       damageBeforeDefense *
@@ -4421,13 +4894,18 @@ export default function Home() {
     );
     const instantExecute = Boolean(
       selectedSkill?.executeBelowHealthPercent &&
-      targetMonsterHealth <
-        targetMonsterMaxHealth * (selectedSkill.executeBelowHealthPercent / 100)
+        targetMonsterHealth <
+          targetMonsterMaxHealth *
+            (selectedSkill.executeBelowHealthPercent / 100)
     );
-    const skillHitCount = selectedSkill?.hitCountMin && selectedSkill.hitCountMax
-      ? selectedSkill.hitCountMin +
-        Math.floor(Math.random() * (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1))
-      : 1;
+    const skillHitCount =
+      selectedSkill?.hitCountMin && selectedSkill.hitCountMax
+        ? selectedSkill.hitCountMin +
+          Math.floor(
+            Math.random() *
+              (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1)
+          )
+        : 1;
     const skillCastCount = truthDoubleCastTriggered ? 2 : 1;
     const skillWithWeaponPierce = selectedSkill
       ? {
@@ -4438,64 +4916,274 @@ export default function Home() {
           ),
         }
       : undefined;
+    const dawnBowTargetCount = Math.max(
+      1,
+      battle.groupMembers
+        ? getLivingMonsterGroupMembers(battle.groupMembers).length
+        : 1
+    );
+    const dawnBowDamageAgainst = (member?: MonsterGroupMember) => {
+      const livingMembers = battle.groupMembers
+        ? getLivingMonsterGroupMembers(battle.groupMembers)
+        : [];
+      const targetIndex = member
+        ? Math.max(
+            0,
+            livingMembers.findIndex(candidate => candidate.id === member.id)
+          )
+        : 0;
+      const progressiveBonusPercent = Math.min(
+        weaponAbility?.effects.dawnWardenBowMaxDamageBonusPercent ?? 30,
+        targetIndex *
+          (weaponAbility?.effects.dawnWardenBowDamageBonusPerTargetPercent ??
+            10)
+      );
+      const targetDefense = member
+        ? (member.defense ?? targetMonsterDefense) *
+          (1 - targetArmorReductionPercent / 100) *
+          (1 -
+            (helmetAbility?.effects.dawnGuardianDefensePiercePercent ?? 0) /
+              100)
+        : targetDefenseAfterDebuff;
+      const dividedAttack = Math.round(
+        (buffedPlayerDamage / dawnBowTargetCount) *
+          (1 + progressiveBonusPercent / 100)
+      );
+      const rawDamage = selectedSkill
+        ? calculateSpecialSkillDamage(
+            dividedAttack,
+            targetDefense,
+            skillWithWeaponPierce ?? selectedSkill
+          ) *
+          skillHitCount *
+          skillCastCount
+        : Math.max(
+            1,
+            dividedAttack -
+              getDefenseReduction(
+                targetDefense * (1 - extraDefensePiercePercent / 100)
+              )
+          );
+      const targetResistance =
+        (damageType === "魔法"
+          ? (member?.magicResistancePercent ?? targetMagicResistance)
+          : (member?.physicalResistancePercent ?? targetPhysicalResistance)) -
+        (damageType === "魔法"
+          ? (effectiveCombatStats.magicPenetrationPercent ?? 0)
+          : 0) -
+        (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
+      return Math.max(
+        1,
+        Math.round(rawDamage * (1 - Math.max(0, targetResistance) / 100))
+      );
+    };
     const baseRawDamageDealt = instantExecute
       ? targetMonsterHealth
       : actionLocked
-      ? 0
-      : monsterDodges
-      ? 0
-      : selectedSkill?.effectType === "buff"
         ? 0
-      : selectedSkill
-        ? calculateSpecialSkillDamage(
-            buffedPlayerDamage,
-            targetDefenseAfterDebuff,
-            skillWithWeaponPierce ?? selectedSkill
-          ) * skillHitCount * skillCastCount
-        : Math.max(
-            1,
-            buffedPlayerDamage -
-              getDefenseReduction(
-                targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
-              )
-          );
+        : monsterDodges
+          ? 0
+          : selectedSkill?.effectType === "buff"
+            ? 0
+            : selectedSkill
+              ? calculateSpecialSkillDamage(
+                  buffedPlayerDamage,
+                  targetDefenseAfterDebuff,
+                  skillWithWeaponPierce ?? selectedSkill
+                ) *
+                skillHitCount *
+                skillCastCount
+              : Math.max(
+                  1,
+                  buffedPlayerDamage -
+                    getDefenseReduction(
+                      targetDefenseAfterDebuff *
+                        (1 - extraDefensePiercePercent / 100)
+                    )
+                );
+    const solarEyeTriggered = Boolean(
+      amuletAbility?.id === "solar-eye" &&
+        baseRawDamageDealt > 0 &&
+        !instantExecute &&
+        rollSolarEyeProc(amuletAbility, true)
+    );
+    const solarEyeBonusRawDamage = solarEyeTriggered
+      ? Math.round(
+          (effectiveAbilities.strength + effectiveAbilities.intelligence) *
+            ((amuletAbility?.effects.solarEyeHybridDamagePercent ?? 50) / 100)
+        )
+      : 0;
+    const solarEyeBonusAfterDefense = Math.max(
+      0,
+      solarEyeBonusRawDamage -
+        getDefenseReduction(
+          targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+        )
+    );
     const dawnBonusDamage = dawnProcTriggered
       ? Math.round(
           basePlayerDamage *
-            ((weaponAbility?.effects.dawnBonusDamagePercentAttack ?? 20) / 100) *
+            ((weaponAbility?.effects.dawnBonusDamagePercentAttack ?? 20) /
+              100) *
             (targetMonsterHealth >
             targetMonsterMaxHealth *
-              ((weaponAbility?.effects.dawnHighHealthThresholdPercent ?? 70) / 100)
-              ? weaponAbility?.effects.dawnHighHealthDamageMultiplier ?? 2
+              ((weaponAbility?.effects.dawnHighHealthThresholdPercent ?? 70) /
+                100)
+              ? (weaponAbility?.effects.dawnHighHealthDamageMultiplier ?? 2)
               : 1)
         )
       : 0;
     const firmamentBonusDamage =
-      criticalHit &&
-      isDamageAction &&
-      weaponAbility?.id === "firmament-bow"
+      criticalHit && isDamageAction && weaponAbility?.id === "firmament-bow"
         ? Math.round(
             effectiveAbilities.strength *
-              ((weaponAbility.effects.firmamentBonusDamagePercentStrength ?? 50) / 100)
+              ((weaponAbility.effects.firmamentBonusDamagePercentStrength ??
+                50) /
+                100)
           )
         : 0;
+    const galeLeggingBonusRawDamage =
+      isDamageAction && damageType === "物理"
+        ? leggingsPassiveState.nextGaleAttackBonusDamage
+        : 0;
+    const galeLeggingBonusAfterDefense = Math.max(
+      0,
+      galeLeggingBonusRawDamage -
+        getDefenseReduction(
+          targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+        )
+    );
+    const nightSetBonusAfterDefense = Math.max(
+      0,
+      nightSetBonusRawDamage -
+        getDefenseReduction(
+          targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+        )
+    );
     const rawDamageDealt =
       baseRawDamageDealt > 0 && !instantExecute
-        ? baseRawDamageDealt + dawnBonusDamage + firmamentBonusDamage
+        ? baseRawDamageDealt +
+          dawnBonusDamage +
+          firmamentBonusDamage +
+          galeLeggingBonusAfterDefense +
+          nightSetBonusAfterDefense +
+          solarEyeBonusAfterDefense
         : baseRawDamageDealt;
-    const resistancePercent = damageType === "魔法"
+    const moonStalkerDaggerDoubleStrikeTriggered = Boolean(
+      weaponAbility?.id === "moon-stalker-dagger" &&
+        criticalHit &&
+        rawDamageDealt > 0 &&
+        rollPercentChance(
+          weaponAbility.effects.moonStalkerDaggerDoubleStrikeChancePercent ?? 35
+        )
+    );
+    const moonStalkerDaggerBonusDamage = moonStalkerDaggerDoubleStrikeTriggered
       ? Math.max(
           0,
-          targetMagicResistance -
-            (effectiveCombatStats.magicPenetrationPercent ?? 0)
+          Math.round(
+            baseRawDamageDealt *
+              ((weaponAbility?.effects.moonStalkerDaggerBonusDamagePercent ??
+                50) /
+                100)
+          ) +
+            getDefenseReduction(targetDefenseAfterDebuff) -
+            getDefenseReduction(
+              targetDefenseAfterDebuff *
+                (1 -
+                  (weaponAbility?.effects
+                    .moonStalkerDaggerDefensePiercePercent ?? 15) /
+                    100)
+            )
         )
-      : targetPhysicalResistance;
+      : 0;
+    const rawDamageWithMoonStalkerBonus =
+      rawDamageDealt + moonStalkerDaggerBonusDamage;
+    const resistancePercent =
+      damageType === "魔法"
+        ? Math.max(
+            0,
+            targetMagicResistance -
+              (effectiveCombatStats.magicPenetrationPercent ?? 0) -
+              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
+          )
+        : Math.max(
+            0,
+            targetPhysicalResistance -
+              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
+          );
     const damageDealt = instantExecute
       ? battle.monsterHealth
       : rawDamageDealt === 0
-      ? 0
-      : Math.max(1, Math.round(rawDamageDealt * (1 - resistancePercent / 100)));
+        ? 0
+        : weaponAbility?.id === "dawn-warden-bow"
+          ? dawnBowDamageAgainst(targetGroupMember)
+          : Math.max(
+              1,
+              Math.round(
+                rawDamageWithMoonStalkerBonus * (1 - resistancePercent / 100)
+              )
+            );
     const weaponHitLanded = isDamageAction && damageDealt > 0;
+    const moonStalkerVisionTriggered = Boolean(
+      helmetAbility?.id === "moon-stalker-vision" && weaponHitLanded
+    );
+    const moonStalkerMarkTriggered = Boolean(
+      amuletAbility?.id === "moon-stalker-amulet" &&
+        weaponHitLanded &&
+        !targetIsMoonMarked &&
+        rollPercentChance(
+          amuletAbility.effects.moonStalkerMarkChancePercent ?? 20
+        )
+    );
+    const moonStalkerBowTriggered = Boolean(
+      weaponAbility?.id === "moon-stalker-bow" && criticalHit && weaponHitLanded
+    );
+    const moonStalkerStaffFreezeTriggered = Boolean(
+      weaponAbility?.id === "moon-stalker-staff" &&
+        selectedSkill &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.moonStalkerStaffFreezeChancePercent ?? 50
+        )
+    );
+    const shadowmoonAttackBonusTurnsAfterAction =
+      helmetAbility?.id === "moon-stalker-vision"
+        ? moonStalkerVisionTriggered
+          ? (helmetAbility.effects.moonStalkerEffectDurationTurns ?? 3)
+          : Math.max(0, (battle.shadowmoonAttackBonusTurns ?? 0) - 1)
+        : 0;
+    const shadowmoonAttackBonusAfterAction =
+      helmetAbility?.id === "moon-stalker-vision"
+        ? moonStalkerVisionTriggered
+          ? (helmetAbility.effects.moonStalkerAttackBonusPercent ?? 10)
+          : shadowmoonAttackBonusTurnsAfterAction > 0
+            ? (battle.shadowmoonAttackBonusPercent ?? 10)
+            : 0
+        : 0;
+    const moonStalkerGuaranteedHitsAfterAction =
+      weaponAbility?.id === "moon-stalker-bow"
+        ? moonStalkerBowTriggered
+          ? (weaponAbility.effects.moonStalkerBowGuaranteedHits ?? 3)
+          : Math.max(
+              0,
+              (battle.moonStalkerGuaranteedHitsRemaining ?? 0) -
+                (isDamageAction &&
+                (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0
+                  ? 1
+                  : 0)
+            )
+        : 0;
+    const moonStalkerStaffDamageTurnsAfterAction =
+      weaponAbility?.id === "moon-stalker-staff"
+        ? moonStalkerStaffFreezeTriggered
+          ? (weaponAbility.effects.moonStalkerEffectDurationTurns ?? 2)
+          : Math.max(0, (battle.moonStalkerStaffDamageTurns ?? 0) - 1)
+        : 0;
+    const medusaEyeAttackTriggered = Boolean(
+      amuletAbility?.id === "medusa-eye" &&
+        weaponHitLanded &&
+        rollMedusaEyeProc(amuletAbility, true)
+    );
     const moonshadowTriggered = Boolean(
       weaponAbility?.id === "moonshadow-sword" &&
         criticalHit &&
@@ -4530,8 +5218,7 @@ export default function Home() {
         : weaponPassiveState.fireVeinMarks;
     const fireVeinBurstTriggered = Boolean(
       weaponAbility?.id === "fire-vein-staff" &&
-        fireVeinMarkCount >=
-          (weaponAbility.effects.fireVeinMarksToBurst ?? 5)
+        fireVeinMarkCount >= (weaponAbility.effects.fireVeinMarksToBurst ?? 5)
     );
     const genesisChainTriggered = Boolean(
       weaponAbility?.id === "genesis-staff" &&
@@ -4551,7 +5238,9 @@ export default function Home() {
       weaponAbility?.id === "nature-staff" &&
         selectedSkill &&
         !actionLocked &&
-        rollPercentChance(weaponAbility.effects.natureStaffHealChancePercent ?? 35)
+        rollPercentChance(
+          weaponAbility.effects.natureStaffHealChancePercent ?? 35
+        )
     );
     const triggeredWeaponTimedBuffs: WeaponTimedBuff[] = [];
     if (swiftfangTriggered) {
@@ -4573,6 +5262,94 @@ export default function Home() {
       });
     }
     const weaponStatusEffects: SkillStatusEffect[] = [];
+    if (moonStalkerVisionTriggered) {
+      weaponStatusEffects.push({
+        kind: "虛弱",
+        element: "奧術",
+        chance: 1,
+        durationTurns:
+          helmetAbility?.effects.moonStalkerEffectDurationTurns ?? 3,
+        damagePerTurn: 0,
+        outgoingDamageReductionPercent:
+          helmetAbility?.effects.moonStalkerEnemyAttackStealPercent ?? 10,
+      });
+    }
+    if (moonStalkerMarkTriggered) {
+      weaponStatusEffects.push({
+        kind: "月蝕印記",
+        element: "奧術",
+        chance: 1,
+        durationTurns: 9999,
+        damagePerTurn: 0,
+      });
+    }
+    if (moonStalkerBowTriggered) {
+      weaponStatusEffects.push({
+        kind: "致盲",
+        element: "自然",
+        chance: 1,
+        durationTurns: 2,
+        damagePerTurn: 0,
+        accuracyReductionPercent:
+          weaponAbility?.effects.moonStalkerBowBlindAccuracyReductionPercent ??
+          20,
+      });
+    }
+    if (moonStalkerStaffFreezeTriggered) {
+      weaponStatusEffects.push({
+        kind: "霜月遲緩",
+        element: "冰霜",
+        chance: 1,
+        durationTurns:
+          weaponAbility?.effects.moonStalkerStaffFreezeDurationTurns ?? 2,
+        damagePerTurn: 0,
+        outgoingDamageReductionPercent:
+          weaponAbility?.effects.moonStalkerStaffEnemyDamageReductionPercent ??
+          20,
+        defenseBonusPercent:
+          weaponAbility?.effects.moonStalkerStaffEnemyDefenseBonusPercent ?? 20,
+      });
+    }
+    if (amuletAbility?.id === "dawn-guardian-sunmark" && weaponHitLanded) {
+      weaponStatusEffects.push({
+        kind: "太陽印記",
+        element: "火焰",
+        chance: 1,
+        durationTurns: 9999,
+        damagePerTurn: 0,
+      });
+    }
+    if (solarEyeTriggered) {
+      weaponStatusEffects.push({
+        kind: "致盲",
+        element: "自然",
+        chance: 1,
+        durationTurns:
+          amuletAbility?.effects.solarEyeAccuracyReductionDurationTurns ?? 2,
+        damagePerTurn: 0,
+        accuracyReductionPercent:
+          amuletAbility?.effects.solarEyeAccuracyReductionPercent ?? 15,
+      });
+    }
+    if (medusaEyeAttackTriggered) {
+      weaponStatusEffects.push({
+        kind: "石化",
+        element: "自然",
+        chance: 1,
+        durationTurns: 1,
+        damagePerTurn: 0,
+      });
+    }
+    if (dawnWardenSwordTriggered) {
+      weaponStatusEffects.push({
+        kind: "暈眩",
+        element: "火焰",
+        chance: 1,
+        durationTurns:
+          weaponAbility?.effects.dawnWardenSwordStunDurationTurns ?? 1,
+        damagePerTurn: 0,
+      });
+    }
     if (
       weaponAbility?.id === "starfire-bow" &&
       criticalHit &&
@@ -4587,7 +5364,9 @@ export default function Home() {
           1,
           Math.round(
             damageDealt *
-              ((weaponAbility.effects.starfireBurnPercentOfCriticalDamage ?? 15) / 100)
+              ((weaponAbility.effects.starfireBurnPercentOfCriticalDamage ??
+                15) /
+                100)
           )
         ),
         armorReductionPercent:
@@ -4612,7 +5391,8 @@ export default function Home() {
           )
         ),
         healingReceivedReductionPercent:
-          weaponAbility.effects.poisonThornHealingReceivedReductionPercent ?? 15,
+          weaponAbility.effects.poisonThornHealingReceivedReductionPercent ??
+          15,
       });
     }
     if (
@@ -4634,7 +5414,9 @@ export default function Home() {
     if (
       weaponAbility?.id === "sandfeather-bow" &&
       weaponHitLanded &&
-      rollPercentChance(weaponAbility.effects.sandfeatherProcChancePercent ?? 25)
+      rollPercentChance(
+        weaponAbility.effects.sandfeatherProcChancePercent ?? 25
+      )
     ) {
       weaponStatusEffects.push({
         kind: "致盲",
@@ -4704,11 +5486,10 @@ export default function Home() {
       }
     }
     const arcaneSkillCastThisTurn = Boolean(
-      weaponAbility?.id === "starlight-staff" &&
-        selectedSkill &&
-        !actionLocked
+      weaponAbility?.id === "starlight-staff" && selectedSkill && !actionLocked
     );
-    const arcaneNextCastCount = weaponPassiveState.arcaneSkillCastsSinceEcho +
+    const arcaneNextCastCount =
+      weaponPassiveState.arcaneSkillCastsSinceEcho +
       (arcaneSkillCastThisTurn && !arcaneEchoTriggered ? 1 : 0);
     const weaponPassiveStateAfterPlayerAction: WeaponPassiveBattleState = {
       ...weaponPassiveState,
@@ -4721,32 +5502,51 @@ export default function Home() {
       hunterCritStacks:
         weaponPassiveState.hunterCritStacks + (hunterCriticalTriggered ? 1 : 0),
       starrealmCritStacks,
-      arcaneSkillCastsSinceEcho: weaponAbility?.id === "starlight-staff"
-        ? arcaneEchoTriggered
-          ? 0
-          : arcaneNextCastCount >=
-            (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+      arcaneSkillCastsSinceEcho:
+        weaponAbility?.id === "starlight-staff"
+          ? arcaneEchoTriggered
             ? 0
-            : arcaneNextCastCount
-        : weaponPassiveState.arcaneSkillCastsSinceEcho,
-      arcaneEchoReady: weaponAbility?.id === "starlight-staff"
-        ? arcaneEchoTriggered
-          ? false
-          : arcaneNextCastCount >=
-            (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
-            ? true
-            : weaponPassiveState.arcaneEchoReady
-        : weaponPassiveState.arcaneEchoReady,
-      fireVeinMarks: weaponAbility?.id === "fire-vein-staff"
-        ? fireVeinBurstTriggered
-          ? 0
-          : fireVeinMarkCount
-        : weaponPassiveState.fireVeinMarks,
+            : arcaneNextCastCount >=
+                (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+              ? 0
+              : arcaneNextCastCount
+          : weaponPassiveState.arcaneSkillCastsSinceEcho,
+      arcaneEchoReady:
+        weaponAbility?.id === "starlight-staff"
+          ? arcaneEchoTriggered
+            ? false
+            : arcaneNextCastCount >=
+                (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+              ? true
+              : weaponPassiveState.arcaneEchoReady
+          : weaponPassiveState.arcaneEchoReady,
+      fireVeinMarks:
+        weaponAbility?.id === "fire-vein-staff"
+          ? fireVeinBurstTriggered
+            ? 0
+            : fireVeinMarkCount
+          : weaponPassiveState.fireVeinMarks,
     };
     const weaponTimedBuffsAfterPlayerAction = advanceWeaponTimedBuffs(
       activeWeaponBuffs,
       triggeredWeaponTimedBuffs
     );
+    const leggingsPassiveStateAfterPlayerAction: LeggingPassiveBattleState = {
+      ...leggingsPassiveState,
+      asuraCritStackTurns:
+        leggingsAbility?.id === "asura-leggings"
+          ? advanceAsuraCritStackTurns(
+              leggingsPassiveState.asuraCritStackTurns,
+              criticalHit && weaponHitLanded,
+              leggingsAbility.effects.asuraMaxCritStacks ?? 3,
+              leggingsAbility.effects.asuraCritStackDurationTurns ?? 3
+            )
+          : leggingsPassiveState.asuraCritStackTurns,
+      nextGaleAttackBonusDamage:
+        isDamageAction && damageType === "物理"
+          ? 0
+          : leggingsPassiveState.nextGaleAttackBonusDamage,
+    };
     const nextMonsterStatuses = applyBattleStatusEffects(
       battle.monsterStatuses,
       [
@@ -4757,9 +5557,12 @@ export default function Home() {
       ],
       damageDealt
     );
-    const petrifyBroken = damageDealt > 200 && nextMonsterStatuses.some(
-      status => status.kind === "石化" && status.breakDamageThreshold !== undefined
-    );
+    const petrifyBroken =
+      damageDealt > 200 &&
+      nextMonsterStatuses.some(
+        status =>
+          status.kind === "石化" && status.breakDamageThreshold !== undefined
+      );
     const statusesBeforeTick = petrifyBroken
       ? nextMonsterStatuses.filter(status => status.kind !== "石化")
       : nextMonsterStatuses;
@@ -4781,38 +5584,54 @@ export default function Home() {
       groupDamageResult?.totalDamageApplied ?? damageDealt + statusDamage;
     const weaponAreaDamageType =
       fireVeinBurstTriggered || genesisChainTriggered ? "魔法" : "物理";
-    const weaponAreaRawDamage = starrealmBurstTriggered
+    const weaponAreaRawDamage = dawnWardenSwordTriggered
       ? Math.round(
           basePlayerDamage *
-            ((weaponAbility?.effects.starrealmAoeAttackPercent ?? 80) / 100)
+            ((weaponAbility?.effects.dawnWardenSwordAoeDamagePercentAttack ??
+              150) /
+              100)
         )
-      : fireVeinBurstTriggered
+      : starrealmBurstTriggered
         ? Math.round(
             basePlayerDamage *
-              ((weaponAbility?.effects.fireVeinAoeMagicAttackPercent ?? 100) / 100)
+              ((weaponAbility?.effects.starrealmAoeAttackPercent ?? 80) / 100)
           )
-        : genesisChainTriggered
-          ? weaponAbility?.effects.genesisStaffBonusMagicDamage ?? 30
-          : 0;
-    const weaponAreaResistancePercent = weaponAreaDamageType === "魔法"
-      ? Math.max(
-          0,
-          targetMagicResistance -
-            (effectiveCombatStats.magicPenetrationPercent ?? 0)
-        )
-      : targetPhysicalResistance;
-    const weaponAreaDamagePerTarget = weaponAreaRawDamage > 0
-      ? Math.max(
-          1,
-          Math.round(
-            Math.max(
-              1,
-              weaponAreaRawDamage - getDefenseReduction(targetDefenseAfterDebuff)
-            ) *
-              (1 - weaponAreaResistancePercent / 100)
+        : fireVeinBurstTriggered
+          ? Math.round(
+              basePlayerDamage *
+                ((weaponAbility?.effects.fireVeinAoeMagicAttackPercent ?? 100) /
+                  100)
+            )
+          : genesisChainTriggered
+            ? (weaponAbility?.effects.genesisStaffBonusMagicDamage ?? 30)
+            : 0;
+    const weaponAreaResistancePercent =
+      weaponAreaDamageType === "魔法"
+        ? Math.max(
+            0,
+            targetMagicResistance -
+              (effectiveCombatStats.magicPenetrationPercent ?? 0) -
+              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           )
-        )
-      : 0;
+        : Math.max(
+            0,
+            targetPhysicalResistance -
+              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
+          );
+    const weaponAreaDamagePerTarget =
+      weaponAreaRawDamage > 0
+        ? Math.max(
+            1,
+            Math.round(
+              Math.max(
+                1,
+                weaponAreaRawDamage -
+                  getDefenseReduction(targetDefenseAfterDebuff)
+              ) *
+                (1 - weaponAreaResistancePercent / 100)
+            )
+          )
+        : 0;
     const weaponAreaTargetLimit = genesisChainTriggered
       ? Math.min(
           Number.POSITIVE_INFINITY,
@@ -4834,20 +5653,53 @@ export default function Home() {
         Math.max(0, battle.monsterHealth - primaryAppliedDamage)
       );
     }
+    if (weaponAbility?.id === "dawn-warden-bow" && nextGroupMembers) {
+      const bowAreaResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        member => dawnBowDamageAgainst(member),
+        targetGroupMember?.id
+      );
+      nextGroupMembers = bowAreaResult.members;
+      weaponAreaDamageApplied += bowAreaResult.totalDamageApplied;
+    }
     const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied;
+    const hunterFangKillTriggered = Boolean(
+      amuletAbility?.id === "hunter-king-fang" &&
+        (nextGroupMembers
+          ? nextGroupMembers.find(
+              member => member.id === battle.targetMonsterMemberId
+            )?.health === 0
+          : primaryAppliedDamage >= battle.monsterHealth)
+    );
+    if (hunterFangKillTriggered) {
+      for (const skill of battleSpecialSkills) {
+        if (skill.effectType === "damage" && nextSkillCooldowns[skill.id] > 0) {
+          nextSkillCooldowns[skill.id] = Math.max(
+            0,
+            nextSkillCooldowns[skill.id] -
+              (amuletAbility?.effects.hunterFangCooldownReductionOnKill ?? 1)
+          );
+        }
+      }
+    }
     const actualDamageDealt = groupDamageResult
       ? Math.min(damageDealt, primaryAppliedDamage)
       : damageDealt;
     const actualStatusDamage = primaryAppliedDamage - actualDamageDealt;
-    const nextTargetMonsterMemberId = nextGroupMembers
-      ?.find(member => member.id === battle.targetMonsterMemberId && member.health > 0)?.id
-      ?? nextGroupMembers?.find(member => member.health > 0)?.id;
+    const nextTargetMonsterMemberId =
+      nextGroupMembers?.find(
+        member =>
+          member.id === battle.targetMonsterMemberId && member.health > 0
+      )?.id ?? nextGroupMembers?.find(member => member.health > 0)?.id;
     const remainingGroupCount = nextGroupMembers
       ? getLivingMonsterGroupMembers(nextGroupMembers).length
       : 0;
-    const targetMemberNumber = nextGroupMembers && groupDamageResult?.targetMemberId
-      ? nextGroupMembers.findIndex(member => member.id === groupDamageResult.targetMemberId) + 1
-      : 0;
+    const targetMemberNumber =
+      nextGroupMembers && groupDamageResult?.targetMemberId
+        ? nextGroupMembers.findIndex(
+            member => member.id === groupDamageResult.targetMemberId
+          ) + 1
+        : 0;
     const groupDamageLog = nextGroupMembers
       ? `；集中攻擊群聚成員 ${targetMemberNumber || "目標"}，${remainingGroupCount} 隻仍在戰鬥`
       : "";
@@ -4855,31 +5707,95 @@ export default function Home() {
       ...statusTick.labels,
       ...(petrifyBroken ? ["石化被高額傷害提前解除，受到 25 點石化傷害"] : []),
     ];
-    const statusLogs = statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
-    const pendingAttackLifestealPercent = battle.nextAttackLifestealPercent ?? 0;
-    const helmetLifestealPercent = activeHelmetEffects.lifestealPercent +
+    const statusLogs =
+      statusLabels.length > 0 ? `；${statusLabels.join("；")}` : "";
+    const pendingAttackLifestealPercent =
+      battle.nextAttackLifestealPercent ?? 0;
+    const helmetLifestealPercent =
+      activeHelmetEffects.lifestealPercent +
+      (activeLegendarySetBonuses.asura ? 20 : 0) +
       (actualDamageDealt > 0 ? pendingAttackLifestealPercent : 0);
-    const helmetLifestealHealing = actualDamageDealt > 0
-      ? Math.floor(actualDamageDealt * helmetLifestealPercent / 100)
-      : 0;
+    const helmetLifestealHealing =
+      actualDamageDealt > 0
+        ? Math.floor((actualDamageDealt * helmetLifestealPercent) / 100)
+        : 0;
     const lifestealHealing = helmetLifestealHealing;
-    const reflectedDamage = actualDamageDealt > 0
-      ? targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0
-      : 0;
+    const reflectedDamage =
+      actualDamageDealt > 0
+        ? (targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0)
+        : 0;
     const reactiveDamageOnDeath =
-      reflectedDamage + (targetGroupMember?.explosionDamage ?? monster.explosionDamage ?? 0);
+      reflectedDamage +
+      (targetGroupMember?.explosionDamage ?? monster.explosionDamage ?? 0);
     const activeBuffHealing = Math.floor(
-      effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0) / 100
+      (effectiveAbilities.health * (activeBuff?.healPercentMaxHealth ?? 0)) /
+        100
     );
     const natureHealing = natureHealTriggered
       ? Math.max(
           1,
           Math.floor(
             effectiveAbilities.intelligence *
-              ((weaponAbility?.effects.natureStaffHealPercentIntelligence ?? 30) / 100)
+              ((weaponAbility?.effects.natureStaffHealPercentIntelligence ??
+                30) /
+                100)
           )
         )
       : 0;
+    const leggingsSkillHealing = astralSkillResolution.healing;
+    const mountainSetHealing = activeLegendarySetBonuses.mountain
+      ? Math.max(1, Math.floor(effectiveAbilities.health * 0.02))
+      : 0;
+    const leviathanLowHealth = Boolean(
+      amuletAbility?.id === "leviathan-heart" &&
+        healthAfterPlayerStatus <
+          effectiveAbilities.health *
+            ((amuletAbility.effects.leviathanLowHealthThresholdPercent ?? 30) /
+              100)
+    );
+    const leviathanHealing = getLeviathanHealing(
+      amuletAbility,
+      effectiveAbilities.health,
+      healthAfterPlayerStatus,
+      battle.turn
+    );
+    const dawnMarkLifestealHealing =
+      amuletAbility?.id === "dawn-guardian-sunmark" &&
+      targetIsDawnMarked &&
+      actualDamageDealt > 0
+        ? Math.floor(
+            actualDamageDealt *
+              ((amuletAbility.effects.dawnMarkLifestealPercent ?? 10) / 100)
+          )
+        : 0;
+    const healingBeforeDawnArmorBonus =
+      lifestealHealing +
+      dawnMarkLifestealHealing +
+      activeBuffHealing +
+      natureHealing +
+      leggingsSkillHealing +
+      mountainSetHealing +
+      leviathanHealing;
+    const dawnArmorHealingReceivedBonus =
+      chestAbility?.id === "dawn-guardian-armor"
+        ? Math.floor(
+            (healingBeforeDawnArmorBonus *
+              (dawnArmorStacksAtStart *
+                (chestAbility.effects.dawnArmorHealingReceivedPercentPerStack ??
+                  2))) /
+              100
+          )
+        : 0;
+    const dawnArmorFullStackHealing =
+      chestAbility?.id === "dawn-guardian-armor" &&
+      dawnArmorStacksAtStart >= (chestAbility.effects.dawnArmorMaxStacks ?? 5)
+        ? Math.floor(
+            effectiveAbilities.health *
+              ((chestAbility.effects.dawnArmorFullStackHealMaxHealthPercent ??
+                3) /
+                100)
+          )
+        : 0;
     const specialAbilityActionLogs = [
       activeHelmetEffects.attackDamageBonusPercent > 0
         ? `【${helmetAbility?.name}】傷害 +${activeHelmetEffects.attackDamageBonusPercent}%`
@@ -4889,6 +5805,18 @@ export default function Home() {
         : "",
       activeChestEffects.defenseBonusPercent > 0
         ? `【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`
+        : "",
+      activeLeggingsEffects.defenseBonusPercent > 0
+        ? `【${leggingsAbility?.name}】防禦 +${activeLeggingsEffects.defenseBonusPercent}%`
+        : "",
+      activeLeggingsEffects.dodgeRateBonusPercent > 0
+        ? `【${leggingsAbility?.name}】閃避率 +${activeLeggingsEffects.dodgeRateBonusPercent}%`
+        : "",
+      activeLeggingsEffects.physicalDamageBonusPercent > 0
+        ? `【${leggingsAbility?.name}】物理傷害 +${activeLeggingsEffects.physicalDamageBonusPercent}%`
+        : "",
+      nightSetBonusAfterDefense > 0
+        ? `【夜魔主宰套裝】第 ${battle.turn} 回合追加 ${nightSetBonusAfterDefense} 點傷害（閃避率 ${nightSetCurrentDodgeRate.toFixed(1)}%）`
         : "",
       activeChestEffects.enemyDamageReductionPercent > 0
         ? `【${chestAbility?.name}】敵人造成的傷害 -${activeChestEffects.enemyDamageReductionPercent}%`
@@ -4905,9 +5833,15 @@ export default function Home() {
       helmetLifestealHealing > 0
         ? `【${helmetAbility?.name}】吸血回復 ${helmetLifestealHealing} 生命`
         : "",
-      selectedSkill && selectedSkill.cooldownTurns > 0 &&
-        (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
+      selectedSkill &&
+      selectedSkill.cooldownTurns > 0 &&
+      (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
         ? `【${helmetAbility?.name}】技能冷卻額外減少 ${helmetAbility?.effects.cooldownReductionOnSkill} 回合`
+        : "",
+      selectedSkill &&
+      selectedSkill.cooldownTurns > 0 &&
+      activeLegendarySetBonuses.astral
+        ? "【星辰智者套裝】套裝效果使技能冷卻額外減少 1 回合"
         : "",
       dawnProcTriggered
         ? `【${weaponAbility?.name}】額外造成 ${dawnBonusDamage} 點曙光傷害`
@@ -4929,7 +5863,9 @@ export default function Home() {
         : "",
       fireVeinBurstTriggered
         ? `【${weaponAbility?.name}】五層灼燒印記爆發，造成 ${weaponAreaDamageApplied} 點範圍傷害`
-        : weaponAbility?.id === "fire-vein-staff" && weaponHitLanded && selectedSkill?.effectType === "damage"
+        : weaponAbility?.id === "fire-vein-staff" &&
+            weaponHitLanded &&
+            selectedSkill?.effectType === "damage"
           ? `【${weaponAbility.name}】灼燒印記 ${fireVeinMarkCount}/${weaponAbility.effects.fireVeinMarksToBurst ?? 5}`
           : "",
       genesisChainTriggered
@@ -4944,18 +5880,78 @@ export default function Home() {
       natureHealing > 0
         ? `【${weaponAbility?.name}】自然復甦恢復 ${natureHealing} 生命`
         : "",
+      astralSkillResolution.triggered
+        ? `【${leggingsAbility?.name}】恢復 ${leggingsSkillHealing} 生命，下一次傷害技能暴擊率 +${astralSkillResolution.nextSkillCritRateBonusPercent}%`
+        : "",
+      leggingsAbility?.id === "asura-leggings" && criticalHit && weaponHitLanded
+        ? `【${leggingsAbility.name}】阿修羅戰意堆疊 ${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length}/3，物理傷害 +${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length * (leggingsAbility.effects.asuraPhysicalDamageBonusPerCritPercent ?? 8)}%`
+        : "",
+      mountainSetHealing > 0
+        ? `【永恆山脈套裝】回復 ${mountainSetHealing} 生命`
+        : "",
+      solarEyeTriggered
+        ? `【${amuletAbility?.name}】雙修爆發：額外造成 ${solarEyeBonusAfterDefense} 點傷害，敵人命中率降低 ${amuletAbility?.effects.solarEyeAccuracyReductionPercent ?? 15}%`
+        : "",
+      medusaEyeAttackTriggered
+        ? `【${amuletAbility?.name}】命中觸發石化，目標無法行動 1 回合`
+        : "",
+      hunterFangHighHealthTarget
+        ? `【${amuletAbility?.name}】獵王優勢：穿透防禦 ${amuletAbility?.effects.hunterFangDefensePiercePercent ?? 20}%`
+        : "",
+      hunterFangKillTriggered
+        ? `【${amuletAbility?.name}】獵殺成功：傷害技能冷卻減少 ${amuletAbility?.effects.hunterFangCooldownReductionOnKill ?? 1} 回合`
+        : "",
+      leviathanHealing > 0
+        ? `【${amuletAbility?.name}】深海回潮恢復 ${leviathanHealing} 生命`
+        : "",
+      dawnMarkLifestealHealing > 0
+        ? `【${amuletAbility?.name}】太陽印記吸血恢復 ${dawnMarkLifestealHealing} 生命`
+        : "",
+      dawnArmorFullStackHealing > 0
+        ? `【${chestAbility?.name}】聖光滿層回春 ${dawnArmorFullStackHealing} 生命`
+        : "",
+      starCoreShieldGain > 0
+        ? `【${amuletAbility?.name}】技能凝聚 ${starCoreShieldGain} 點星核護盾，魔法傷害提升 ${amuletAbility?.effects.starCoreMagicDamageBonusPercent ?? 15}%`
+        : "",
+      helmetAbility?.id === "dawn-guardian-vision" && actualDamageDealt > 0
+        ? `【${helmetAbility.name}】神聖視界穿透防禦與抗性 ${helmetAbility.effects.dawnGuardianDefensePiercePercent ?? 15}%`
+        : "",
+      amuletAbility?.id === "dawn-guardian-sunmark" && weaponHitLanded
+        ? targetIsDawnMarked
+          ? "【太陽印記】目標仍受印記強化"
+          : "【太陽印記】已在目標身上留下印記"
+        : "",
+      dawnWardenSwordTriggered
+        ? `【${weaponAbility?.name}】巨型光劍命中所有敵人，造成 ${weaponAreaDamageApplied} 點範圍傷害並暈眩`
+        : "",
+      dawnWardenDaggerTriggered && weaponHitLanded
+        ? "【光束殘影】殘影已留下，將於下回合爆炸造成真實傷害"
+        : "",
+      weaponAbility?.id === "dawn-warden-bow" && weaponHitLanded
+        ? `【${weaponAbility.name}】追光箭矢必定命中所有敵人（${dawnBowTargetCount} 個目標）`
+        : "",
+      weaponAbility?.id === "dawn-warden-staff" &&
+      selectedSkill &&
+      weaponHitLanded
+        ? `【${weaponAbility.name}】聖光陣界已展開：每回合造成敵人最大生命 5% 傷害，敵方傷害 -20%`
+        : "",
     ].filter(Boolean);
-    const specialAbilityActionLog = specialAbilityActionLogs.length > 0
-      ? `；${specialAbilityActionLogs.join("；")}`
-      : "";
+    const specialAbilityActionLog =
+      specialAbilityActionLogs.length > 0
+        ? `；${specialAbilityActionLogs.join("；")}`
+        : "";
     const healedPlayerHealth = Math.min(
       effectiveAbilities.health,
       healthAfterPlayerStatus +
-        lifestealHealing +
-        activeBuffHealing +
-        natureHealing
+        healingBeforeDawnArmorBonus +
+        dawnArmorHealingReceivedBonus +
+        dawnArmorFullStackHealing
     );
-    const actionLabel = actionLocked ? "停滯" : selectedSkill ? `「${selectedSkill.name}」` : "攻擊";
+    const actionLabel = actionLocked
+      ? "停滯"
+      : selectedSkill
+        ? `「${selectedSkill.name}」`
+        : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
     const logs = [
       ...battle.logs,
@@ -4985,23 +5981,43 @@ export default function Home() {
         usedSkillIds,
         skillCooldowns: nextSkillCooldowns,
         nextAttackGuaranteedCrit:
-          actualDamageDealt > 0 ? false : Boolean(battle.nextAttackGuaranteedCrit),
+          actualDamageDealt > 0
+            ? false
+            : Boolean(battle.nextAttackGuaranteedCrit),
         nextAttackDamageBonusPercent:
-          (actualDamageDealt > 0 ? 0 : battle.nextAttackDamageBonusPercent ?? 0) +
+          (actualDamageDealt > 0
+            ? 0
+            : (battle.nextAttackDamageBonusPercent ?? 0)) +
           (moonshadowTriggered
-            ? weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20
+            ? (weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ??
+              20)
             : 0),
         nextAttackCritRateBonusPercent:
           actualDamageDealt > 0
             ? 0
-            : battle.nextAttackCritRateBonusPercent ?? 0,
+            : (battle.nextAttackCritRateBonusPercent ?? 0),
         nextAttackDefensePiercePercent:
           actualDamageDealt > 0
             ? 0
-            : battle.nextAttackDefensePiercePercent ?? 0,
+            : (battle.nextAttackDefensePiercePercent ?? 0),
+        nextSkillCritRateBonusPercent: nextSkillCritRateBonusAfterAction,
         weaponPassiveState: weaponPassiveStateAfterPlayerAction,
         weaponTimedBuffs: weaponTimedBuffsAfterPlayerAction,
+        leggingsPassiveState: leggingsPassiveStateAfterPlayerAction,
         divineShield: statusShieldResolution.state,
+        starCoreShield: starCoreShieldAfterSkillCast,
+        dawnArmorStacks: dawnArmorStacksAtStart,
+        shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
+        shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
+        shadowmoonAfterimageTurns: battle.shadowmoonAfterimageTurns ?? 0,
+        shadowmoonStealthUsed: Boolean(
+          battle.shadowmoonStealthUsed || shadowmoonStealthTriggered
+        ),
+        shadowmoonStealthActive,
+        moonStalkerGuaranteedHitsRemaining:
+          moonStalkerGuaranteedHitsAfterAction,
+        moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+        timeReversalUsed: Boolean(battle.timeReversalUsed),
         monsterStatuses: statusTick.statuses,
         playerStatuses: playerStatusTick.statuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
@@ -5012,9 +6028,18 @@ export default function Home() {
           ...logs,
           `${monster.name}倒下了！獲得 ${xpReward} XP。`,
           lifestealHealing ? `吸血回復 ${lifestealHealing} 生命。` : "",
-          activeBuffHealing ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。` : "",
-          natureHealing ? `【${weaponAbility?.name}】恢復 ${natureHealing} 生命。` : "",
-          monster.explosionDamage ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！` : "",
+          activeBuffHealing
+            ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。`
+            : "",
+          natureHealing
+            ? `【${weaponAbility?.name}】恢復 ${natureHealing} 生命。`
+            : "",
+          leggingsSkillHealing
+            ? `【${leggingsAbility?.name}】恢復 ${leggingsSkillHealing} 生命。`
+            : "",
+          monster.explosionDamage
+            ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！`
+            : "",
           reflectedDamage ? `受到 ${reflectedDamage} 點反傷。` : "",
           lootDrop
             ? `戰利品掉落：${lootDrop.kind === "equipment" ? "裝備" : "寶藏"}「${lootDrop.name}」（${lootDrop.rarity}${lootAffixSummary}）！`
@@ -5032,7 +6057,13 @@ export default function Home() {
         action: selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
         playerDamage: reactiveDamageOnDeath,
-        healing: lifestealHealing + activeBuffHealing + natureHealing,
+        healing:
+          lifestealHealing +
+          activeBuffHealing +
+          natureHealing +
+          leggingsSkillHealing +
+          mountainSetHealing +
+          leviathanHealing,
         critical: criticalHit,
         monsterDodged: false,
         playerDodged: false,
@@ -5075,15 +6106,10 @@ export default function Home() {
           skillUpgradePoints: previous.skillUpgradePoints + levelUps,
           abilityLevel: Math.max(previous.abilityLevel, nextLevel),
           abilities: {
-            health:
-              previous.abilities.health +
-              levelGrowth.abilities.health,
+            health: previous.abilities.health + levelGrowth.abilities.health,
             strength:
-              previous.abilities.strength +
-              levelGrowth.abilities.strength,
-            defense:
-              previous.abilities.defense +
-              levelGrowth.abilities.defense,
+              previous.abilities.strength + levelGrowth.abilities.strength,
+            defense: previous.abilities.defense + levelGrowth.abilities.defense,
             intelligence:
               previous.abilities.intelligence +
               levelGrowth.abilities.intelligence,
@@ -5118,77 +6144,101 @@ export default function Home() {
     const currentEnemyAttackDodgeBonusPercent =
       weaponPassiveState.nextEnemyAttackDodgeBonusPercent +
       (moonshadowTriggered
-        ? weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10
+        ? (weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10)
         : 0) +
       (swiftfangTriggered
-        ? weaponAbility?.effects.swiftfangDodgeRateBonusPercent ?? 5
+        ? (weaponAbility?.effects.swiftfangDodgeRateBonusPercent ?? 5)
         : 0);
     const currentEnemyAccuracyReductionPercent =
       weaponPassiveState.enemyAccuracyReductionNextPercent +
       (moonstringArrowShot
-        ? weaponAbility?.effects.moonstringNextEnemyAccuracyReductionPercent ?? 15
+        ? (weaponAbility?.effects.moonstringNextEnemyAccuracyReductionPercent ??
+          15)
         : 0);
-    const effectivePlayerDodgeRate = Math.min(
-      100,
-      effectiveCombatStats.dodgeRate +
-        (activeBuff?.dodgeRateBonusPercent ?? 0) +
-        activeChestEffects.dodgeRateBonusPercent +
-        activeWeaponBuffBonuses.dodgeRateBonusPercent +
-        targetAccuracyReductionPercent +
-        currentEnemyAccuracyReductionPercent +
-        currentEnemyAttackDodgeBonusPercent
-    ) *
+    const effectivePlayerDodgeRate =
+      Math.min(
+        100,
+        effectiveCombatStats.dodgeRate +
+          (activeBuff?.dodgeRateBonusPercent ?? 0) +
+          activeChestEffects.dodgeRateBonusPercent +
+          activeLeggingsEffects.dodgeRateBonusPercent +
+          (shadowmoonStealthActive
+            ? (leggingsAbility?.effects.moonStalkerStealthDodgeBonusPercent ??
+              25)
+            : 0) +
+          activeWeaponBuffBonuses.dodgeRateBonusPercent +
+          targetAccuracyReductionPercent +
+          currentEnemyAccuracyReductionPercent +
+          currentEnemyAttackDodgeBonusPercent
+      ) *
       (1 - (monster.dodgeIgnorePercent ?? 0) / 100);
-    const playerDodges = statusTick.frozen
-      ? false
-      : Math.random() < effectivePlayerDodgeRate / 100;
+    const galeSetEvasionTriggered = Boolean(
+      activeLegendarySetBonuses.gale &&
+        battle.turn - (battle.galeSetLastEvasionTurn ?? 0) >= 5 &&
+        !statusTick.frozen
+    );
+    const playerDodges =
+      statusTick.frozen || galeSetEvasionTriggered
+        ? false
+        : Math.random() < effectivePlayerDodgeRate / 100;
+    const playerEvadedBeforeLethalCheck =
+      playerDodges || galeSetEvasionTriggered;
     const monsterCritical =
       !statusTick.frozen &&
-      !playerDodges &&
+      !dawnWardenSwordTriggered &&
+      !(monsterDisarmed && !monsterUsesSkill) &&
+      !playerEvadedBeforeLethalCheck &&
       Math.random() < (targetGroupMember?.critRate ?? monster.critRate) / 100;
-    const nextArcherDodgeFailStacks = isArcher
-      ? getNextArcherDodgeFailStacks(state.archerDodgeFailStacks, playerDodges)
-      : 0;
-    const nextArcherTalentBonuses = getArcherTalentBonuses(
-      nextArcherDodgeFailStacks
-    );
-    const archerTalentLog = isArcher
-      ? playerDodges
-        ? "（游擊本能觸發：閃避成功，累積加成重置）"
-        : `（游擊本能累積 ${nextArcherDodgeFailStacks} 層：攻擊 +${nextArcherTalentBonuses.attackPercent}%、閃避 +${nextArcherTalentBonuses.dodgePercent}%）`
-      : "";
     const groupDamage = battle.groupMembers
       ? getLivingMonsterGroupMembers(battle.groupMembers).reduce(
-          (total, member) => total + (member.damage ?? Math.max(1, Math.round(monster.damage / 2))),
+          (total, member) =>
+            total +
+            (member.damage ?? Math.max(1, Math.round(monster.damage / 2))),
           0
         )
       : monster.damage;
-    const incomingBaseDamage = statusTick.frozen
-      ? 0
-      : failedRequirement
-        ? Math.round(groupDamage * 2 * monsterAttackMultiplier)
-        : Math.round(groupDamage * monsterAttackMultiplier);
+    const incomingBaseDamage =
+      statusTick.frozen ||
+      dawnWardenSwordTriggered ||
+      (monsterDisarmed && !monsterUsesSkill)
+        ? 0
+        : failedRequirement
+          ? Math.round(groupDamage * 2 * monsterAttackMultiplier)
+          : Math.round(groupDamage * monsterAttackMultiplier);
     const effectivePlayerDefense = Math.round(
       effectiveAbilities.defense *
         (1 +
           (activeHelmetEffects.defenseBonusPercent +
-            activeChestEffects.defenseBonusPercent) /
+            activeChestEffects.defenseBonusPercent +
+            activeLeggingsEffects.defenseBonusPercent) /
             100)
     );
-    const reducedDamage = Math.max(
-      1,
-      incomingBaseDamage - getDefenseReduction(effectivePlayerDefense)
-    );
+    const reducedDamage =
+      incomingBaseDamage <= 0
+        ? 0
+        : Math.max(
+            1,
+            incomingBaseDamage - getDefenseReduction(effectivePlayerDefense)
+          );
     const equipmentResistancePercent = monsterUsesSkill
       ? activeHelmetEffects.magicResistancePercent +
-        activeChestEffects.magicResistancePercent
+        activeChestEffects.magicResistancePercent +
+        activeLeggingsEffects.magicResistancePercent +
+        (activeLegendarySetBonuses.mountain ? 50 : 0) +
+        (leviathanLowHealth
+          ? (amuletAbility?.effects.leviathanLowHealthResistancePercent ?? 20)
+          : 0)
       : activeHelmetEffects.physicalResistancePercent +
-        activeChestEffects.physicalResistancePercent;
+        activeChestEffects.physicalResistancePercent +
+        activeLeggingsEffects.physicalResistancePercent +
+        (activeLegendarySetBonuses.mountain ? 50 : 0) +
+        (leviathanLowHealth
+          ? (amuletAbility?.effects.leviathanLowHealthResistancePercent ?? 20)
+          : 0);
     const targetOutgoingDamageReductionPercent = Math.min(
       80,
       statusesBeforeTick.reduce(
-        (total, status) =>
-          total + (status.outgoingDamageReductionPercent ?? 0),
+        (total, status) => total + (status.outgoingDamageReductionPercent ?? 0),
         0
       )
     );
@@ -5196,33 +6246,128 @@ export default function Home() {
       ? weaponPassiveState.ironGuardStacks *
         (weaponAbility?.effects.ironGuardDamageReductionPercentPerStack ?? 10)
       : 0;
-    const buffReducedDamage = Math.max(
-      1,
-      Math.ceil(
-        reducedDamage *
-          (1 -
-            Math.min(
-              80,
-              (effectiveCombatStats.damageReductionPercent ?? 0) +
-                (activeBuff?.damageReductionPercent ?? 0) +
-                equipmentResistancePercent +
-                activeHelmetEffects.enemyDamageReductionPercent +
-                activeChestEffects.enemyDamageReductionPercent +
-                targetOutgoingDamageReductionPercent +
-                ironGuardDamageReductionPercent
-            ) /
-              100)
-      )
-    );
+    const buffReducedDamage =
+      reducedDamage <= 0
+        ? 0
+        : Math.max(
+            1,
+            Math.ceil(
+              reducedDamage *
+                (1 -
+                  Math.min(
+                    80,
+                    (effectiveCombatStats.damageReductionPercent ?? 0) +
+                      (activeBuff?.damageReductionPercent ?? 0) +
+                      equipmentResistancePercent +
+                      dawnArmorStacksAtStart *
+                        (chestAbility?.effects
+                          .dawnArmorDamageReductionPercentPerStack ?? 0) +
+                      activeHelmetEffects.enemyDamageReductionPercent +
+                      activeChestEffects.enemyDamageReductionPercent +
+                      targetOutgoingDamageReductionPercent +
+                      ironGuardDamageReductionPercent +
+                      (activeLegendarySetBonuses.mountain ? 35 : 0)
+                  ) /
+                    100) *
+                (activeLegendarySetBonuses.asura ? 1.2 : 1) *
+                ((battle.shadowmoonAfterimageTurns ?? 0) > 0 ? 0.7 : 1) *
+                (shadowmoonStealthActive
+                  ? 1 +
+                    (leggingsAbility?.effects
+                      .moonStalkerStealthDamageTakenBonusPercent ?? 30) /
+                      100
+                  : 1)
+            )
+          );
     const incomingDamageTaken = statusTick.frozen
       ? 0
-      : playerDodges
-      ? 0
-      : monsterCritical
-        ? Math.ceil(
-            (buffReducedDamage * (targetGroupMember?.critDamage ?? monster.critDamage)) / 100
+      : playerEvadedBeforeLethalCheck
+        ? 0
+        : monsterCritical
+          ? Math.ceil(
+              (buffReducedDamage *
+                (targetGroupMember?.critDamage ?? monster.critDamage)) /
+                100
+            )
+          : buffReducedDamage;
+    const unmitigatedDamageTaken = incomingDamageTaken + reflectedDamage;
+    const starCoreIncomingShieldResolution = resolveStarCoreShieldDamage(
+      starCoreShieldAfterSkillCast,
+      unmitigatedDamageTaken
+    );
+    const potentialDivineShieldResolution = resolveDivineShieldDamage(
+      chestAbility,
+      statusShieldResolution.state,
+      healedPlayerHealth,
+      effectiveAbilities.health,
+      starCoreIncomingShieldResolution.damageRemaining,
+      true
+    );
+    const shadowmoonEvasion = resolveShadowmoonLethalEvasion(
+      leggingsAbility,
+      healedPlayerHealth,
+      potentialDivineShieldResolution.damageTaken
+    );
+    const divineShieldResolution = shadowmoonEvasion.triggered
+      ? {
+          ...potentialDivineShieldResolution,
+          health: healedPlayerHealth,
+          damageTaken: 0,
+          absorbedDamage: 0,
+          triggered: false,
+          state: statusShieldResolution.state,
+        }
+      : potentialDivineShieldResolution;
+    const damageTaken = divineShieldResolution.damageTaken;
+    const playerEvaded =
+      playerDodges || galeSetEvasionTriggered || shadowmoonEvasion.triggered;
+    const moonStalkerCounterTriggered = Boolean(
+      weaponAbility?.id === "moon-stalker-sword" && playerEvaded
+    );
+    const moonStalkerCounterDamage = moonStalkerCounterTriggered
+      ? Math.max(
+          1,
+          Math.round(
+            Math.max(
+              1,
+              Math.round(
+                effectiveAbilities.strength *
+                  ((weaponAbility?.effects
+                    .moonStalkerSwordCounterDamagePercentStrength ?? 120) /
+                    100)
+              ) - getDefenseReduction(targetDefenseAfterDebuff)
+            ) *
+              (1 - targetPhysicalResistance / 100)
           )
-        : buffReducedDamage;
+        )
+      : 0;
+    const shadowmoonAfterimageTurnsAfterTurn =
+      chestAbility?.id === "moon-stalker-chest"
+        ? playerEvaded
+          ? (chestAbility.effects.moonStalkerEffectDurationTurns ?? 1)
+          : statusTick.frozen
+            ? Math.max(0, (battle.shadowmoonAfterimageTurns ?? 0) - 1)
+            : 0
+        : 0;
+    const shadowmoonDodgeHealing =
+      chestAbility?.id === "moon-stalker-chest" && playerEvaded
+        ? Math.floor(
+            effectiveAbilities.health *
+              ((chestAbility.effects.moonStalkerDodgeHealMaxHealthPercent ??
+                3) /
+                100)
+          )
+        : 0;
+    const finalIncomingDamageTaken = shadowmoonEvasion.triggered
+      ? 0
+      : incomingDamageTaken;
+    const dawnArmorStacksAfterTurn =
+      chestAbility?.id === "dawn-guardian-armor"
+        ? Math.min(
+            chestAbility.effects.dawnArmorMaxStacks ?? 5,
+            dawnArmorStacksAtStart + (damageTaken > 0 ? 1 : 0)
+          )
+        : 0;
     const targetHealingReceivedReductionPercent = Math.min(
       100,
       statusesBeforeTick.reduce(
@@ -5231,60 +6376,105 @@ export default function Home() {
         0
       )
     );
-    const lifestealMonster = nextGroupMembers?.find(member => member.health > 0);
+    const groupMembersAfterDawnReflection = nextGroupMembers
+      ? applyMonsterGroupDamage(
+          nextGroupMembers,
+          moonStalkerCounterDamage,
+          targetGroupMember?.id
+        ).members
+      : undefined;
+    const lifestealMonster = groupMembersAfterDawnReflection?.find(
+      member => member.health > 0
+    );
     const monsterLifestealPercent =
       lifestealMonster?.lifestealPercent ??
       targetGroupMember?.lifestealPercent ??
       monster.lifestealPercent ??
       0;
-    const monsterLifestealHealing = incomingDamageTaken > 0
-      ? Math.floor(
-          incomingDamageTaken *
-            (monsterLifestealPercent / 100) *
-            (1 - targetHealingReceivedReductionPercent / 100)
-        )
-      : 0;
-    const monsterGroupMemberToHealId = nextGroupMembers?.find(
-      member => member.id === targetGroupMember?.id && member.health > 0
-    )?.id ?? lifestealMonster?.id;
-    const groupMembersAfterLifesteal = nextGroupMembers?.map(member =>
-      member.id === monsterGroupMemberToHealId
-        ? {
-            ...member,
-            health: Math.min(member.maxHealth, member.health + monsterLifestealHealing),
-          }
-        : member
+    const monsterLifestealHealing =
+      finalIncomingDamageTaken > 0
+        ? Math.floor(
+            finalIncomingDamageTaken *
+              (monsterLifestealPercent / 100) *
+              (1 - targetHealingReceivedReductionPercent / 100)
+          )
+        : 0;
+    const monsterGroupMemberToHealId =
+      groupMembersAfterDawnReflection?.find(
+        member => member.id === targetGroupMember?.id && member.health > 0
+      )?.id ?? lifestealMonster?.id;
+    const groupMembersAfterLifesteal = groupMembersAfterDawnReflection?.map(
+      member =>
+        member.id === monsterGroupMemberToHealId
+          ? {
+              ...member,
+              health: Math.min(
+                member.maxHealth,
+                member.health + monsterLifestealHealing
+              ),
+            }
+          : member
     );
     const monsterHealthAfterLifesteal = groupMembersAfterLifesteal
-      ? groupMembersAfterLifesteal.reduce((total, member) => total + member.health, 0)
-      : Math.min(monster.health, monsterHealth + monsterLifestealHealing);
+      ? groupMembersAfterLifesteal.reduce(
+          (total, member) => total + member.health,
+          0
+        )
+      : Math.max(
+          0,
+          Math.min(
+            monster.health,
+            monsterHealth + monsterLifestealHealing - moonStalkerCounterDamage
+          )
+        );
     const nextPlayerStatuses = applyBattleStatusEffects(
       playerStatusTick.statuses,
-      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
-        ? [{
-            element: monster.elementalAttack.element,
-            kind: "燃燒",
-            chance: 1,
-            durationTurns: monster.elementalAttack.durationTurns,
-            damagePerTurn: 0,
-            damagePercentOfSkill: monster.elementalAttack.damagePercent,
-            damageReductionPercent: monster.elementalAttack.damageReductionPercent,
-          }]
+      monsterUsesSkill &&
+        monster.elementalAttack &&
+        finalIncomingDamageTaken > 0
+        ? [
+            {
+              element: monster.elementalAttack.element,
+              kind: "燃燒",
+              chance: 1,
+              durationTurns: monster.elementalAttack.durationTurns,
+              damagePerTurn: 0,
+              damagePercentOfSkill: monster.elementalAttack.damagePercent,
+              damageReductionPercent:
+                monster.elementalAttack.damageReductionPercent,
+            },
+          ]
         : []
     );
     const burnApplied = Boolean(
-      monsterUsesSkill && monster.elementalAttack && incomingDamageTaken > 0
+      monsterUsesSkill &&
+        monster.elementalAttack &&
+        finalIncomingDamageTaken > 0
     );
-    const unmitigatedDamageTaken = incomingDamageTaken + reflectedDamage;
-    const divineShieldResolution = resolveDivineShieldDamage(
-      chestAbility,
-      statusShieldResolution.state,
-      healedPlayerHealth,
-      effectiveAbilities.health,
-      unmitigatedDamageTaken,
-      true
+    const nextArcherDodgeFailStacks = isArcher
+      ? getNextArcherDodgeFailStacks(state.archerDodgeFailStacks, playerEvaded)
+      : 0;
+    const nextArcherTalentBonuses = getArcherTalentBonuses(
+      nextArcherDodgeFailStacks
     );
-    const damageTaken = divineShieldResolution.damageTaken;
+    const archerTalentLog = isArcher
+      ? playerEvaded
+        ? "（游擊本能觸發：閃避成功，累積加成重置）"
+        : `（游擊本能累積 ${nextArcherDodgeFailStacks} 層：攻擊 +${nextArcherTalentBonuses.attackPercent}%、閃避 +${nextArcherTalentBonuses.dodgePercent}%）`
+      : "";
+    const galeLeggingEvasionTriggered =
+      leggingsAbility?.id === "gale-leggings" && playerEvaded;
+    const nextLeggingsPassiveState: LeggingPassiveBattleState = {
+      ...leggingsPassiveStateAfterPlayerAction,
+      nextGaleAttackBonusDamage: galeLeggingEvasionTriggered
+        ? Math.round(
+            effectiveAbilities.strength *
+              ((leggingsAbility?.effects.galeNextAttackBonusPercentStrength ??
+                120) /
+                100)
+          )
+        : leggingsPassiveStateAfterPlayerAction.nextGaleAttackBonusDamage,
+    };
     const divineShieldTriggered =
       statusShieldResolution.triggered || divineShieldResolution.triggered;
     const divineShieldAbsorbedDamage =
@@ -5296,19 +6486,20 @@ export default function Home() {
         guaranteedCrit: Boolean(battle.nextAttackGuaranteedCrit),
         damageBonusPercent: battle.nextAttackDamageBonusPercent ?? 0,
       },
-      playerDodges,
+      playerEvaded,
       actualDamageDealt > 0
     );
-    const nextGaleStacks = chestAbility?.id === "gale-dancer"
-      ? resolveGaleStackCount(
-          battle.galeStacks ?? 0,
-          !selectedSkill && !actionLocked,
-          playerDodges,
-          chestAbility.effects.galeMaxStacks
-        )
-      : battle.galeStacks ?? 0;
+    const nextGaleStacks =
+      chestAbility?.id === "gale-dancer"
+        ? resolveGaleStackCount(
+            battle.galeStacks ?? 0,
+            !selectedSkill && !actionLocked,
+            playerEvaded,
+            chestAbility.effects.galeMaxStacks
+          )
+        : (battle.galeStacks ?? 0);
     const phantomStepTriggered = Boolean(
-      weaponAbility?.id === "phantom-step-dagger" && playerDodges
+      weaponAbility?.id === "phantom-step-dagger" && playerEvaded
     );
     const enemyAttackResolved = !statusTick.frozen;
     const ironGuardActionUsed = Boolean(
@@ -5319,7 +6510,7 @@ export default function Home() {
             selectedSkill.damageType === "物理"))
     );
     const ironGuardStacksAfterHit =
-      !monsterUsesSkill && incomingDamageTaken > 0
+      !monsterUsesSkill && finalIncomingDamageTaken > 0
         ? 0
         : weaponPassiveState.ironGuardStacks;
     const nextWeaponPassiveState: WeaponPassiveBattleState = {
@@ -5334,44 +6525,161 @@ export default function Home() {
         ? 0
         : weaponPassiveState.enemyAccuracyReductionNextPercent +
           (moonstringArrowShot
-            ? weaponAbility?.effects.moonstringNextEnemyAccuracyReductionPercent ?? 15
+            ? (weaponAbility?.effects
+                .moonstringNextEnemyAccuracyReductionPercent ?? 15)
             : 0),
       nextEnemyAttackDodgeBonusPercent: enemyAttackResolved
         ? 0
         : weaponPassiveState.nextEnemyAttackDodgeBonusPercent +
           (moonshadowTriggered
-            ? weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10
+            ? (weaponAbility?.effects.moonshadowDodgeRateBonusPercent ?? 10)
             : 0),
     };
     const nextAttackCritRateBonusPercent =
-      (actualDamageDealt > 0 ? 0 : battle.nextAttackCritRateBonusPercent ?? 0) +
+      (actualDamageDealt > 0
+        ? 0
+        : (battle.nextAttackCritRateBonusPercent ?? 0)) +
       (phantomStepTriggered
-        ? weaponAbility?.effects.phantomStepNextAttackCritRateBonusPercent ?? 50
+        ? (weaponAbility?.effects.phantomStepNextAttackCritRateBonusPercent ??
+          50)
         : 0);
     const nextAttackDefensePiercePercent =
-      (actualDamageDealt > 0 ? 0 : battle.nextAttackDefensePiercePercent ?? 0) +
+      (actualDamageDealt > 0
+        ? 0
+        : (battle.nextAttackDefensePiercePercent ?? 0)) +
       (phantomStepTriggered
-        ? weaponAbility?.effects.phantomStepDefensePiercePercent ?? 20
+        ? (weaponAbility?.effects.phantomStepDefensePiercePercent ?? 20)
         : 0);
     const nextAttackDamageBonusPercent =
       nextDodgeCounterState.damageBonusPercent +
       (moonshadowTriggered
-        ? weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20
-        : 0);
+        ? (weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20)
+        : 0) +
+      (galeSetEvasionTriggered ? 50 : 0);
     const nextWeaponTimedBuffs = weaponTimedBuffsAfterPlayerAction;
     const oracleStunTriggered = Boolean(
       chestAbility?.effects.oracleStunEnemiesOnHitAtTurnEnd &&
-        incomingDamageTaken > 0
+        finalIncomingDamageTaken > 0
     );
-    const monsterStatusesAfterTurn = oracleStunTriggered
-      ? applyBattleStatusEffects(statusTick.statuses, [{
-          kind: "暈眩",
-          element: "奧術",
-          chance: 1,
-          durationTurns: 1,
-          damagePerTurn: 0,
-        }])
-      : statusTick.statuses;
+    const medusaEyeEvasionTriggered = Boolean(
+      amuletAbility?.id === "medusa-eye" &&
+        playerEvaded &&
+        rollMedusaEyeProc(amuletAbility, true)
+    );
+    const dawnStepDisarmTriggered = Boolean(
+      leggingsAbility?.id === "dawn-guardian-step" &&
+        !monsterUsesSkill &&
+        finalIncomingDamageTaken > 0 &&
+        rollPercentChance(
+          leggingsAbility.effects.dawnStepDisarmChancePercent ?? 25
+        )
+    );
+    const monsterTurnEndEffects: SkillStatusEffect[] = [
+      ...(oracleStunTriggered
+        ? [
+            {
+              kind: "暈眩" as const,
+              element: "奧術" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
+      ...(medusaEyeEvasionTriggered
+        ? [
+            {
+              kind: "石化" as const,
+              element: "自然" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
+      ...(dawnStepDisarmTriggered
+        ? [
+            {
+              kind: "繳械" as const,
+              element: "自然" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
+      ...(moonStalkerCounterTriggered
+        ? [
+            {
+              kind: "流血" as const,
+              element: "自然" as const,
+              chance: 1,
+              durationTurns:
+                weaponAbility?.effects.moonStalkerEffectDurationTurns ?? 3,
+              damagePerTurn: Math.max(
+                1,
+                Math.floor(
+                  moonStalkerCounterDamage *
+                    ((weaponAbility?.effects
+                      .moonStalkerSwordBleedPercentCounterDamage ?? 10) /
+                      100)
+                )
+              ),
+              healingReceivedReductionPercent:
+                weaponAbility?.effects
+                  .moonStalkerSwordHealingReductionPercent ?? 50,
+            },
+          ]
+        : []),
+      ...(dawnWardenDaggerTriggered && weaponHitLanded
+        ? [
+            {
+              kind: "光束殘影" as const,
+              element: "奧術" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: Math.max(
+                1,
+                Math.floor(
+                  basePlayerDamage *
+                    ((weaponAbility?.effects
+                      .dawnWardenDaggerEchoDamagePercentAttack ?? 50) /
+                      100)
+                )
+              ),
+            },
+          ]
+        : []),
+      ...(weaponAbility?.id === "dawn-warden-staff" &&
+      selectedSkill &&
+      weaponHitLanded
+        ? [
+            {
+              kind: "聖光陣界" as const,
+              element: "火焰" as const,
+              chance: 1,
+              durationTurns:
+                weaponAbility.effects.dawnWardenStaffDotDurationTurns ?? 3,
+              damagePerTurn: Math.max(
+                1,
+                Math.floor(
+                  targetMonsterMaxHealth *
+                    ((weaponAbility.effects
+                      .dawnWardenStaffDotMaxHealthPercent ?? 5) /
+                      100)
+                )
+              ),
+              outgoingDamageReductionPercent:
+                weaponAbility.effects.dawnWardenStaffDamageReductionPercent ??
+                20,
+            },
+          ]
+        : []),
+    ];
+    const monsterStatusesAfterTurn =
+      monsterTurnEndEffects.length > 0
+        ? applyBattleStatusEffects(statusTick.statuses, monsterTurnEndEffects)
+        : statusTick.statuses;
     const lethalProtection = resolveLethalProtection(
       helmetAbility,
       healedPlayerHealth,
@@ -5379,9 +6687,23 @@ export default function Home() {
       Boolean(battle.lethalProtectionUsed)
     );
     const lethalProtectionTriggered = lethalProtection.triggered;
-    const totalDamageTaken = statusDamageActuallyTaken +
-      (lethalProtectionTriggered ? 0 : damageTaken);
-    const playerHealth = lethalProtection.health;
+    const timeReversalTriggered = Boolean(
+      !lethalProtectionTriggered &&
+        rollSpacetimeReversal(
+          amuletAbility,
+          healedPlayerHealth,
+          damageTaken,
+          Boolean(battle.timeReversalUsed)
+        )
+    );
+    const totalDamageTaken =
+      statusDamageActuallyTaken +
+      (lethalProtectionTriggered || timeReversalTriggered ? 0 : damageTaken);
+    const playerHealth = Math.min(
+      effectiveAbilities.health,
+      (timeReversalTriggered ? healedPlayerHealth : lethalProtection.health) +
+        shadowmoonDodgeHealing
+    );
     const nextAttackLifestealPercent = lethalProtectionTriggered
       ? lethalProtection.nextAttackLifestealPercent
       : actualDamageDealt > 0
@@ -5394,39 +6716,133 @@ export default function Home() {
         ? [`神聖護盾吸收 ${statusShieldResolution.absorbedDamage} 點持續傷害。`]
         : []),
       ...(divineShieldTriggered
-        ? [`【${chestAbility?.name}】神聖護盾觸發，持續 ${chestAbility?.effects.sacredShieldDurationTurns ?? 2} 回合（本場戰鬥僅一次）。`]
+        ? [
+            `【${chestAbility?.name}】神聖護盾觸發，持續 ${chestAbility?.effects.sacredShieldDurationTurns ?? 2} 回合（本場戰鬥僅一次）。`,
+          ]
         : []),
       ...(divineShieldAbsorbedDamage > 0
         ? [`神聖護盾共吸收 ${divineShieldAbsorbedDamage} 點傷害。`]
         : []),
-      ...(playerDodges && chestAbility?.id === "abyssal-counter"
-        ? [`【${chestAbility.name}】觸發深淵反擊：下一次成功命中的攻擊必定暴擊並增傷 ${nextDodgeCounterState.damageBonusPercent}%。`]
+      ...(starCoreIncomingShieldResolution.absorbedDamage > 0
+        ? [
+            `【${amuletAbility?.name}】星核護盾吸收 ${starCoreIncomingShieldResolution.absorbedDamage} 點傷害。`,
+          ]
+        : []),
+      ...(starCoreShieldGain > 0
+        ? [
+            `【${amuletAbility?.name}】技能凝聚 ${starCoreShieldGain} 點星核護盾。`,
+          ]
+        : []),
+      ...(dawnArmorStacksAfterTurn > dawnArmorStacksAtStart
+        ? [
+            `【${chestAbility?.name}】聖光能量累積至 ${dawnArmorStacksAfterTurn}/5 層。`,
+          ]
+        : []),
+      ...(dawnArmorFullStackHealing > 0
+        ? [
+            `【${chestAbility?.name}】滿層回春 ${dawnArmorFullStackHealing} 生命。`,
+          ]
+        : []),
+      ...(shadowmoonStealthTriggered
+        ? [
+            `【${leggingsAbility?.name}】生命低於 40%，進入暗影潛行！傷害 +50%、閃避 +25%、受到傷害 +30%。`,
+          ]
+        : []),
+      ...(shadowmoonDodgeHealing > 0
+        ? [
+            `【${chestAbility?.name}】深淵護體恢復 ${shadowmoonDodgeHealing} 生命，獲得暗影殘像。`,
+          ]
+        : []),
+      ...(moonStalkerCounterTriggered
+        ? [
+            `【${weaponAbility?.name}】月刃割裂反擊造成 ${moonStalkerCounterDamage} 傷害，目標流血並降低受療。`,
+          ]
+        : []),
+      ...(moonStalkerDaggerDoubleStrikeTriggered
+        ? [
+            `【${weaponAbility?.name}】迅牙撕裂追加 ${moonStalkerDaggerBonusDamage} 點傷害。`,
+          ]
+        : []),
+      ...(moonStalkerBowTriggered
+        ? [
+            `【${weaponAbility?.name}】沙風獵殺致盲敵人，接下來 3 次攻擊必定命中且暴擊率 +10%。`,
+          ]
+        : []),
+      ...(moonStalkerStaffFreezeTriggered
+        ? [
+            `【${weaponAbility?.name}】霜月凍結觸發，凍結目標並使後續傷害 +30%。`,
+          ]
+        : []),
+      ...(moonStalkerMarkTriggered
+        ? [`【${amuletAbility?.name}】已施加月蝕印記。`]
+        : []),
+      ...(timeReversalTriggered
+        ? [
+            `【${amuletAbility?.name}】時空逆轉觸發，免疫致命傷害並保留 ${playerHealth} 生命（本場戰鬥僅一次）。`,
+          ]
+        : []),
+      ...(shadowmoonEvasion.triggered
+        ? [`【${leggingsAbility?.name}】影月庇佑觸發，成功閃避致命攻擊！`]
+        : []),
+      ...(medusaEyeEvasionTriggered
+        ? [`【${amuletAbility?.name}】閃避觸發石化，目標無法行動 1 回合。`]
+        : []),
+      ...(galeSetEvasionTriggered
+        ? ["【疾風劍聖套裝】保證閃避本次傷害，下次攻擊傷害 +50%。"]
+        : []),
+      ...(activeLegendarySetBonuses.asura && finalIncomingDamageTaken > 0
+        ? ["【阿修羅戰神套裝】套裝效果使受到傷害 +20%。"]
+        : []),
+      ...(playerEvaded && leggingsAbility?.id === "gale-leggings"
+        ? [
+            `【${leggingsAbility.name}】閃避成功，下一次物理攻擊附加 ${nextLeggingsPassiveState.nextGaleAttackBonusDamage} 傷害。`,
+          ]
+        : []),
+      ...(playerEvaded && chestAbility?.id === "abyssal-counter"
+        ? [
+            `【${chestAbility.name}】觸發深淵反擊：下一次成功命中的攻擊必定暴擊並增傷 ${nextDodgeCounterState.damageBonusPercent}%。`,
+          ]
         : []),
       ...(nextGaleStacks > (battle.galeStacks ?? 0)
-        ? [`【${chestAbility?.name}】疾風堆疊 ${nextGaleStacks}/${chestAbility?.effects.galeMaxStacks ?? 5}。`]
+        ? [
+            `【${chestAbility?.name}】疾風堆疊 ${nextGaleStacks}/${chestAbility?.effects.galeMaxStacks ?? 5}。`,
+          ]
         : []),
       ...(oracleStunTriggered
-        ? [`【${chestAbility?.name}】神諭庇佑於回合結束時使所有敵人暈眩 1 回合。`]
+        ? [
+            `【${chestAbility?.name}】神諭庇佑於回合結束時使所有敵人暈眩 1 回合。`,
+          ]
         : []),
       ...(natureHealing > 0
         ? [`【${weaponAbility?.name}】自然復甦，恢復 ${natureHealing} 生命。`]
         : []),
       ...(activeHelmetEffects.defenseBonusPercent > 0
-        ? [`【${helmetAbility?.name}】防禦 +${activeHelmetEffects.defenseBonusPercent}%`]
+        ? [
+            `【${helmetAbility?.name}】防禦 +${activeHelmetEffects.defenseBonusPercent}%`,
+          ]
         : []),
       ...(activeChestEffects.defenseBonusPercent > 0
-        ? [`【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`]
+        ? [
+            `【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`,
+          ]
         : []),
-      ...(equipmentResistancePercent > 0 && incomingDamageTaken > 0
-        ? [`${monsterUsesSkill ? "魔法" : "物理"}傷害抗性／減免 +${equipmentResistancePercent}%`]
+      ...(activeLeggingsEffects.defenseBonusPercent > 0
+        ? [
+            `【${leggingsAbility?.name}】防禦 +${activeLeggingsEffects.defenseBonusPercent}%`,
+          ]
+        : []),
+      ...(equipmentResistancePercent > 0 && finalIncomingDamageTaken > 0
+        ? [
+            `${monsterUsesSkill ? "魔法" : "物理"}傷害抗性／減免 +${equipmentResistancePercent}%`,
+          ]
         : []),
       lethalProtectionTriggered
         ? `致命傷害被【${helmetAbility?.name}】抵銷！下一次成功攻擊將獲得 ${nextAttackLifestealPercent}% 吸血。`
         : statusTick.frozen
-        ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
-        : playerDodges
-        ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
-        : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round(incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${monsterLifestealHealing ? `；吸血回復 ${monsterLifestealHealing} 生命` : ""}${archerTalentLog}`,
+          ? `${monster.name}被${statusTick.controlLabel ?? "控制"}，無法反擊！`
+          : playerEvaded
+            ? `你閃過了${monster.name}的攻擊！${archerTalentLog}`
+            : `${monster.name}${monsterUsesSkill ? "施放火焰技能" : "普通攻擊"}造成 ${incomingDamageTaken} 傷害${monsterCritical ? "（暴擊！）" : ""}${burnApplied ? `；施加${monster.elementalAttack?.element}灼燒（每回合${Math.max(1, Math.round((incomingDamageTaken * (monster.elementalAttack?.damagePercent ?? 0)) / 100))} 傷害，持續${monster.elementalAttack?.durationTurns}回合；你的物理攻擊傷害降低${monster.elementalAttack?.damageReductionPercent}%` : ""}${monsterLifestealHealing ? `；吸血回復 ${monsterLifestealHealing} 生命` : ""}${archerTalentLog}`,
     ];
     const nextDamageTaken = battle.damageTaken + totalDamageTaken;
     if (playerHealth <= 0) {
@@ -5434,10 +6850,16 @@ export default function Home() {
         action: selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
         playerDamage: totalDamageTaken,
-        healing: lifestealHealing + activeBuffHealing + natureHealing,
+        healing:
+          lifestealHealing +
+          activeBuffHealing +
+          natureHealing +
+          leggingsSkillHealing +
+          mountainSetHealing +
+          leviathanHealing,
         critical: criticalHit || monsterCritical,
         monsterDodged: monsterDodges,
-        playerDodged: playerDodges,
+        playerDodged: playerEvaded,
         monsterDefeated: false,
         playerDefeated: true,
       });
@@ -5455,8 +6877,29 @@ export default function Home() {
           nextAttackDamageBonusPercent,
           nextAttackCritRateBonusPercent,
           nextAttackDefensePiercePercent,
+          nextSkillCritRateBonusPercent: nextSkillCritRateBonusAfterAction,
           weaponPassiveState: nextWeaponPassiveState,
           weaponTimedBuffs: nextWeaponTimedBuffs,
+          leggingsPassiveState: nextLeggingsPassiveState,
+          starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+          dawnArmorStacks: dawnArmorStacksAfterTurn,
+          shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
+          shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
+          shadowmoonAfterimageTurns: shadowmoonAfterimageTurnsAfterTurn,
+          shadowmoonStealthUsed: Boolean(
+            battle.shadowmoonStealthUsed || shadowmoonStealthTriggered
+          ),
+          shadowmoonStealthActive,
+          moonStalkerGuaranteedHitsRemaining:
+            moonStalkerGuaranteedHitsAfterAction,
+          moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+
+          timeReversalUsed: Boolean(
+            battle.timeReversalUsed || timeReversalTriggered
+          ),
+          galeSetLastEvasionTurn: galeSetEvasionTriggered
+            ? battle.turn
+            : (battle.galeSetLastEvasionTurn ?? 0),
           divineShield: divineShieldResolution.state,
           monsterStatuses: monsterStatusesAfterTurn,
           playerStatuses: nextPlayerStatuses,
@@ -5464,14 +6907,14 @@ export default function Home() {
           activeBuff: nextActiveBuff,
           actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
-        logs: [
+          logs: [
             ...nextLogs,
             `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`,
           ],
           damageDealt: battle.damageDealt + appliedDamage,
           damageTaken: nextDamageTaken,
           criticalHits,
-          dodges: dodges + (playerDodges ? 1 : 0),
+          dodges: dodges + (playerEvaded ? 1 : 0),
           outcome: "defeat",
         });
         setState(previous => ({
@@ -5507,8 +6950,29 @@ export default function Home() {
         nextAttackDamageBonusPercent,
         nextAttackCritRateBonusPercent,
         nextAttackDefensePiercePercent,
+        nextSkillCritRateBonusPercent: nextSkillCritRateBonusAfterAction,
         weaponPassiveState: nextWeaponPassiveState,
         weaponTimedBuffs: nextWeaponTimedBuffs,
+        leggingsPassiveState: nextLeggingsPassiveState,
+        starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+        dawnArmorStacks: dawnArmorStacksAfterTurn,
+        shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
+        shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
+        shadowmoonAfterimageTurns: shadowmoonAfterimageTurnsAfterTurn,
+        shadowmoonStealthUsed: Boolean(
+          battle.shadowmoonStealthUsed || shadowmoonStealthTriggered
+        ),
+        shadowmoonStealthActive,
+        moonStalkerGuaranteedHitsRemaining:
+          moonStalkerGuaranteedHitsAfterAction,
+        moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+
+        timeReversalUsed: Boolean(
+          battle.timeReversalUsed || timeReversalTriggered
+        ),
+        galeSetLastEvasionTurn: galeSetEvasionTriggered
+          ? battle.turn
+          : (battle.galeSetLastEvasionTurn ?? 0),
         divineShield: divineShieldResolution.state,
         monsterStatuses: monsterStatusesAfterTurn,
         playerStatuses: nextPlayerStatuses,
@@ -5520,7 +6984,7 @@ export default function Home() {
         damageDealt: battle.damageDealt + appliedDamage,
         damageTaken: nextDamageTaken,
         criticalHits,
-        dodges: dodges + (playerDodges ? 1 : 0),
+        dodges: dodges + (playerEvaded ? 1 : 0),
         outcome: "defeat",
       });
       setState(previous => ({
@@ -5545,10 +7009,16 @@ export default function Home() {
       action: selectedSkill ? "skill" : "attack",
       monsterDamage: appliedDamage,
       playerDamage: totalDamageTaken,
-      healing: lifestealHealing + activeBuffHealing + natureHealing,
+      healing:
+        lifestealHealing +
+        activeBuffHealing +
+        natureHealing +
+        leggingsSkillHealing +
+        mountainSetHealing +
+        leviathanHealing,
       critical: criticalHit || monsterCritical,
       monsterDodged: monsterDodges,
-      playerDodged: playerDodges,
+      playerDodged: playerEvaded,
       monsterDefeated: false,
       playerDefeated: false,
     });
@@ -5568,21 +7038,44 @@ export default function Home() {
       nextAttackDamageBonusPercent,
       nextAttackCritRateBonusPercent,
       nextAttackDefensePiercePercent,
+      nextSkillCritRateBonusPercent: nextSkillCritRateBonusAfterAction,
       weaponPassiveState: nextWeaponPassiveState,
       weaponTimedBuffs: nextWeaponTimedBuffs,
+      leggingsPassiveState: nextLeggingsPassiveState,
+      starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+      dawnArmorStacks: dawnArmorStacksAfterTurn,
+      shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
+      shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
+      shadowmoonAfterimageTurns: shadowmoonAfterimageTurnsAfterTurn,
+      shadowmoonStealthUsed: Boolean(
+        battle.shadowmoonStealthUsed || shadowmoonStealthTriggered
+      ),
+      shadowmoonStealthActive,
+      moonStalkerGuaranteedHitsRemaining: moonStalkerGuaranteedHitsAfterAction,
+      moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+
+      timeReversalUsed: Boolean(
+        battle.timeReversalUsed || timeReversalTriggered
+      ),
+      galeSetLastEvasionTurn: galeSetEvasionTriggered
+        ? battle.turn
+        : (battle.galeSetLastEvasionTurn ?? 0),
       galeStacks: nextGaleStacks,
       divineShield: divineShieldResolution.state,
       monsterStatuses: monsterStatusesAfterTurn,
       playerStatuses: nextPlayerStatuses,
       monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
-      actionLockTurns: selectedSkill?.name === "終焉狙殺" ? 1 : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
+      actionLockTurns:
+        selectedSkill?.name === "終焉狙殺"
+          ? 1
+          : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
       logs: nextLogs,
       damageDealt: battle.damageDealt + appliedDamage,
       damageTaken: nextDamageTaken,
       criticalHits,
-      dodges: dodges + (playerDodges ? 1 : 0),
+      dodges: dodges + (playerEvaded ? 1 : 0),
     });
     setState(previous => ({
       ...previous,
@@ -5700,7 +7193,8 @@ export default function Home() {
       item => item.state.runningTimer !== null
     );
     if (
-      (stateRef.current.runningTimer && profile.id !== activeProfileIdRef.current) ||
+      (stateRef.current.runningTimer &&
+        profile.id !== activeProfileIdRef.current) ||
       (runningProfile && runningProfile.id !== profile.id)
     ) {
       showToast("請先停止目前計時器，再切換角色存檔");
@@ -5906,7 +7400,9 @@ export default function Home() {
 
   const shuffleBoardTasks = () => {
     setState(previous => {
-      const boardTasks = previous.tasks.filter(task => task.slot < boardSlotCount);
+      const boardTasks = previous.tasks.filter(
+        task => task.slot < boardSlotCount
+      );
       if (boardTasks.length < 2) return previous;
       const shuffledSlots = Array.from(
         { length: boardSlotCount },
@@ -5989,8 +7485,14 @@ export default function Home() {
         Date.now
       ),
     }));
-    const chestGold = chestRewards.reduce((total, reward) => total + reward.gold, 0);
-    const chestXp = chestRewards.reduce((total, reward) => total + reward.xp, 0);
+    const chestGold = chestRewards.reduce(
+      (total, reward) => total + reward.gold,
+      0
+    );
+    const chestXp = chestRewards.reduce(
+      (total, reward) => total + reward.xp,
+      0
+    );
     const chestLoot = chestRewards.flatMap(reward =>
       reward.loot ? [reward.loot] : []
     );
@@ -6039,10 +7541,12 @@ export default function Home() {
         allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
         dailyQuestChestClaims:
           nextCompleted && newlyUnlockedChestMilestones.length > 0
-            ? [...new Set([
-                ...claimedChestMilestones,
-                ...newlyUnlockedChestMilestones,
-              ])]
+            ? [
+                ...new Set([
+                  ...claimedChestMilestones,
+                  ...newlyUnlockedChestMilestones,
+                ]),
+              ]
             : claimedChestMilestones,
         dailyQuestChestPeriodKey: currentDailyPeriodKey,
         inventory:
@@ -6054,8 +7558,7 @@ export default function Home() {
               previous.weeklyStats,
               {
                 tasksCompleted: 1,
-                coinsEarned:
-                  task.coins + chestGold + (allTasksBonus ? 50 : 0),
+                coinsEarned: task.coins + chestGold + (allTasksBonus ? 50 : 0),
                 levelsGained: levelUps,
                 abilitiesGained: levelGrowth.abilities,
               },
@@ -6063,15 +7566,10 @@ export default function Home() {
             )
           : previous.weeklyStats,
         abilities: {
-          health:
-            previous.abilities.health +
-            levelGrowth.abilities.health,
+          health: previous.abilities.health + levelGrowth.abilities.health,
           strength:
-            previous.abilities.strength +
-            levelGrowth.abilities.strength,
-          defense:
-            previous.abilities.defense +
-            levelGrowth.abilities.defense,
+            previous.abilities.strength + levelGrowth.abilities.strength,
+          defense: previous.abilities.defense + levelGrowth.abilities.defense,
           intelligence:
             previous.abilities.intelligence +
             levelGrowth.abilities.intelligence,
@@ -6088,19 +7586,14 @@ export default function Home() {
             (getLevelGrowth(previous.jobClass, levelUps).combat.critDamage ??
               0),
         },
-        currentHealth:
-          previous.currentHealth +
-          levelGrowth.abilities.health,
+        currentHealth: previous.currentHealth + levelGrowth.abilities.health,
       };
     });
-    showUndoToast(
-      nextCompleted ? "任務已完成" : "任務完成狀態已取消",
-      () => {
-        setState(() => previousState);
-        clearUndoAction();
-        showToast("任務狀態已復原");
-      }
-    );
+    showUndoToast(nextCompleted ? "任務已完成" : "任務完成狀態已取消", () => {
+      setState(() => previousState);
+      clearUndoAction();
+      showToast("任務狀態已復原");
+    });
     if (nextCompleted) {
       const afterCompletion = state.tasks.map(item =>
         item.id === task.id ? { ...item, completed: true } : item
@@ -6166,7 +7659,8 @@ export default function Home() {
                   ...reward,
                   title,
                   description:
-                    rewardDraft.description.trim() || "完成任務後，給自己的小獎勵",
+                    rewardDraft.description.trim() ||
+                    "完成任務後，給自己的小獎勵",
                   cost,
                   icon: rewardDraft.icon,
                 }
@@ -6191,7 +7685,11 @@ export default function Home() {
       };
     });
     setModal(null);
-    showToast(modal?.kind === "reward" && modal.rewardId ? "獎勵設定已更新" : "自訂獎勵已放入寶庫");
+    showToast(
+      modal?.kind === "reward" && modal.rewardId
+        ? "獎勵設定已更新"
+        : "自訂獎勵已放入寶庫"
+    );
   };
 
   const redeemReward = (reward: Reward) => {
@@ -6218,7 +7716,11 @@ export default function Home() {
   };
 
   const deleteReward = (reward: Reward) => {
-    if (!window.confirm(`確定要刪除「${reward.title}」嗎？\n目前價格：${reward.cost} 金幣\n既有兌換歷史會保留。`)) {
+    if (
+      !window.confirm(
+        `確定要刪除「${reward.title}」嗎？\n目前價格：${reward.cost} 金幣\n既有兌換歷史會保留。`
+      )
+    ) {
       return;
     }
     const previousRewards = state.rewards;
@@ -6290,7 +7792,10 @@ export default function Home() {
     const running = stateRef.current.runningTimer;
     if (!running?.pomodoro || !timerLockOwned) return;
     const runtime = running.pomodoro;
-    if (getPomodoroPhaseElapsed(runtime, Date.now()) < runtime.phaseDurationSeconds) {
+    if (
+      getPomodoroPhaseElapsed(runtime, Date.now()) <
+      runtime.phaseDurationSeconds
+    ) {
       showToast(`目前${pomodoroPhaseLabel(runtime.phase)}尚未結束`);
       return;
     }
@@ -6323,8 +7828,7 @@ export default function Home() {
         ),
         runningTimer: {
           ...current,
-          xpEarned:
-            current.xpEarned + (roundCompleted ? POMODORO_ROUND_XP : 0),
+          xpEarned: current.xpEarned + (roundCompleted ? POMODORO_ROUND_XP : 0),
           pomodoro: advancePomodoroRuntime(
             current.pomodoro,
             previous.pomodoroSettings,
@@ -6358,7 +7862,9 @@ export default function Home() {
         setState(normalizeProfileLoot(existingTimerProfile.state));
         showToast("此角色已有進行中的計時，已同步狀態；請先停止該計時");
       } else {
-        showToast(`「${existingTimerProfile.name}」存檔已有計時，請先切換並停止`);
+        showToast(
+          `「${existingTimerProfile.name}」存檔已有計時，請先切換並停止`
+        );
       }
       return;
     }
@@ -6380,7 +7886,9 @@ export default function Home() {
       lease = null;
     }
     if (!lease) {
-      showToast("無法取得計時鎖；請確認其他分頁未計時，並允許此網站使用儲存空間");
+      showToast(
+        "無法取得計時鎖；請確認其他分頁未計時，並允許此網站使用儲存空間"
+      );
       return;
     }
     const latestRunningProfile = getStoredProfiles().find(
@@ -6395,7 +7903,9 @@ export default function Home() {
       showToast("計時狀態已變更；請重新確認目前的角色存檔");
       return;
     }
-    if (!stateRef.current.timerActivities.some(item => item.id === activityId)) {
+    if (
+      !stateRef.current.timerActivities.some(item => item.id === activityId)
+    ) {
       lease.release();
       return;
     }
@@ -6509,8 +8019,7 @@ export default function Home() {
         rewardChecks: previousRunning.rewardChecks + finalPendingChecks,
         abilityPointsEarned:
           previousRunning.abilityPointsEarned + pointsAwarded,
-        pomodoroRoundsCompleted:
-          previousRunning.pomodoro?.completedRounds ?? 0,
+        pomodoroRoundsCompleted: previousRunning.pomodoro?.completedRounds ?? 0,
       };
 
       return {
@@ -6523,8 +8032,7 @@ export default function Home() {
                 totalSeconds: item.totalSeconds + finalElapsedSeconds,
                 xpEarned: item.xpEarned + finalPendingXp,
                 rewardChecks: item.rewardChecks + finalPendingChecks,
-                abilityPointsEarned:
-                  item.abilityPointsEarned + pointsAwarded,
+                abilityPointsEarned: item.abilityPointsEarned + pointsAwarded,
                 pomodoroRoundsCompleted: item.pomodoroRoundsCompleted ?? 0,
                 sessions: [...item.sessions, session],
               }
@@ -6539,7 +8047,9 @@ export default function Home() {
   };
 
   const deleteTimerActivity = (activity: TimerActivity) => {
-    if (getStoredProfiles().some(profile => profile.state.runningTimer !== null)) {
+    if (
+      getStoredProfiles().some(profile => profile.state.runningTimer !== null)
+    ) {
       showToast("請先停止目前的計時器，再刪除事務與紀錄");
       return;
     }
@@ -6604,7 +8114,9 @@ export default function Home() {
     }));
     showToast(
       `成就「${achievement.title}」已領取：+${achievement.rewardCoins} 金幣${
-        achievement.rewardSkillPoints ? `、+${achievement.rewardSkillPoints} 技能點` : ""
+        achievement.rewardSkillPoints
+          ? `、+${achievement.rewardSkillPoints} 技能點`
+          : ""
       }`
     );
   };
@@ -6641,7 +8153,9 @@ export default function Home() {
           </div>
           <span className="monster-level">LV. {monster.level}</span>
         </div>
-        {monster.region && <div className="monster-region-label">{monster.region}</div>}
+        {monster.region && (
+          <div className="monster-region-label">{monster.region}</div>
+        )}
         <h3>{monster.name}</h3>
         <p>{monster.description}</p>
         <div className="monster-requirements">
@@ -6710,107 +8224,107 @@ export default function Home() {
         <div className="sidebar-scroll" aria-label="側邊導覽選單">
           <div className="sidebar-section-label">冒險地圖</div>
           <nav className="sidebar-nav" aria-label="冒險地圖">
-          <button
-            className={`sidebar-link ${activePage === "dashboard" ? "active" : ""}`}
-            onClick={() => navigateTo("dashboard")}
-          >
-            <LayoutGrid size={18} />
-            <span>任務總覽</span>
-            {activePage === "dashboard" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
-            onClick={() => navigateTo("abilities")}
-          >
-            <ShieldCheck size={18} />
-            <span>角色</span>
-            {activePage === "abilities" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "monsters" ? "active" : ""}`}
-            onClick={() => navigateTo("monsters")}
-          >
-            <Skull size={18} />
-            <span>怪物區域</span>
-            {activePage === "monsters" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "soulTrial" ? "active" : ""}`}
-            onClick={() => navigateTo("soulTrial")}
-          >
-            <Sparkles size={18} />
-            <span>靈魂的試煉</span>
-            {activePage === "soulTrial" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "loot" ? "active" : ""}`}
-            onClick={() => navigateTo("loot")}
-          >
-            <Gift size={18} />
-            <span>裝備工坊</span>
-            {activePage === "loot" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "codex" ? "active" : ""}`}
-            onClick={() => navigateTo("codex")}
-          >
-            <BookOpen size={18} />
-            <span>裝備圖鑑</span>
-            {activePage === "codex" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "monsterCodex" ? "active" : ""}`}
-            onClick={() => navigateTo("monsterCodex")}
-          >
-            <Skull size={18} />
-            <span>怪物圖鑑</span>
-            {activePage === "monsterCodex" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "rewards" ? "active" : ""}`}
-            onClick={() => navigateTo("rewards")}
-          >
-            <Gift size={18} />
-            <span>獎勵寶庫</span>
-            {activePage === "rewards" && <span className="active-dot" />}
-          </button>
-          <button
-            className={`sidebar-link ${activePage === "timers" ? "active" : ""}`}
-            onClick={() => navigateTo("timers")}
-          >
-            <Clock3 size={18} />
-            <span>事務計時</span>
-            {activePage === "timers" && <span className="active-dot" />}
-          </button>
-          <button
-            className="sidebar-link"
-            onClick={() => navigateTo("achievements")}
-          >
-            <Trophy size={18} />
-            <span>成就里程碑</span>
-          </button>
+            <button
+              className={`sidebar-link ${activePage === "dashboard" ? "active" : ""}`}
+              onClick={() => navigateTo("dashboard")}
+            >
+              <LayoutGrid size={18} />
+              <span>任務總覽</span>
+              {activePage === "dashboard" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
+              onClick={() => navigateTo("abilities")}
+            >
+              <ShieldCheck size={18} />
+              <span>角色</span>
+              {activePage === "abilities" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "monsters" ? "active" : ""}`}
+              onClick={() => navigateTo("monsters")}
+            >
+              <Skull size={18} />
+              <span>怪物區域</span>
+              {activePage === "monsters" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "soulTrial" ? "active" : ""}`}
+              onClick={() => navigateTo("soulTrial")}
+            >
+              <Sparkles size={18} />
+              <span>靈魂的試煉</span>
+              {activePage === "soulTrial" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "loot" ? "active" : ""}`}
+              onClick={() => navigateTo("loot")}
+            >
+              <Gift size={18} />
+              <span>裝備工坊</span>
+              {activePage === "loot" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "codex" ? "active" : ""}`}
+              onClick={() => navigateTo("codex")}
+            >
+              <BookOpen size={18} />
+              <span>裝備圖鑑</span>
+              {activePage === "codex" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "monsterCodex" ? "active" : ""}`}
+              onClick={() => navigateTo("monsterCodex")}
+            >
+              <Skull size={18} />
+              <span>怪物圖鑑</span>
+              {activePage === "monsterCodex" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "rewards" ? "active" : ""}`}
+              onClick={() => navigateTo("rewards")}
+            >
+              <Gift size={18} />
+              <span>獎勵寶庫</span>
+              {activePage === "rewards" && <span className="active-dot" />}
+            </button>
+            <button
+              className={`sidebar-link ${activePage === "timers" ? "active" : ""}`}
+              onClick={() => navigateTo("timers")}
+            >
+              <Clock3 size={18} />
+              <span>事務計時</span>
+              {activePage === "timers" && <span className="active-dot" />}
+            </button>
+            <button
+              className="sidebar-link"
+              onClick={() => navigateTo("achievements")}
+            >
+              <Trophy size={18} />
+              <span>成就里程碑</span>
+            </button>
           </nav>
           <div className="sidebar-section-label sidebar-label-spaced">系統</div>
           <nav className="sidebar-nav" aria-label="系統">
-          <button
-            type="button"
-            className="sidebar-link"
-            onClick={openProfileSettings}
-          >
-            <Settings2 size={18} />
-            <span>設定偏好</span>
-          </button>
-          <button className="sidebar-link" onClick={openSaveManager}>
-            <BookOpen size={18} />
-            <span>冒險存檔</span>
-          </button>
-          <button
-            className="sidebar-link"
-            onClick={() => showToast("你的冒險紀錄已安全保存在此裝置")}
-          >
-            <ShieldCheck size={18} />
-            <span>資料安全</span>
-          </button>
+            <button
+              type="button"
+              className="sidebar-link"
+              onClick={openProfileSettings}
+            >
+              <Settings2 size={18} />
+              <span>設定偏好</span>
+            </button>
+            <button className="sidebar-link" onClick={openSaveManager}>
+              <BookOpen size={18} />
+              <span>冒險存檔</span>
+            </button>
+            <button
+              className="sidebar-link"
+              onClick={() => showToast("你的冒險紀錄已安全保存在此裝置")}
+            >
+              <ShieldCheck size={18} />
+              <span>資料安全</span>
+            </button>
           </nav>
         </div>
         <div className="sidebar-footer-card">
@@ -6942,9 +8456,7 @@ export default function Home() {
                     SOUL MEMORY · {soulMemory.roleCount} ROLES
                   </span>
                   <h2>靈魂的記憶</h2>
-                  <p>
-                    彙整目前所有角色的 10% 經驗與基礎能力，不計入裝備加成。
-                  </p>
+                  <p>彙整目前所有角色的 10% 經驗與基礎能力，不計入裝備加成。</p>
                 </div>
                 <div className="soul-memory-stats">
                   <div>
@@ -7128,7 +8640,11 @@ export default function Home() {
                         equipped => equipped.slot === slot
                       );
                       const specialAbility = item
-                        ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
+                        ? getEquipmentSpecialAbility(
+                            item.name,
+                            item.rarity,
+                            item.specialAbilityId
+                          )
                         : undefined;
                       return item ? (
                         <button
@@ -7139,9 +8655,18 @@ export default function Home() {
                           title="點擊卸下"
                         >
                           <span>{getTaskIcon(item.icon, 14)}</span>
-                          <strong>{slot} · {item.name}</strong>
-                          <small>{item.element ? `${item.element}元素 · ` : ""}{item.bonus}</small>
-                          {specialAbility ? <small>特殊能力：{specialAbility.description}</small> : null}
+                          <strong>
+                            {slot} · {item.name}
+                          </strong>
+                          <small>
+                            {item.element ? `${item.element}元素 · ` : ""}
+                            {item.bonus}
+                          </small>
+                          {specialAbility ? (
+                            <small>
+                              特殊能力：{specialAbility.description}
+                            </small>
+                          ) : null}
                         </button>
                       ) : (
                         <button
@@ -7173,13 +8698,21 @@ export default function Home() {
                       <b>閃避 +{equipmentBonuses.combat.dodgeRate}%</b>
                     ) : null}
                     {equipmentBonuses.combat.castSpeedPercent ? (
-                      <b>施法速度 +{equipmentBonuses.combat.castSpeedPercent}%</b>
+                      <b>
+                        施法速度 +{equipmentBonuses.combat.castSpeedPercent}%
+                      </b>
                     ) : null}
                     {equipmentBonuses.combat.damageReductionPercent ? (
-                      <b>受到傷害 −{equipmentBonuses.combat.damageReductionPercent}%</b>
+                      <b>
+                        受到傷害 −
+                        {equipmentBonuses.combat.damageReductionPercent}%
+                      </b>
                     ) : null}
                     {equipmentBonuses.combat.magicPenetrationPercent ? (
-                      <b>魔法穿透 +{equipmentBonuses.combat.magicPenetrationPercent}%</b>
+                      <b>
+                        魔法穿透 +
+                        {equipmentBonuses.combat.magicPenetrationPercent}%
+                      </b>
                     ) : null}
                   </div>
                   <div className="equipment-set-summary">
@@ -7190,7 +8723,8 @@ export default function Home() {
                       </div>
                       <small>同系列裝備達到 2／4 件時啟用</small>
                     </div>
-                    {equipmentBonuses.activeSets.length > 0 ? (
+                    {equipmentBonuses.activeSets.length > 0 ||
+                    activeLegendarySpecialSetEntries.length > 0 ? (
                       <div className="equipment-set-list">
                         {equipmentBonuses.activeSets.map(set => (
                           <div className="equipment-set-card" key={set.id}>
@@ -7202,15 +8736,29 @@ export default function Home() {
                             <div className="equipment-set-effects">
                               {set.activeBonuses.map(bonus => (
                                 <span key={`${set.id}-${bonus.pieces}`}>
-                                  <b>{bonus.pieces} 件</b> {bonus.label} · {bonus.description}
+                                  <b>{bonus.pieces} 件</b> {bonus.label} ·{" "}
+                                  {bonus.description}
                                 </span>
                               ))}
                             </div>
                           </div>
                         ))}
+                        {activeLegendarySpecialSetEntries.map(set => (
+                          <div className="equipment-set-card" key={set.name}>
+                            <div className="equipment-set-card-top">
+                              <strong>{set.name}</strong>
+                              <span>2 件</span>
+                            </div>
+                            <div className="equipment-set-effects">
+                              <span>{set.description}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      <p className="equipment-set-empty">目前尚未湊齊任何套裝；裝備名稱前綴相同的部件屬於同一系列。</p>
+                      <p className="equipment-set-empty">
+                        目前尚未湊齊任何套裝；裝備名稱前綴相同的部件屬於同一系列。
+                      </p>
                     )}
                   </div>
                 </div>
@@ -7259,8 +8807,15 @@ export default function Home() {
                       {classDefinition.name} · Lv.{player.level}
                     </span>
                   </div>
-                  <div className="attribute-breakdown-table" role="table" aria-label="角色屬性來源拆解">
-                    <div className="attribute-breakdown-row attribute-breakdown-header" role="row">
+                  <div
+                    className="attribute-breakdown-table"
+                    role="table"
+                    aria-label="角色屬性來源拆解"
+                  >
+                    <div
+                      className="attribute-breakdown-row attribute-breakdown-header"
+                      role="row"
+                    >
                       <span role="columnheader">屬性</span>
                       <span role="columnheader">目前</span>
                       <span role="columnheader">基礎</span>
@@ -7273,9 +8828,15 @@ export default function Home() {
                       const formatValue = (value: number) =>
                         `${value > 0 ? "+" : ""}${value}${attribute.unit}`;
                       return (
-                        <div className="attribute-breakdown-row" role="row" key={attribute.key}>
+                        <div
+                          className="attribute-breakdown-row"
+                          role="row"
+                          key={attribute.key}
+                        >
                           <div className="attribute-breakdown-name" role="cell">
-                            <span className={`attribute-breakdown-icon attribute-${attribute.tone}`}>
+                            <span
+                              className={`attribute-breakdown-icon attribute-${attribute.tone}`}
+                            >
                               <Icon size={14} />
                             </span>
                             <span>
@@ -7283,13 +8844,23 @@ export default function Home() {
                               <small>{attribute.note}</small>
                             </span>
                           </div>
-                          <strong className="attribute-breakdown-total" role="cell">
-                            {attribute.total}{attribute.unit}
+                          <strong
+                            className="attribute-breakdown-total"
+                            role="cell"
+                          >
+                            {attribute.total}
+                            {attribute.unit}
                           </strong>
                           <span role="cell">{formatValue(attribute.base)}</span>
-                          <span role="cell">{formatValue(attribute.classBonus)}</span>
-                          <span role="cell">{formatValue(attribute.equipmentBonus)}</span>
-                          <span role="cell">{formatValue(attribute.specializationBonus)}</span>
+                          <span role="cell">
+                            {formatValue(attribute.classBonus)}
+                          </span>
+                          <span role="cell">
+                            {formatValue(attribute.equipmentBonus)}
+                          </span>
+                          <span role="cell">
+                            {formatValue(attribute.specializationBonus)}
+                          </span>
                         </div>
                       );
                     })}
@@ -7301,22 +8872,39 @@ export default function Home() {
                     </div>
                     {temporaryBattleBuff ? (
                       <div className="temporary-buff-values">
-                        <span>剩餘 {temporaryBattleBuff.turnsRemaining} 回合</span>
+                        <span>
+                          剩餘 {temporaryBattleBuff.turnsRemaining} 回合
+                        </span>
                         {temporaryBattleBuff.damageBonusPercent ? (
                           <b>傷害 +{temporaryBattleBuff.damageBonusPercent}%</b>
                         ) : null}
                         {temporaryBattleBuff.damageReductionPercent ? (
-                          <b>受傷 {temporaryBattleBuff.damageReductionPercent > 0 ? "−" : "+"}{Math.abs(temporaryBattleBuff.damageReductionPercent)}%</b>
+                          <b>
+                            受傷{" "}
+                            {temporaryBattleBuff.damageReductionPercent > 0
+                              ? "−"
+                              : "+"}
+                            {Math.abs(
+                              temporaryBattleBuff.damageReductionPercent
+                            )}
+                            %
+                          </b>
                         ) : null}
                         {temporaryBattleBuff.healPercentMaxHealth ? (
-                          <b>回復 +{temporaryBattleBuff.healPercentMaxHealth}%</b>
+                          <b>
+                            回復 +{temporaryBattleBuff.healPercentMaxHealth}%
+                          </b>
                         ) : null}
                         {temporaryBattleBuff.dodgeRateBonusPercent ? (
-                          <b>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</b>
+                          <b>
+                            閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%
+                          </b>
                         ) : null}
                       </div>
                     ) : (
-                      <span className="temporary-buff-empty">目前沒有生效中的戰鬥 Buff</span>
+                      <span className="temporary-buff-empty">
+                        目前沒有生效中的戰鬥 Buff
+                      </span>
                     )}
                   </div>
                 </div>
@@ -7363,7 +8951,9 @@ export default function Home() {
                   </div>
                   <div className="combat-stat">
                     <span>施法速度</span>
-                    <strong>{effectiveCombatStats.castSpeedPercent ?? 0}%</strong>
+                    <strong>
+                      {effectiveCombatStats.castSpeedPercent ?? 0}%
+                    </strong>
                     <small>每 10% 魔法技能冷卻 -1 回合</small>
                   </div>
                   <div className="combat-stat">
@@ -7392,7 +8982,8 @@ export default function Home() {
                       <span>固定閃避率 +10%</span>
                     </div>
                     <p>
-                      每次閃避失敗累積攻擊 +3%、閃避 +5%；加成持續至下一次閃避成功，成功時全部重置。
+                      每次閃避失敗累積攻擊 +3%、閃避
+                      +5%；加成持續至下一次閃避成功，成功時全部重置。
                     </p>
                     <div className="archer-talent-current">
                       <span>目前累積 {state.archerDodgeFailStacks} 層</span>
@@ -7410,7 +9001,7 @@ export default function Home() {
                       經驗獲取 +{experienceBonusPercent.toFixed(1)}%
                     </strong>
                   </div>
-                    <small>每 1 智力 +1% · 最高 +500%</small>
+                  <small>每 1 智力 +1% · 最高 +500%</small>
                 </div>
                 <div className="class-skill-panel">
                   <div className="class-skill-panel-heading">
@@ -7421,7 +9012,11 @@ export default function Home() {
                     <button
                       type="button"
                       className="skill-page-link"
-                      onClick={() => document.getElementById("skills")?.scrollIntoView({ behavior: "smooth" })}
+                      onClick={() =>
+                        document
+                          .getElementById("skills")
+                          ?.scrollIntoView({ behavior: "smooth" })
+                      }
                     >
                       跳到完整技能樹 <ChevronRight size={13} />
                     </button>
@@ -7479,9 +9074,13 @@ export default function Home() {
             <section className="skills-page" id="skills">
               <div className="section-heading">
                 <div>
-                  <div className="section-kicker"><Zap size={15} /> CLASS SKILL ARCHIVE</div>
+                  <div className="section-kicker">
+                    <Zap size={15} /> CLASS SKILL ARCHIVE
+                  </div>
                   <h2>角色技能</h2>
-                  <p>角色能力與技能集中於同一頁；達到基礎能力門檻後解鎖特殊技能。</p>
+                  <p>
+                    角色能力與技能集中於同一頁；達到基礎能力門檻後解鎖特殊技能。
+                  </p>
                 </div>
                 <div className="skill-page-class-badge">
                   {getTaskIcon(classDefinition.icon, 18)} {classDefinition.name}
@@ -7505,14 +9104,18 @@ export default function Home() {
                       : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
                   </small>
                 </div>
-                <div className={`specialization-identity specialization-identity-${currentSpecializationVisual.colorClass}`}>
+                <div
+                  className={`specialization-identity specialization-identity-${currentSpecializationVisual.colorClass}`}
+                >
                   <div className="specialization-identity-art">
                     {getTaskIcon(currentSpecializationVisual.icon, 30)}
                   </div>
                   <div>
                     <span className="mini-kicker">CURRENT ASPECT</span>
                     <strong>
-                      {specializationSelected ? currentSpecialization.name : "尚未選擇專精"}
+                      {specializationSelected
+                        ? currentSpecialization.name
+                        : "尚未選擇專精"}
                     </strong>
                     <small>
                       {specializationSelected
@@ -7526,25 +9129,29 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="specialization-branch-grid">
-                  {getSpecializations(state.jobClass).map(specialization => (
+                  {getSpecializations(state.jobClass).map(specialization =>
                     (() => {
                       const visual = specializationVisuals[specialization.id];
                       return (
-                    <button
-                      type="button"
-                      key={specialization.id}
-                      className={`specialization-branch-option specialization-option-${visual.colorClass} ${isSpecializationSelected(player.level, specialization.id, state.specialization) ? "is-selected" : ""}`}
-                      disabled={!specializationUnlocked}
-                      onClick={() => selectSpecialization(specialization.id)}
-                    >
-                      <span className="specialization-option-icon">{getTaskIcon(visual.icon, 21)}</span>
-                      <strong>{specialization.name}</strong>
-                      <small>{visual.subtitle}</small>
-                      <span>{specialization.description}</span>
-                    </button>
+                        <button
+                          type="button"
+                          key={specialization.id}
+                          className={`specialization-branch-option specialization-option-${visual.colorClass} ${isSpecializationSelected(player.level, specialization.id, state.specialization) ? "is-selected" : ""}`}
+                          disabled={!specializationUnlocked}
+                          onClick={() =>
+                            selectSpecialization(specialization.id)
+                          }
+                        >
+                          <span className="specialization-option-icon">
+                            {getTaskIcon(visual.icon, 21)}
+                          </span>
+                          <strong>{specialization.name}</strong>
+                          <small>{visual.subtitle}</small>
+                          <span>{specialization.description}</span>
+                        </button>
                       );
                     })()
-                  ))}
+                  )}
                 </div>
               </div>
               <div className="skill-page-summary panel-card">
@@ -7558,24 +9165,35 @@ export default function Home() {
                 </div>
                 <div>
                   <span>已解鎖</span>
-                  <strong>{battleSpecialSkills.length} / {allSpecialSkills.length}</strong>
+                  <strong>
+                    {battleSpecialSkills.length} / {allSpecialSkills.length}
+                  </strong>
                 </div>
                 <div>
                   <span>下一門檻</span>
-                  <strong>{nextSkillUnlockThreshold === null ? "全部解鎖" : `${nextSkillUnlockThreshold}${state.jobClass === "rogue" ? "%" : " 點"}`}</strong>
+                  <strong>
+                    {nextSkillUnlockThreshold === null
+                      ? "全部解鎖"
+                      : `${nextSkillUnlockThreshold}${state.jobClass === "rogue" ? "%" : " 點"}`}
+                  </strong>
                 </div>
               </div>
               <div className="skill-upgrade-points panel-card">
                 <div>
                   <span className="mini-kicker">SKILL UPGRADE POINTS</span>
                   <strong>{state.skillUpgradePoints}</strong>
-                  <small>每升 1 級獲得 1 點；增益技能每級 +1% 增益，傷害技能每級 +5% 傷害；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。</small>
+                  <small>
+                    每升 1 級獲得 1 點；增益技能每級 +1% 增益，傷害技能每級 +5%
+                    傷害；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。
+                  </small>
                 </div>
                 <Zap size={24} />
               </div>
               <div className="skill-archive-grid">
                 {allSpecialSkills.map(skill => {
-                  const unlocked = battleSpecialSkills.some(item => item.id === skill.id);
+                  const unlocked = battleSpecialSkills.some(
+                    item => item.id === skill.id
+                  );
                   const isBuff = skill.effectType === "buff";
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
                   const upgradeBonusLabel =
@@ -7583,8 +9201,8 @@ export default function Home() {
                       ? skill.effectType === "damage"
                         ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(60, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
                         : skill.effectType === "buff"
-                        ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
-                        : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
+                          ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
+                          : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
                       : "";
                   const nextUpgradeSkill =
                     unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
@@ -7594,9 +9212,14 @@ export default function Home() {
                     ? getSkillDamagePreview(skill)
                     : null;
                   return (
-                    <article className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`} key={skill.id}>
+                    <article
+                      className={`skill-archive-card panel-card ${unlocked ? "is-unlocked" : "is-locked"}`}
+                      key={skill.id}
+                    >
                       <div className="skill-archive-card-top">
-                        <div className="skill-archive-icon"><Zap size={18} /></div>
+                        <div className="skill-archive-icon">
+                          <Zap size={18} />
+                        </div>
                         <div>
                           <span>{unlocked ? "已解鎖" : "尚未解鎖"}</span>
                           <h3>{skill.name}</h3>
@@ -7611,7 +9234,9 @@ export default function Home() {
                       {upgradeBonusLabel && (
                         <div className="skill-upgrade-bonus">
                           <Zap size={13} />
-                          <span>{upgradeBonusLabel}（Lv.{upgradeLevel}）</span>
+                          <span>
+                            {upgradeBonusLabel}（Lv.{upgradeLevel}）
+                          </span>
                         </div>
                       )}
                       {damagePreview ? (
@@ -7622,16 +9247,36 @@ export default function Home() {
                           </div>
                           <div className="skill-damage-preview-grid">
                             <span>預估傷害</span>
-                            <b>{damagePreview.minimumDamage}～{damagePreview.maximumDamage}</b>
+                            <b>
+                              {damagePreview.minimumDamage}～
+                              {damagePreview.maximumDamage}
+                            </b>
                             <span>傷害類型</span>
                             <b>{damagePreview.damageType}</b>
-                            <span>{damagePreview.damageType === "魔法" ? "魔法穿透" : "物理穿透"}</span>
+                            <span>
+                              {damagePreview.damageType === "魔法"
+                                ? "魔法穿透"
+                                : "物理穿透"}
+                            </span>
                             <b>{damagePreview.penetration}%</b>
-                            <span>{damagePreview.damageType === "魔法" ? "魔法抗性" : "物理抗性"}後</span>
-                            <b>約 {damagePreview.minimumAfterResistance}～{damagePreview.maximumAfterResistance}</b>
+                            <span>
+                              {damagePreview.damageType === "魔法"
+                                ? "魔法抗性"
+                                : "物理抗性"}
+                              後
+                            </span>
+                            <b>
+                              約 {damagePreview.minimumAfterResistance}～
+                              {damagePreview.maximumAfterResistance}
+                            </b>
                           </div>
                           <small className="skill-damage-preview-note">
-                            目標{damagePreview.damageType === "魔法" ? "魔法" : "物理"}抗性 {damagePreview.resistancePercent}%；預覽已套用技能穿透與目前裝備／能力值。
+                            目標
+                            {damagePreview.damageType === "魔法"
+                              ? "魔法"
+                              : "物理"}
+                            抗性 {damagePreview.resistancePercent}
+                            %；預覽已套用技能穿透與目前裝備／能力值。
                           </small>
                         </div>
                       ) : skill.effectType === "damage" ? (
@@ -7644,15 +9289,21 @@ export default function Home() {
                           <strong>下一級預覽</strong>
                           {skill.effectType === "damage" ? (
                             <span>
-                              {skill.damageMultiplier.toFixed(2)}× → {nextUpgradeSkill.damageMultiplier.toFixed(2)}× {skill.damageType}傷害
+                              {skill.damageMultiplier.toFixed(2)}× →{" "}
+                              {nextUpgradeSkill.damageMultiplier.toFixed(2)}×{" "}
+                              {skill.damageType}傷害
                             </span>
                           ) : skill.effectType === "buff" ? (
                             <span>
-                              傷害增益 {skill.damageBonusPercent}% → {nextUpgradeSkill.damageBonusPercent}% · 減傷 {skill.damageReductionPercent}% → {nextUpgradeSkill.damageReductionPercent}%
+                              傷害增益 {skill.damageBonusPercent}% →{" "}
+                              {nextUpgradeSkill.damageBonusPercent}% · 減傷{" "}
+                              {skill.damageReductionPercent}% →{" "}
+                              {nextUpgradeSkill.damageReductionPercent}%
                             </span>
                           ) : (
                             <span>
-                              暴擊傷害 +{skill.critDamageBonusPercent}% → +{nextUpgradeSkill.critDamageBonusPercent}%
+                              暴擊傷害 +{skill.critDamageBonusPercent}% → +
+                              {nextUpgradeSkill.critDamageBonusPercent}%
                             </span>
                           )}
                           <small>升級消耗：1 點技能升級點數</small>
@@ -7660,15 +9311,30 @@ export default function Home() {
                       )}
                       <div className="skill-archive-meta">
                         <span>{skill.attributeName}門檻</span>
-                        {isBuff ? <span>增益技能 · {skill.durationTurns} 回合</span> : <span>{skill.damageMultiplier.toFixed(2)}×{skill.damageType}傷害</span>}
-                        {skill.cooldownTurns > 0 && <span>冷卻 {skill.cooldownTurns} 回合</span>}
+                        {isBuff ? (
+                          <span>增益技能 · {skill.durationTurns} 回合</span>
+                        ) : (
+                          <span>
+                            {skill.damageMultiplier.toFixed(2)}×
+                            {skill.damageType}傷害
+                          </span>
+                        )}
+                        {skill.cooldownTurns > 0 && (
+                          <span>冷卻 {skill.cooldownTurns} 回合</span>
+                        )}
                         <button
                           type="button"
                           className="skill-upgrade-button"
-                          disabled={!unlocked || state.skillUpgradePoints <= 0 || upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL}
+                          disabled={
+                            !unlocked ||
+                            state.skillUpgradePoints <= 0 ||
+                            upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
+                          }
                           onClick={() => upgradeSkill(skill.id, skill.name)}
                         >
-                          {upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL ? "已滿級" : `升級 ${upgradeLevel}/${MAX_SKILL_UPGRADE_LEVEL}`}
+                          {upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
+                            ? "已滿級"
+                            : `升級 ${upgradeLevel}/${MAX_SKILL_UPGRADE_LEVEL}`}
                         </button>
                       </div>
                     </article>
@@ -7677,7 +9343,9 @@ export default function Home() {
               </div>
               <div className="skill-archive-note panel-card">
                 <strong>戰鬥規則</strong>
-                <span>已解鎖技能可在回合制戰鬥中點擊使用；技能冷卻與持續回合只在該場戰鬥內計算。</span>
+                <span>
+                  已解鎖技能可在回合制戰鬥中點擊使用；技能冷卻與持續回合只在該場戰鬥內計算。
+                </span>
               </div>
             </section>
           )}
@@ -7817,7 +9485,8 @@ export default function Home() {
                       </div>
                       <div className="monster-region-label">
                         {monster.region}
-                        {monster.encounterType === "individual" && " · 個體小怪"}
+                        {monster.encounterType === "individual" &&
+                          " · 個體小怪"}
                         {monster.encounterType === "swarm" && " · 群聚小怪"}
                       </div>
                       <h3>{monster.name}</h3>
@@ -7844,7 +9513,10 @@ export default function Home() {
                         <span>暴傷 {monster.critDamage}%</span>
                       </div>
                       {mechanicLabels.length > 0 && (
-                        <div className="monster-mechanics" aria-label="特殊機制">
+                        <div
+                          className="monster-mechanics"
+                          aria-label="特殊機制"
+                        >
                           {mechanicLabels.map(label => (
                             <span key={label}>{label}</span>
                           ))}
@@ -7887,7 +9559,8 @@ export default function Home() {
                     {formatRefreshCountdown(
                       nextWeeklyBossRefreshAt - currentTime
                     )}{" "}
-                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} · 可挑戰各等級魔王，戰鬥風險隨等級提高。
+                    · 下次 {formatRefreshDate(nextWeeklyBossRefreshAt)} ·
+                    可挑戰各等級魔王，戰鬥風險隨等級提高。
                   </p>
                 </div>
                 <div className="boss-warning">
@@ -7902,7 +9575,10 @@ export default function Home() {
                   const mechanicLabels = [
                     ...getMonsterMechanicLabels(boss),
                     ...(boss.elementalAttack
-                      ? [`普通攻擊 100% · 技能攻擊 ${boss.elementalAttack.skillDamagePercent}% · 冷卻${boss.elementalAttack.cooldownTurns}回合`, `${boss.elementalAttack.element}灼燒：魔王實際技能傷害的${boss.elementalAttack.damagePercent}%／回合，持續${boss.elementalAttack.durationTurns}回合 · 物理攻擊傷害-${boss.elementalAttack.damageReductionPercent}%`]
+                      ? [
+                          `普通攻擊 100% · 技能攻擊 ${boss.elementalAttack.skillDamagePercent}% · 冷卻${boss.elementalAttack.cooldownTurns}回合`,
+                          `${boss.elementalAttack.element}灼燒：魔王實際技能傷害的${boss.elementalAttack.damagePercent}%／回合，持續${boss.elementalAttack.durationTurns}回合 · 物理攻擊傷害-${boss.elementalAttack.damageReductionPercent}%`,
+                        ]
                       : []),
                   ];
                   return (
@@ -7941,13 +9617,18 @@ export default function Home() {
                         <span>攻擊 {boss.damage}</span>
                         <span>防禦 {boss.defense}</span>
                         <span>減免 {getDefenseReduction(boss.defense)}</span>
-                        {boss.intelligence !== undefined && <span>智力 {boss.intelligence}</span>}
+                        {boss.intelligence !== undefined && (
+                          <span>智力 {boss.intelligence}</span>
+                        )}
                         <span>暴擊 {boss.critRate}%</span>
                         <span>閃避 {boss.dodgeRate}%</span>
                         <span>暴傷 {boss.critDamage}%</span>
                       </div>
                       {mechanicLabels.length > 0 && (
-                        <div className="monster-mechanics" aria-label="特殊機制">
+                        <div
+                          className="monster-mechanics"
+                          aria-label="特殊機制"
+                        >
                           {mechanicLabels.map(label => (
                             <span key={label}>{label}</span>
                           ))}
@@ -8297,7 +9978,13 @@ export default function Home() {
                             >
                               <Gift size={14} />
                               <strong>{milestone}</strong>
-                              <span>{claimed ? "已領取" : reached ? "可領取" : "待解鎖"}</span>
+                              <span>
+                                {claimed
+                                  ? "已領取"
+                                  : reached
+                                    ? "可領取"
+                                    : "待解鎖"}
+                              </span>
                             </div>
                           );
                         })}
@@ -8366,61 +10053,113 @@ export default function Home() {
             <section className="achievements-section" id="achievements">
               <div className="section-heading achievements-heading">
                 <div>
-                  <div className="section-kicker"><Trophy size={15} /> ACHIEVEMENT HALL</div>
+                  <div className="section-kicker">
+                    <Trophy size={15} /> ACHIEVEMENT HALL
+                  </div>
                   <h2>成就里程碑</h2>
-                  <p>完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵；里程碑由所有存檔共用。</p>
+                  <p>
+                    完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵；里程碑由所有存檔共用。
+                  </p>
                 </div>
                 <div className="achievement-trophy-count">
-                  <strong>{achievementStatuses.filter(item => item.claimed).length}</strong>
+                  <strong>
+                    {achievementStatuses.filter(item => item.claimed).length}
+                  </strong>
                   <span>/ {ACHIEVEMENTS.length} 已領取</span>
                 </div>
               </div>
               <div className="achievement-summary-grid">
                 <div className="achievement-summary-card panel-card">
                   <span>已解鎖</span>
-                  <strong>{achievementStatuses.filter(item => item.progress.completed).length}</strong>
+                  <strong>
+                    {
+                      achievementStatuses.filter(
+                        item => item.progress.completed
+                      ).length
+                    }
+                  </strong>
                 </div>
                 <div className="achievement-summary-card panel-card">
                   <span>待領取</span>
-                  <strong>{achievementStatuses.filter(item => item.progress.completed && !item.claimed).length}</strong>
+                  <strong>
+                    {
+                      achievementStatuses.filter(
+                        item => item.progress.completed && !item.claimed
+                      ).length
+                    }
+                  </strong>
                 </div>
                 <div className="achievement-summary-card panel-card">
                   <span>可領取金幣</span>
-                  <strong>{achievementStatuses.filter(item => item.progress.completed && !item.claimed).reduce((total, item) => total + item.achievement.rewardCoins, 0)}</strong>
+                  <strong>
+                    {achievementStatuses
+                      .filter(item => item.progress.completed && !item.claimed)
+                      .reduce(
+                        (total, item) => total + item.achievement.rewardCoins,
+                        0
+                      )}
+                  </strong>
                 </div>
               </div>
               <div className="achievement-grid">
-                {achievementStatuses.map(({ achievement, progress, claimed }) => {
-                  const progressPercent = Math.min(100, Math.round((progress.value / progress.goal) * 100));
-                  return (
-                    <article className={`achievement-card panel-card ${progress.completed ? "is-complete" : ""} ${claimed ? "is-claimed" : ""}`} key={achievement.id}>
-                      <div className="achievement-card-top">
-                        <div className="achievement-icon">{getTaskIcon(achievement.icon, 20)}</div>
-                        <div>
-                          <span>{achievement.category}</span>
-                          <h3>{achievement.title}</h3>
+                {achievementStatuses.map(
+                  ({ achievement, progress, claimed }) => {
+                    const progressPercent = Math.min(
+                      100,
+                      Math.round((progress.value / progress.goal) * 100)
+                    );
+                    return (
+                      <article
+                        className={`achievement-card panel-card ${progress.completed ? "is-complete" : ""} ${claimed ? "is-claimed" : ""}`}
+                        key={achievement.id}
+                      >
+                        <div className="achievement-card-top">
+                          <div className="achievement-icon">
+                            {getTaskIcon(achievement.icon, 20)}
+                          </div>
+                          <div>
+                            <span>{achievement.category}</span>
+                            <h3>{achievement.title}</h3>
+                          </div>
+                          {progress.completed && (
+                            <CheckCircle2
+                              size={18}
+                              className="achievement-complete-icon"
+                            />
+                          )}
                         </div>
-                        {progress.completed && <CheckCircle2 size={18} className="achievement-complete-icon" />}
-                      </div>
-                      <p>{achievement.description}</p>
-                      <div className="achievement-progress-label">
-                        <span>{progress.label}</span>
-                        <strong>{progressPercent}%</strong>
-                      </div>
-                      <div className="achievement-progress-track"><span style={{ width: `${progressPercent}%` }} /></div>
-                      <div className="achievement-reward-row">
-                        <span>獎勵：+{achievement.rewardCoins} 金幣{achievement.rewardSkillPoints ? ` · +${achievement.rewardSkillPoints} 技能點` : ""}</span>
-                        {claimed ? (
-                          <strong>已領取</strong>
-                        ) : progress.completed ? (
-                          <button type="button" onClick={() => claimAchievement(achievement.id)}>領取獎勵</button>
-                        ) : (
-                          <small>尚未完成</small>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
+                        <p>{achievement.description}</p>
+                        <div className="achievement-progress-label">
+                          <span>{progress.label}</span>
+                          <strong>{progressPercent}%</strong>
+                        </div>
+                        <div className="achievement-progress-track">
+                          <span style={{ width: `${progressPercent}%` }} />
+                        </div>
+                        <div className="achievement-reward-row">
+                          <span>
+                            獎勵：+{achievement.rewardCoins} 金幣
+                            {achievement.rewardSkillPoints
+                              ? ` · +${achievement.rewardSkillPoints} 技能點`
+                              : ""}
+                          </span>
+                          {claimed ? (
+                            <strong>已領取</strong>
+                          ) : progress.completed ? (
+                            <button
+                              type="button"
+                              onClick={() => claimAchievement(achievement.id)}
+                            >
+                              領取獎勵
+                            </button>
+                          ) : (
+                            <small>尚未完成</small>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  }
+                )}
               </div>
             </section>
           )}
@@ -8433,15 +10172,22 @@ export default function Home() {
                     <Gift size={15} /> LOOT VAULT
                   </div>
                   <h2>裝備工坊</h2>
-                  <p>集中管理戰利品、裝備欄位與裝備合成；擊敗怪物有機會帶回新的裝備與道具。</p>
+                  <p>
+                    集中管理戰利品、裝備欄位與裝備合成；擊敗怪物有機會帶回新的裝備與道具。
+                  </p>
                 </div>
                 <div className="loot-count">
                   <strong>{inventory.length}</strong>
                   <span>件收藏</span>
                 </div>
               </div>
-              <nav className="equipment-workshop-tabs" aria-label="裝備工坊分區">
-                <a className="is-active" href="#loot">戰利品庫</a>
+              <nav
+                className="equipment-workshop-tabs"
+                aria-label="裝備工坊分區"
+              >
+                <a className="is-active" href="#loot">
+                  戰利品庫
+                </a>
                 <a href="#fusion">裝備合成</a>
               </nav>
               <div className="equipment-benchmark-strip panel-card">
@@ -8454,10 +10200,19 @@ export default function Home() {
                   {LOOT_RARITIES.map((rarity, index) => {
                     const benchmark = RPG_EQUIPMENT_BENCHMARKS[rarity];
                     return (
-                      <div key={rarity} className={`equipment-benchmark-item loot-${LOOT_RARITY_CLASS[rarity]}`}>
-                        <strong>Lv.{index + 1} · {rarity}</strong>
-                        <span>HP {benchmark.hp} · ATK {benchmark.attack}</span>
-                        <span>INT {benchmark.intelligence} · DEF {benchmark.defense}</span>
+                      <div
+                        key={rarity}
+                        className={`equipment-benchmark-item loot-${LOOT_RARITY_CLASS[rarity]}`}
+                      >
+                        <strong>
+                          Lv.{index + 1} · {rarity}
+                        </strong>
+                        <span>
+                          HP {benchmark.hp} · ATK {benchmark.attack}
+                        </span>
+                        <span>
+                          INT {benchmark.intelligence} · DEF {benchmark.defense}
+                        </span>
                         <small>閃避 {benchmark.dodge}%</small>
                       </div>
                     );
@@ -8469,7 +10224,9 @@ export default function Home() {
                   <div>
                     <span className="mini-kicker">ACTIVE LOADOUT</span>
                     <h3>裝備欄位</h3>
-                    <p>五個部位各可裝備一件；同部位換裝會自動替換，寶藏可出售換取金幣。</p>
+                    <p>
+                      五個部位各可裝備一件；同部位換裝會自動替換，寶藏可出售換取金幣。
+                    </p>
                   </div>
                   <strong>
                     {equippedItems.length}
@@ -8492,7 +10249,10 @@ export default function Home() {
                               {getTaskIcon(item.icon, 16)}
                             </div>
                             <div>
-                              <span>{item.weaponType ? `${item.weaponType} · ` : ""}{slot}</span>
+                              <span>
+                                {item.weaponType ? `${item.weaponType} · ` : ""}
+                                {slot}
+                              </span>
                               <strong>{item.name}</strong>
                             </div>
                             <button
@@ -8526,7 +10286,11 @@ export default function Home() {
                     目前查看：{selectedLootCategory}
                   </span>
                 </div>
-                <div className="loot-category-grid" role="tablist" aria-label="戰利品分類">
+                <div
+                  className="loot-category-grid"
+                  role="tablist"
+                  aria-label="戰利品分類"
+                >
                   {LOOT_CATEGORY_KEYS.map(category => {
                     const Icon = lootCategoryMeta[category].icon;
                     const itemCount = getLootCategoryItems(category).length;
@@ -8540,10 +10304,14 @@ export default function Home() {
                         key={category}
                         onClick={() => setSelectedLootCategory(category)}
                       >
-                        <span className="loot-category-icon"><Icon size={19} /></span>
+                        <span className="loot-category-icon">
+                          <Icon size={19} />
+                        </span>
                         <span className="loot-category-copy">
                           <strong>{category}</strong>
-                          <small>{lootCategoryMeta[category].description}</small>
+                          <small>
+                            {lootCategoryMeta[category].description}
+                          </small>
                         </span>
                         <b>{itemCount}</b>
                       </button>
@@ -8552,27 +10320,77 @@ export default function Home() {
                 </div>
               </div>
               {equipmentComparison && selectedEquipmentForComparison ? (
-                <div className="equipment-comparison panel-card" aria-live="polite">
+                <div
+                  className="equipment-comparison panel-card"
+                  aria-live="polite"
+                >
                   <div className="equipment-comparison-heading">
                     <div>
                       <span className="mini-kicker">EQUIPMENT COMPARISON</span>
                       <h3>裝備比較</h3>
                       <p>比較替換同一部位後的角色實際屬性變化。</p>
                     </div>
-                    <button type="button" className="equipment-comparison-close" aria-label="關閉裝備比較" onClick={() => setSelectedEquipmentForComparison(null)}><X size={16} /></button>
+                    <button
+                      type="button"
+                      className="equipment-comparison-close"
+                      aria-label="關閉裝備比較"
+                      onClick={() => setSelectedEquipmentForComparison(null)}
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
                   <div className="equipment-comparison-items">
-                    <div className="equipment-comparison-item is-new"><span>新裝備</span><strong>{selectedEquipmentForComparison.name}</strong><small>{selectedEquipmentForComparison.bonus}</small></div>
+                    <div className="equipment-comparison-item is-new">
+                      <span>新裝備</span>
+                      <strong>{selectedEquipmentForComparison.name}</strong>
+                      <small>{selectedEquipmentForComparison.bonus}</small>
+                    </div>
                     <div className="equipment-comparison-arrow">→</div>
-                    <div className="equipment-comparison-item is-current"><span>目前裝備</span><strong>{equipmentComparison.currentItem?.name ?? "尚未裝備"}</strong><small>{equipmentComparison.currentItem?.bonus ?? "此部位目前沒有裝備"}</small></div>
+                    <div className="equipment-comparison-item is-current">
+                      <span>目前裝備</span>
+                      <strong>
+                        {equipmentComparison.currentItem?.name ?? "尚未裝備"}
+                      </strong>
+                      <small>
+                        {equipmentComparison.currentItem?.bonus ??
+                          "此部位目前沒有裝備"}
+                      </small>
+                    </div>
                   </div>
                   <div className="equipment-comparison-stats">
                     {equipmentComparison.stats.map(stat => {
                       const delta = stat.replacement - stat.current;
-                      return <div className="equipment-comparison-stat" key={stat.label}><span>{stat.label}</span><strong>{stat.replacement}{stat.unit}</strong><small className={delta > 0 ? "is-positive" : delta < 0 ? "is-negative" : ""}>{delta > 0 ? "+" : ""}{delta}{stat.unit}</small></div>;
+                      return (
+                        <div
+                          className="equipment-comparison-stat"
+                          key={stat.label}
+                        >
+                          <span>{stat.label}</span>
+                          <strong>
+                            {stat.replacement}
+                            {stat.unit}
+                          </strong>
+                          <small
+                            className={
+                              delta > 0
+                                ? "is-positive"
+                                : delta < 0
+                                  ? "is-negative"
+                                  : ""
+                            }
+                          >
+                            {delta > 0 ? "+" : ""}
+                            {delta}
+                            {stat.unit}
+                          </small>
+                        </div>
+                      );
                     })}
                   </div>
-                  <small className="equipment-comparison-note">魔法穿透目前由技能提供，裝備若未標示全域穿透則顯示 0；替換不會改變既有存檔格式。</small>
+                  <small className="equipment-comparison-note">
+                    魔法穿透目前由技能提供，裝備若未標示全域穿透則顯示
+                    0；替換不會改變既有存檔格式。
+                  </small>
                 </div>
               ) : null}
               <div className="loot-grid">
@@ -8597,99 +10415,125 @@ export default function Home() {
                     .slice()
                     .reverse()
                     .map(item => {
-                      const specialAbility = item.kind === "equipment"
-                        ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
-                        : undefined;
+                      const specialAbility =
+                        item.kind === "equipment"
+                          ? getEquipmentSpecialAbility(
+                              item.name,
+                              item.rarity,
+                              item.specialAbilityId
+                            )
+                          : undefined;
                       return (
-                      <div
-                        className={`loot-card panel-card loot-${LOOT_RARITY_CLASS[item.rarity]} loot-${item.kind}`}
-                        key={item.id}
-                      >
-                        <div className="loot-card-top">
-                          <div className="loot-icon">
-                            {item.kind === "equipment" ? (
-                              getTaskIcon(item.icon, 19)
-                            ) : (
-                              <Coins size={19} />
-                            )}
+                        <div
+                          className={`loot-card panel-card loot-${LOOT_RARITY_CLASS[item.rarity]} loot-${item.kind}`}
+                          key={item.id}
+                        >
+                          <div className="loot-card-top">
+                            <div className="loot-icon">
+                              {item.kind === "equipment" ? (
+                                getTaskIcon(item.icon, 19)
+                              ) : (
+                                <Coins size={19} />
+                              )}
+                            </div>
+                            <div className="loot-card-labels">
+                              <span className="loot-kind-badge">
+                                {item.kind === "equipment" ? "裝備" : "寶藏"}
+                              </span>
+                              <span>
+                                {item.rarity}
+                                {item.kind === "equipment"
+                                  ? ` · Lv.${item.equipmentLevel ?? LOOT_RARITIES.indexOf(item.rarity) + 1}`
+                                  : ""}
+                              </span>
+                            </div>
                           </div>
-                          <div className="loot-card-labels">
-                            <span className="loot-kind-badge">
-                              {item.kind === "equipment" ? "裝備" : "寶藏"}
+                          <div className="loot-card-copy">
+                            <span>
+                              {item.kind === "equipment"
+                                ? `${item.element ? `${item.element}元素 · ` : ""}${item.weaponType ? `${item.weaponType} · ` : ""}${item.slot} · 裝備等級 ${item.equipmentLevel ?? LOOT_RARITIES.indexOf(item.rarity) + 1}${item.weaponType ? ` · ${getEquipmentRequiredJobClassName(item)}專用` : ""}`
+                                : "可出售寶藏"}
                             </span>
-                              <span>{item.rarity}{item.kind === "equipment" ? ` · Lv.${item.equipmentLevel ?? LOOT_RARITIES.indexOf(item.rarity) + 1}` : ""}</span>
+                            <h3>{item.name}</h3>
+                            <p>{item.description}</p>
+                            {specialAbility ? (
+                              <div className="loot-affix">
+                                <strong>
+                                  特殊能力 · {specialAbility.name}
+                                </strong>
+                                <small>{specialAbility.description}</small>
+                              </div>
+                            ) : null}
+                            {item.affixes?.length ? (
+                              <div
+                                className="loot-affix-list"
+                                aria-label="特殊詞綴"
+                              >
+                                {item.affixes.map((affix, index) => (
+                                  <div
+                                    className="loot-affix"
+                                    key={`${item.id}-affix-${index}`}
+                                  >
+                                    <strong>{affix.name}</strong>
+                                    <small>{affix.description}</small>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="loot-card-bottom">
+                            <strong>
+                              {item.kind === "equipment"
+                                ? item.bonus
+                                : `出售價 +${item.sellValue} 金幣`}
+                            </strong>
+                            <button
+                              className={`loot-equip-button ${item.kind === "equipment" && equippedItemIds.includes(item.id) ? "is-equipped" : ""} ${item.kind === "treasure" ? "loot-sell-button" : ""}`}
+                              disabled={
+                                item.kind === "equipment" &&
+                                !equippedItemIds.includes(item.id) &&
+                                !canEquipEquipment(item, state.jobClass)
+                              }
+                              title={
+                                item.kind === "equipment" &&
+                                !canEquipEquipment(item, state.jobClass)
+                                  ? `${getEquipmentRequiredJobClassName(item)}專用武器`
+                                  : undefined
+                              }
+                              onClick={() =>
+                                item.kind === "equipment"
+                                  ? toggleEquipItem(item)
+                                  : sellTreasure(item)
+                              }
+                            >
+                              {item.kind === "equipment"
+                                ? equippedItemIds.includes(item.id)
+                                  ? "已裝備"
+                                  : !canEquipEquipment(item, state.jobClass)
+                                    ? `${getEquipmentRequiredJobClassName(item)}專用`
+                                    : equippedItems.some(
+                                          equipped =>
+                                            equipped.slot === item.slot
+                                        )
+                                      ? "替換裝備"
+                                      : "裝備"
+                                : `出售 +${item.sellValue} 金幣`}
+                            </button>
+                            {item.kind === "equipment" &&
+                            !equippedItemIds.includes(item.id) &&
+                            canEquipEquipment(item, state.jobClass) ? (
+                              <button
+                                type="button"
+                                className="loot-compare-button"
+                                onClick={() =>
+                                  setSelectedEquipmentForComparison(item)
+                                }
+                              >
+                                比較替換
+                              </button>
+                            ) : null}
                           </div>
                         </div>
-                        <div className="loot-card-copy">
-                          <span>
-                            {item.kind === "equipment"
-                              ? `${item.element ? `${item.element}元素 · ` : ""}${item.weaponType ? `${item.weaponType} · ` : ""}${item.slot} · 裝備等級 ${item.equipmentLevel ?? LOOT_RARITIES.indexOf(item.rarity) + 1}${item.weaponType ? ` · ${getEquipmentRequiredJobClassName(item)}專用` : ""}`
-                              : "可出售寶藏"}
-                          </span>
-                          <h3>{item.name}</h3>
-                          <p>{item.description}</p>
-                          {specialAbility ? (
-                            <div className="loot-affix">
-                              <strong>特殊能力 · {specialAbility.name}</strong>
-                              <small>{specialAbility.description}</small>
-                            </div>
-                          ) : null}
-                          {item.affixes?.length ? (
-                            <div className="loot-affix-list" aria-label="特殊詞綴">
-                              {item.affixes.map((affix, index) => (
-                                <div
-                                  className="loot-affix"
-                                  key={`${item.id}-affix-${index}`}
-                                >
-                                  <strong>{affix.name}</strong>
-                                  <small>{affix.description}</small>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="loot-card-bottom">
-                          <strong>
-                            {item.kind === "equipment"
-                              ? item.bonus
-                              : `出售價 +${item.sellValue} 金幣`}
-                          </strong>
-                          <button
-                            className={`loot-equip-button ${item.kind === "equipment" && equippedItemIds.includes(item.id) ? "is-equipped" : ""} ${item.kind === "treasure" ? "loot-sell-button" : ""}`}
-                            disabled={
-                              item.kind === "equipment" &&
-                              !equippedItemIds.includes(item.id) &&
-                              !canEquipEquipment(item, state.jobClass)
-                            }
-                            title={
-                              item.kind === "equipment" &&
-                              !canEquipEquipment(item, state.jobClass)
-                                ? `${getEquipmentRequiredJobClassName(item)}專用武器`
-                                : undefined
-                            }
-                            onClick={() =>
-                              item.kind === "equipment"
-                                ? toggleEquipItem(item)
-                                : sellTreasure(item)
-                            }
-                          >
-                            {item.kind === "equipment"
-                              ? equippedItemIds.includes(item.id)
-                                ? "已裝備"
-                                : !canEquipEquipment(item, state.jobClass)
-                                  ? `${getEquipmentRequiredJobClassName(item)}專用`
-                                : equippedItems.some(
-                                      equipped => equipped.slot === item.slot
-                                    )
-                                  ? "替換裝備"
-                                  : "裝備"
-                              : `出售 +${item.sellValue} 金幣`}
-                          </button>
-                          {item.kind === "equipment" && !equippedItemIds.includes(item.id) && canEquipEquipment(item, state.jobClass) ? (
-                            <button type="button" className="loot-compare-button" onClick={() => setSelectedEquipmentForComparison(item)}>比較替換</button>
-                          ) : null}
-                        </div>
-                      </div>
                       );
                     })
                 )}
@@ -8719,15 +10563,20 @@ export default function Home() {
                 <div className="codex-progress-copy">
                   <span className="mini-kicker">COLLECTION PROGRESS</span>
                   <strong>
-                    {codexDiscoveredCount} / {RPG_EQUIPMENT_TEMPLATES.length} 已發現
+                    {codexDiscoveredCount} / {RPG_EQUIPMENT_TEMPLATES.length}{" "}
+                    已發現
                   </strong>
                   <small>
-                    尚有 {RPG_EQUIPMENT_TEMPLATES.length - codexDiscoveredCount} 件裝備等待探索 · 所有存檔共用進度
+                    尚有 {RPG_EQUIPMENT_TEMPLATES.length - codexDiscoveredCount}{" "}
+                    件裝備等待探索 · 所有存檔共用進度
                   </small>
                 </div>
                 <div className="codex-progress-visual">
                   <strong>{codexCompletionPercent}%</strong>
-                  <div className="codex-progress-track" aria-label={`裝備圖鑑完成度 ${codexCompletionPercent}%`}>
+                  <div
+                    className="codex-progress-track"
+                    aria-label={`裝備圖鑑完成度 ${codexCompletionPercent}%`}
+                  >
                     <span style={{ width: `${codexCompletionPercent}%` }} />
                   </div>
                 </div>
@@ -8744,11 +10593,15 @@ export default function Home() {
                     <span>稀有度</span>
                     <select
                       value={codexRarity}
-                      onChange={event => setCodexRarity(event.target.value as "all" | LootRarity)}
+                      onChange={event =>
+                        setCodexRarity(event.target.value as "all" | LootRarity)
+                      }
                     >
                       <option value="all">全部稀有度</option>
                       {LOOT_RARITIES.map(rarity => (
-                        <option value={rarity} key={rarity}>{rarity}</option>
+                        <option value={rarity} key={rarity}>
+                          {rarity}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -8756,11 +10609,19 @@ export default function Home() {
                     <span>裝備部位</span>
                     <select
                       value={codexSlot}
-                      onChange={event => setCodexSlot(event.target.value as "all" | (typeof EQUIPMENT_SLOTS)[number])}
+                      onChange={event =>
+                        setCodexSlot(
+                          event.target.value as
+                            | "all"
+                            | (typeof EQUIPMENT_SLOTS)[number]
+                        )
+                      }
                     >
                       <option value="all">全部部位</option>
                       {EQUIPMENT_SLOTS.map(slot => (
-                        <option value={slot} key={slot}>{slot}</option>
+                        <option value={slot} key={slot}>
+                          {slot}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -8779,17 +10640,38 @@ export default function Home() {
               </div>
 
               <div className="codex-result-summary">
-                <span>目前顯示 {codexItems.length} / {RPG_EQUIPMENT_TEMPLATES.length} 件裝備</span>
-                <span>{codexItems.filter(item => discoveredEquipmentNames.has(item.name)).length} 件已發現 · {codexItems.filter(item => !discoveredEquipmentNames.has(item.name)).length} 件未發現</span>
+                <span>
+                  目前顯示 {codexItems.length} /{" "}
+                  {RPG_EQUIPMENT_TEMPLATES.length} 件裝備
+                </span>
+                <span>
+                  {
+                    codexItems.filter(item =>
+                      discoveredEquipmentNames.has(item.name)
+                    ).length
+                  }{" "}
+                  件已發現 ·{" "}
+                  {
+                    codexItems.filter(
+                      item => !discoveredEquipmentNames.has(item.name)
+                    ).length
+                  }{" "}
+                  件未發現
+                </span>
               </div>
 
               <div className="codex-grid">
                 {codexItems.map(item => {
                   const discovered = discoveredEquipmentNames.has(item.name);
                   const specialAbility = discovered
-                    ? getEquipmentSpecialAbility(item.name, item.rarity, item.specialAbilityId)
+                    ? getEquipmentSpecialAbility(
+                        item.name,
+                        item.rarity,
+                        item.specialAbilityId
+                      )
                     : undefined;
-                  const collectionNumber = RPG_EQUIPMENT_TEMPLATES.indexOf(item) + 1;
+                  const collectionNumber =
+                    RPG_EQUIPMENT_TEMPLATES.indexOf(item) + 1;
                   return (
                     <article
                       className={`codex-card panel-card loot-${LOOT_RARITY_CLASS[item.rarity]} ${discovered ? "is-discovered" : "is-locked"}`}
@@ -8797,20 +10679,41 @@ export default function Home() {
                     >
                       <div className="codex-card-top">
                         <div className="codex-card-icon">
-                          {discovered ? getTaskIcon(item.icon, 22) : <LockKeyhole size={19} />}
+                          {discovered ? (
+                            getTaskIcon(item.icon, 22)
+                          ) : (
+                            <LockKeyhole size={19} />
+                          )}
                         </div>
                         <div className="codex-card-meta">
-                          <span className="codex-rarity-pill">{item.rarity}</span>
-                          <small>#{String(collectionNumber).padStart(3, "0")}</small>
+                          <span className="codex-rarity-pill">
+                            {item.rarity}
+                          </span>
+                          <small>
+                            #{String(collectionNumber).padStart(3, "0")}
+                          </small>
                         </div>
                       </div>
                       <div className="codex-card-copy">
-                        <span>{item.weaponType ? `${item.weaponType} · ` : ""}{item.slot}{item.element ? ` · ${item.element}` : ""}{item.weaponType ? ` · ${getEquipmentRequiredJobClassName(item)}專用` : ""}</span>
+                        <span>
+                          {item.weaponType ? `${item.weaponType} · ` : ""}
+                          {item.slot}
+                          {item.element ? ` · ${item.element}` : ""}
+                          {item.weaponType
+                            ? ` · ${getEquipmentRequiredJobClassName(item)}專用`
+                            : ""}
+                        </span>
                         <h3>{discovered ? item.name : "尚未發現的裝備"}</h3>
-                        <p>{discovered ? item.description : "探索怪物區域或完成裝備合成，解鎖這張收藏卡的詳細資料。"}</p>
+                        <p>
+                          {discovered
+                            ? item.description
+                            : "探索怪物區域或完成裝備合成，解鎖這張收藏卡的詳細資料。"}
+                        </p>
                         <div className="codex-bonus">
                           <small>{discovered ? "裝備效果" : "效果資訊"}</small>
-                          <strong>{discovered ? item.bonus : "????????"}</strong>
+                          <strong>
+                            {discovered ? item.bonus : "????????"}
+                          </strong>
                         </div>
                         {specialAbility ? (
                           <div className="codex-bonus">
@@ -8820,7 +10723,10 @@ export default function Home() {
                         ) : null}
                       </div>
                       <div className="codex-card-bottom">
-                        <span>裝備等級 {discovered ? `Lv.${item.equipmentLevel}` : "?"}</span>
+                        <span>
+                          裝備等級{" "}
+                          {discovered ? `Lv.${item.equipmentLevel}` : "?"}
+                        </span>
                         <strong>{discovered ? "已發現" : "尚未發現"}</strong>
                       </div>
                     </article>
@@ -8838,7 +10744,9 @@ export default function Home() {
                     <Skull size={15} /> MONSTER CODEX
                   </div>
                   <h2>怪物圖鑑</h2>
-                  <p>收錄冒險區域的普通魔物與區域魔王；擊敗過的敵人會解鎖完整資料。</p>
+                  <p>
+                    收錄冒險區域的普通魔物與區域魔王；擊敗過的敵人會解鎖完整資料。
+                  </p>
                 </div>
                 <div className="codex-total-badge monster-codex-total-badge">
                   <strong>{monsterCodexEntries.length}</strong>
@@ -8849,17 +10757,26 @@ export default function Home() {
                 <div className="codex-progress-copy">
                   <span className="mini-kicker">HUNTING PROGRESS</span>
                   <strong>
-                    {monsterCodexDiscoveredCount} / {monsterCodexEntries.length} 已擊敗
+                    {monsterCodexDiscoveredCount} / {monsterCodexEntries.length}{" "}
+                    已擊敗
                   </strong>
                   <small>擊敗過的魔物會在所有角色存檔中共用圖鑑進度。</small>
                 </div>
                 <div className="codex-progress-visual">
                   <strong>
                     {monsterCodexEntries.length
-                      ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100)
-                      : 0}%
+                      ? Math.round(
+                          (monsterCodexDiscoveredCount /
+                            monsterCodexEntries.length) *
+                            100
+                        )
+                      : 0}
+                    %
                   </strong>
-                  <div className="codex-progress-track" aria-label="怪物圖鑑完成度">
+                  <div
+                    className="codex-progress-track"
+                    aria-label="怪物圖鑑完成度"
+                  >
                     <span
                       style={{
                         width: `${monsterCodexEntries.length ? Math.round((monsterCodexDiscoveredCount / monsterCodexEntries.length) * 100) : 0}%`,
@@ -8879,7 +10796,9 @@ export default function Home() {
                     <span>搜尋</span>
                     <input
                       value={monsterCodexSearch}
-                      onChange={event => setMonsterCodexSearch(event.target.value)}
+                      onChange={event =>
+                        setMonsterCodexSearch(event.target.value)
+                      }
                       placeholder="輸入怪物名稱"
                     />
                   </label>
@@ -8887,18 +10806,24 @@ export default function Home() {
                     <span>區域</span>
                     <select
                       value={monsterCodexRegion}
-                      onChange={event => setMonsterCodexRegion(event.target.value)}
+                      onChange={event =>
+                        setMonsterCodexRegion(event.target.value)
+                      }
                     >
                       <option value="all">全部區域</option>
                       {monsterCodexRegions.map(region => (
-                        <option value={region} key={region}>{region}</option>
+                        <option value={region} key={region}>
+                          {region}
+                        </option>
                       ))}
                     </select>
                   </label>
                   <button
                     type="button"
                     className="codex-clear-button"
-                    disabled={!monsterCodexSearch && monsterCodexRegion === "all"}
+                    disabled={
+                      !monsterCodexSearch && monsterCodexRegion === "all"
+                    }
                     onClick={() => {
                       setMonsterCodexSearch("");
                       setMonsterCodexRegion("all");
@@ -8909,8 +10834,24 @@ export default function Home() {
                 </div>
               </div>
               <div className="codex-result-summary">
-                <span>目前顯示 {filteredMonsterCodexEntries.length} / {monsterCodexEntries.length} 種魔物</span>
-                <span>{filteredMonsterCodexEntries.filter(monster => monster.discovered).length} 種已擊敗 · {filteredMonsterCodexEntries.filter(monster => !monster.discovered).length} 種未擊敗</span>
+                <span>
+                  目前顯示 {filteredMonsterCodexEntries.length} /{" "}
+                  {monsterCodexEntries.length} 種魔物
+                </span>
+                <span>
+                  {
+                    filteredMonsterCodexEntries.filter(
+                      monster => monster.discovered
+                    ).length
+                  }{" "}
+                  種已擊敗 ·{" "}
+                  {
+                    filteredMonsterCodexEntries.filter(
+                      monster => !monster.discovered
+                    ).length
+                  }{" "}
+                  種未擊敗
+                </span>
               </div>
               <div className="monster-codex-grid">
                 {filteredMonsterCodexEntries.map(monster => {
@@ -8922,10 +10863,16 @@ export default function Home() {
                     >
                       <div className="monster-codex-card-top">
                         <div className="monster-codex-icon">
-                          {monster.discovered ? <Icon size={22} /> : <LockKeyhole size={18} />}
+                          {monster.discovered ? (
+                            <Icon size={22} />
+                          ) : (
+                            <LockKeyhole size={18} />
+                          )}
                         </div>
                         <div>
-                          <span className="monster-codex-region">{monster.region}</span>
+                          <span className="monster-codex-region">
+                            {monster.region}
+                          </span>
                           <small>
                             {monster.isBoss
                               ? "區域魔王"
@@ -8938,17 +10885,30 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="monster-codex-copy">
-                        <h3>{monster.discovered ? monster.name : "尚未辨識的魔物"}</h3>
-                        <p>{monster.discovered ? monster.description : "前往怪物區域挑戰並擊敗牠，解鎖詳細資料。"}</p>
-                        {monster.discovered && monster.mechanicLabels.length > 0 && (
-                          <div className="monster-codex-mechanics">
-                            {monster.mechanicLabels.map(label => <span key={label}>{label}</span>)}
-                          </div>
-                        )}
+                        <h3>
+                          {monster.discovered ? monster.name : "尚未辨識的魔物"}
+                        </h3>
+                        <p>
+                          {monster.discovered
+                            ? monster.description
+                            : "前往怪物區域挑戰並擊敗牠，解鎖詳細資料。"}
+                        </p>
+                        {monster.discovered &&
+                          monster.mechanicLabels.length > 0 && (
+                            <div className="monster-codex-mechanics">
+                              {monster.mechanicLabels.map(label => (
+                                <span key={label}>{label}</span>
+                              ))}
+                            </div>
+                          )}
                       </div>
                       <div className="monster-codex-card-bottom">
-                        <span>{monster.discovered ? "資料已解鎖" : "資料鎖定"}</span>
-                        <strong>{monster.discovered ? "已擊敗" : "未擊敗"}</strong>
+                        <span>
+                          {monster.discovered ? "資料已解鎖" : "資料鎖定"}
+                        </span>
+                        <strong>
+                          {monster.discovered ? "已擊敗" : "未擊敗"}
+                        </strong>
                       </div>
                     </article>
                   );
@@ -8989,7 +10949,8 @@ export default function Home() {
                   ))}
                 </div>
                 <p>
-                  普通 → 精良 → 稀有 → 史詩 → 傳說 → 神話。選 3 件相同品質的未裝備裝備，可合成下一級；神話為最高品質。
+                  普通 → 精良 → 稀有 → 史詩 → 傳說 → 神話。選 3
+                  件相同品質的未裝備裝備，可合成下一級；神話為最高品質。
                 </p>
               </div>
 
@@ -9031,7 +10992,9 @@ export default function Home() {
                   ) : (
                     <div className="fusion-item-list">
                       {selectableFusionItems.map(item => {
-                        const selected = selectedFusionItemIds.includes(item.id);
+                        const selected = selectedFusionItemIds.includes(
+                          item.id
+                        );
                         return (
                           <button
                             type="button"
@@ -9041,11 +11004,17 @@ export default function Home() {
                             onClick={() => toggleFusionMaterial(item)}
                           >
                             <span className="fusion-item-check">
-                              {selected ? <Check size={14} /> : getTaskIcon(item.icon, 15)}
+                              {selected ? (
+                                <Check size={14} />
+                              ) : (
+                                getTaskIcon(item.icon, 15)
+                              )}
                             </span>
                             <span className="fusion-item-copy">
                               <strong>{item.name}</strong>
-                              <small>{item.slot} · {item.bonus}</small>
+                              <small>
+                                {item.slot} · {item.bonus}
+                              </small>
                             </span>
                             <span
                               className={`loot-fusion-rarity loot-${LOOT_RARITY_CLASS[item.rarity]}`}
@@ -9081,7 +11050,9 @@ export default function Home() {
                           {item ? (
                             <>
                               <strong>{item.name}</strong>
-                              <small>{item.slot} · {item.rarity}</small>
+                              <small>
+                                {item.slot} · {item.rarity}
+                              </small>
                             </>
                           ) : (
                             <small>選擇第 {index + 1} 件素材</small>
@@ -9092,7 +11063,8 @@ export default function Home() {
                   </div>
                   <div className="fusion-outcome-preview">
                     <span>預計品質</span>
-                    {selectedFusionRarity && nextLootRarity(selectedFusionRarity) ? (
+                    {selectedFusionRarity &&
+                    nextLootRarity(selectedFusionRarity) ? (
                       <strong
                         className={`loot-fusion-rarity loot-${LOOT_RARITY_CLASS[nextLootRarity(selectedFusionRarity)!]}`}
                       >
@@ -9100,12 +11072,18 @@ export default function Home() {
                       </strong>
                     ) : (
                       <strong>
-                        {selectedFusionRarity === "神話" ? "最高品質" : "等待選擇素材"}
+                        {selectedFusionRarity === "神話"
+                          ? "最高品質"
+                          : "等待選擇素材"}
                       </strong>
                     )}
                     {selectedFusionItems.length === 3 && (
                       <small>
-                        隨機部位：{selectedFusionItems.map(item => item.slot).join("、")} · 詞綴重新生成
+                        隨機部位：
+                        {selectedFusionItems
+                          .map(item => item.slot)
+                          .join("、")}{" "}
+                        · 詞綴重新生成
                       </small>
                     )}
                   </div>
@@ -9191,7 +11169,10 @@ export default function Home() {
                   );
                 })}
               </div>
-              <section className="reward-history panel-card" aria-labelledby="reward-history-title">
+              <section
+                className="reward-history panel-card"
+                aria-labelledby="reward-history-title"
+              >
                 <div className="reward-history-heading">
                   <div>
                     <div className="section-kicker">
@@ -9208,7 +11189,9 @@ export default function Home() {
                   <input
                     type="search"
                     value={rewardHistoryQuery}
-                    onChange={event => setRewardHistoryQuery(event.target.value)}
+                    onChange={event =>
+                      setRewardHistoryQuery(event.target.value)
+                    }
                     placeholder="搜尋獎勵名稱"
                   />
                 </label>
@@ -9230,7 +11213,9 @@ export default function Home() {
                         </div>
                         <div className="reward-history-copy">
                           <strong>{entry.title}</strong>
-                          <small>{formatRewardRedemptionDate(entry.redeemedAt)}</small>
+                          <small>
+                            {formatRewardRedemptionDate(entry.redeemedAt)}
+                          </small>
                         </div>
                         <span className="reward-history-cost">
                           <Coins size={14} /> -{entry.cost}
@@ -9265,8 +11250,11 @@ export default function Home() {
               <div className="timer-rule-note">
                 <Sparkles size={17} />
                 <p>
-                  今日計時每天 00:00 依裝置本地時區歸零；正在運行的計時器不中斷，午夜後從零累積今日時間。歷次紀錄與已獲能力點永久保留。
-                  每項事務每完整累積 1 分鐘固定獲得 1 XP，另有一次獨立的 5% 機會獲得 1 點能力點。獎勵進度與未滿一分鐘的秒數不受每日顯示歸零影響；所有角色存檔與瀏覽器分頁共用計時鎖，同一時間只計時一項事務。
+                  今日計時每天 00:00
+                  依裝置本地時區歸零；正在運行的計時器不中斷，午夜後從零累積今日時間。歷次紀錄與已獲能力點永久保留。
+                  每項事務每完整累積 1 分鐘固定獲得 1 XP，另有一次獨立的 5%
+                  機會獲得 1
+                  點能力點。獎勵進度與未滿一分鐘的秒數不受每日顯示歸零影響；所有角色存檔與瀏覽器分頁共用計時鎖，同一時間只計時一項事務。
                   {activeTimerProfile &&
                     ` 目前「${activeTimerProfile.name}」存檔${activeTimerProfileActivity ? ` 的「${activeTimerProfileActivity.name}」` : ""}正在計時；請在持有計時鎖的分頁停止後再開始其他事務。`}
                 </p>
@@ -9277,14 +11265,21 @@ export default function Home() {
                   <div>
                     <span className="mini-kicker">POMODORO MODE</span>
                     <h3>番茄鐘進階模式</h3>
-                    <p>完成一輪專注可獲得 +{POMODORO_ROUND_XP} XP；休息階段會暫停一般計時獎勵並禁止開始戰鬥。</p>
+                    <p>
+                      完成一輪專注可獲得 +{POMODORO_ROUND_XP}{" "}
+                      XP；休息階段會暫停一般計時獎勵並禁止開始戰鬥。
+                    </p>
                   </div>
                   <label className="pomodoro-toggle">
                     <input
                       type="checkbox"
                       checked={state.pomodoroSettings.enabled}
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => updatePomodoroSettings({ enabled: event.target.checked })}
+                      onChange={event =>
+                        updatePomodoroSettings({
+                          enabled: event.target.checked,
+                        })
+                      }
                     />
                     <span>啟用</span>
                   </label>
@@ -9294,14 +11289,20 @@ export default function Home() {
                     <span>專注／短休息</span>
                     <select
                       value={
-                        state.pomodoroSettings.focusMinutes === 25 && state.pomodoroSettings.shortBreakMinutes === 5
+                        state.pomodoroSettings.focusMinutes === 25 &&
+                        state.pomodoroSettings.shortBreakMinutes === 5
                           ? "25-5"
-                          : state.pomodoroSettings.focusMinutes === 50 && state.pomodoroSettings.shortBreakMinutes === 10
+                          : state.pomodoroSettings.focusMinutes === 50 &&
+                              state.pomodoroSettings.shortBreakMinutes === 10
                             ? "50-10"
                             : "custom"
                       }
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => selectPomodoroPreset(event.target.value as "25-5" | "50-10" | "custom")}
+                      onChange={event =>
+                        selectPomodoroPreset(
+                          event.target.value as "25-5" | "50-10" | "custom"
+                        )
+                      }
                     >
                       <option value="25-5">25／5</option>
                       <option value="50-10">50／10</option>
@@ -9316,7 +11317,11 @@ export default function Home() {
                       max={180}
                       value={state.pomodoroSettings.focusMinutes}
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => updatePomodoroSettings({ focusMinutes: Number(event.target.value) })}
+                      onChange={event =>
+                        updatePomodoroSettings({
+                          focusMinutes: Number(event.target.value),
+                        })
+                      }
                     />
                   </label>
                   <label>
@@ -9327,7 +11332,11 @@ export default function Home() {
                       max={60}
                       value={state.pomodoroSettings.shortBreakMinutes}
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => updatePomodoroSettings({ shortBreakMinutes: Number(event.target.value) })}
+                      onChange={event =>
+                        updatePomodoroSettings({
+                          shortBreakMinutes: Number(event.target.value),
+                        })
+                      }
                     />
                   </label>
                   <label>
@@ -9338,7 +11347,11 @@ export default function Home() {
                       max={120}
                       value={state.pomodoroSettings.longBreakMinutes}
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => updatePomodoroSettings({ longBreakMinutes: Number(event.target.value) })}
+                      onChange={event =>
+                        updatePomodoroSettings({
+                          longBreakMinutes: Number(event.target.value),
+                        })
+                      }
                     />
                   </label>
                   <label>
@@ -9349,7 +11362,11 @@ export default function Home() {
                       max={12}
                       value={state.pomodoroSettings.roundsBeforeLongBreak}
                       disabled={Boolean(state.runningTimer)}
-                      onChange={event => updatePomodoroSettings({ roundsBeforeLongBreak: Number(event.target.value) })}
+                      onChange={event =>
+                        updatePomodoroSettings({
+                          roundsBeforeLongBreak: Number(event.target.value),
+                        })
+                      }
                     />
                   </label>
                 </div>
@@ -9358,7 +11375,11 @@ export default function Home() {
                     type="checkbox"
                     checked={state.pomodoroSettings.autoStartNextPhase}
                     disabled={Boolean(state.runningTimer)}
-                    onChange={event => updatePomodoroSettings({ autoStartNextPhase: event.target.checked })}
+                    onChange={event =>
+                      updatePomodoroSettings({
+                        autoStartNextPhase: event.target.checked,
+                      })
+                    }
                   />
                   <span>階段結束後自動開始下一階段</span>
                 </label>
@@ -9384,7 +11405,10 @@ export default function Home() {
                   <strong className="timer-mobile-live-clock">
                     {state.runningTimer.pomodoro
                       ? formatTimerDuration(
-                          getPomodoroPhaseElapsed(state.runningTimer.pomodoro, currentTime)
+                          getPomodoroPhaseElapsed(
+                            state.runningTimer.pomodoro,
+                            currentTime
+                          )
                         )
                       : formatTimerDuration(
                           getTimerTodaySeconds(
@@ -9525,8 +11549,12 @@ export default function Home() {
                             {state.runningTimer.pomodoro ? (
                               <>
                                 <span>
-                                  {pomodoroPhaseLabel(state.runningTimer.pomodoro.phase)}階段 ·
-                                  已完成 {state.runningTimer.pomodoro.completedRounds} 輪
+                                  {pomodoroPhaseLabel(
+                                    state.runningTimer.pomodoro.phase
+                                  )}
+                                  階段 · 已完成{" "}
+                                  {state.runningTimer.pomodoro.completedRounds}{" "}
+                                  輪
                                 </span>
                                 <strong>
                                   本段 +{state.runningTimer.xpEarned} XP ·
@@ -9538,7 +11566,9 @@ export default function Home() {
                                   getPomodoroPhaseElapsed(
                                     state.runningTimer.pomodoro,
                                     currentTime
-                                  ) >= state.runningTimer.pomodoro.phaseDurationSeconds && (
+                                  ) >=
+                                    state.runningTimer.pomodoro
+                                      .phaseDurationSeconds && (
                                     <button
                                       type="button"
                                       className="timer-phase-button"
@@ -9551,7 +11581,8 @@ export default function Home() {
                             ) : (
                               <>
                                 <span>
-                                  本段已完成 {state.runningTimer.xpEarned} 個完整分鐘
+                                  本段已完成 {state.runningTimer.xpEarned}{" "}
+                                  個完整分鐘
                                 </span>
                                 <strong>
                                   {timerLockOwned
@@ -9571,7 +11602,8 @@ export default function Home() {
                               : "primary-button timer-start-button"
                           }
                           disabled={
-                            anotherTimerRunning || (isRunning && !timerLockOwned)
+                            anotherTimerRunning ||
+                            (isRunning && !timerLockOwned)
                           }
                           onClick={() =>
                             isRunning
@@ -9589,31 +11621,42 @@ export default function Home() {
                         </button>
 
                         <details className="timer-history-details">
-                          <summary>全部歷史紀錄（{activity.sessions.length}）</summary>
+                          <summary>
+                            全部歷史紀錄（{activity.sessions.length}）
+                          </summary>
                           {allSessions.length === 0 ? (
-                            <p className="timer-history-empty">停止計時後，這裡會保留每段紀錄。</p>
+                            <p className="timer-history-empty">
+                              停止計時後，這裡會保留每段紀錄。
+                            </p>
                           ) : (
                             <div className="timer-history-list">
                               {allSessions.map(session => (
-                                <div className="timer-history-row" key={session.id}>
+                                <div
+                                  className="timer-history-row"
+                                  key={session.id}
+                                >
                                   <div>
                                     <strong>
-                                      {new Date(session.startedAt).toLocaleString(
-                                        "zh-TW",
-                                        {
-                                          month: "2-digit",
-                                          day: "2-digit",
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        }
-                                      )}
+                                      {new Date(
+                                        session.startedAt
+                                      ).toLocaleString("zh-TW", {
+                                        month: "2-digit",
+                                        day: "2-digit",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
                                     </strong>
                                     <span>
-                                      XP +{session.xpEarned} · 抽取 {session.rewardChecks} 次 ·
-                                      能力點 +{session.abilityPointsEarned}
+                                      XP +{session.xpEarned} · 抽取{" "}
+                                      {session.rewardChecks} 次 · 能力點 +
+                                      {session.abilityPointsEarned}
                                     </span>
                                   </div>
-                                  <b>{formatTimerDuration(session.durationSeconds)}</b>
+                                  <b>
+                                    {formatTimerDuration(
+                                      session.durationSeconds
+                                    )}
+                                  </b>
                                 </div>
                               ))}
                             </div>
@@ -9807,11 +11850,7 @@ export default function Home() {
             }
           }}
         >
-          <div
-            className="battle-card"
-            role="dialog"
-            aria-modal="true"
-          >
+          <div className="battle-card" role="dialog" aria-modal="true">
             <div className="battle-header">
               <div>
                 <span className="mini-kicker">TURN-BASED COMBAT</span>
@@ -9834,7 +11873,9 @@ export default function Home() {
               )}
             </div>
             <div className="battle-arena">
-              <div className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}>
+              <div
+                className={`battle-unit player-unit ${battleFx?.playerDefeated ? "is-defeated" : ""}`}
+              >
                 <span className="battle-unit-label">
                   {state.userName || "冒險者"} · LV. {player.level}
                 </span>
@@ -9848,34 +11889,56 @@ export default function Home() {
                 </div>
                 <small>/ {effectiveAbilities.health} 生命</small>
               </div>
-              <div className="battle-vs"><span>VS</span><i /></div>
-              <div className={`battle-unit enemy-unit ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}>
+              <div className="battle-vs">
+                <span>VS</span>
+                <i />
+              </div>
+              <div
+                className={`battle-unit enemy-unit ${battleFx?.monsterDefeated ? "is-defeated" : ""}`}
+              >
                 <span className="battle-unit-label">
                   {activeBattleMonster.name} · LV. {activeBattleMonster.level}
                 </span>
                 <strong>{battle.monsterHealth}</strong>
                 <div className="battle-hp-track">
                   <span
-                        style={{
-                          width: `${Math.max(0, Math.min(100, (battle.monsterHealth / (battle.groupMembers?.reduce((total, member) => total + member.maxHealth, 0) ?? activeBattleMonster.health)) * 100))}%`,
+                    style={{
+                      width: `${Math.max(0, Math.min(100, (battle.monsterHealth / (battle.groupMembers?.reduce((total, member) => total + member.maxHealth, 0) ?? activeBattleMonster.health)) * 100))}%`,
                     }}
                   />
                 </div>
-                <small>/ {battle.groupMembers?.reduce((total, member) => total + member.maxHealth, 0) ?? activeBattleMonster.health} 生命</small>
+                <small>
+                  /{" "}
+                  {battle.groupMembers?.reduce(
+                    (total, member) => total + member.maxHealth,
+                    0
+                  ) ?? activeBattleMonster.health}{" "}
+                  生命
+                </small>
                 {battle.groupMembers && (
-                  <div className="battle-group-members" aria-label="群聚小怪成員">
+                  <div
+                    className="battle-group-members"
+                    aria-label="群聚小怪成員"
+                  >
                     {battle.groupMembers.map((member, index) => (
                       <button
                         type="button"
                         className={`battle-group-member ${
-                          battle.targetMonsterMemberId === member.id ? "is-targeted" : ""
+                          battle.targetMonsterMemberId === member.id
+                            ? "is-targeted"
+                            : ""
                         }`}
                         key={member.id}
-                        disabled={member.health <= 0 || battle.outcome !== "fighting"}
+                        disabled={
+                          member.health <= 0 || battle.outcome !== "fighting"
+                        }
                         onClick={() =>
                           setBattle(previous =>
                             previous
-                              ? { ...previous, targetMonsterMemberId: member.id }
+                              ? {
+                                  ...previous,
+                                  targetMonsterMemberId: member.id,
+                                }
                               : previous
                           )
                         }
@@ -9883,9 +11946,15 @@ export default function Home() {
                       >
                         <small>成員 {index + 1}</small>
                         <div className="battle-hp-track">
-                          <span style={{ width: `${Math.max(0, Math.min(100, (member.health / member.maxHealth) * 100))}%` }} />
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, (member.health / member.maxHealth) * 100))}%`,
+                            }}
+                          />
                         </div>
-                        <small>{member.health} / {member.maxHealth}</small>
+                        <small>
+                          {member.health} / {member.maxHealth}
+                        </small>
                       </button>
                     ))}
                   </div>
@@ -9900,8 +11969,12 @@ export default function Home() {
             {battle.monsterStatuses.length > 0 && (
               <div className="battle-status-row" aria-label="怪物異常狀態">
                 {battle.monsterStatuses.map(status => (
-                  <span className={`battle-status battle-status-${status.kind}`} key={status.kind}>
-                    {status.element}·{status.kind} · {status.turnsRemaining} 回合
+                  <span
+                    className={`battle-status battle-status-${status.kind}`}
+                    key={status.kind}
+                  >
+                    {status.element}·{status.kind} · {status.turnsRemaining}{" "}
+                    回合
                     {status.damagePerTurn > 0
                       ? ` · 每回合 ${status.damagePerTurn} 傷害`
                       : status.kind === "冰凍" ||
@@ -9940,14 +12013,25 @@ export default function Home() {
             {(battle.playerStatuses ?? []).length > 0 && (
               <div className="battle-status-row" aria-label="角色異常狀態">
                 {(battle.playerStatuses ?? []).map(status => (
-                  <span className="battle-status battle-status-debuff" key={status.kind}>
-                    你受到{status.element}·{status.kind} · {status.turnsRemaining} 回合 · 每回合 {status.damagePerTurn} 傷害{status.damageReductionPercent ? ` · 物理攻擊傷害 -${status.damageReductionPercent}%` : ""}
+                  <span
+                    className="battle-status battle-status-debuff"
+                    key={status.kind}
+                  >
+                    你受到{status.element}·{status.kind} ·{" "}
+                    {status.turnsRemaining} 回合 · 每回合 {status.damagePerTurn}{" "}
+                    傷害
+                    {status.damageReductionPercent
+                      ? ` · 物理攻擊傷害 -${status.damageReductionPercent}%`
+                      : ""}
                   </span>
                 ))}
               </div>
             )}
             {battle.outcome === "fighting" && (
-              <div className="battle-player-effects" aria-label="角色目前戰鬥效果">
+              <div
+                className="battle-player-effects"
+                aria-label="角色目前戰鬥效果"
+              >
                 <span className="battle-effects-label">你的目前效果</span>
                 {temporaryBattleBuff && (
                   <span className="battle-effect battle-effect-buff">
@@ -9958,21 +12042,33 @@ export default function Home() {
                     </strong>
                     <small>{temporaryBattleBuff.turnsRemaining} 回合</small>
                     {temporaryBattleBuff.damageBonusPercent > 0 && (
-                      <small>傷害 +{temporaryBattleBuff.damageBonusPercent}%</small>
+                      <small>
+                        傷害 +{temporaryBattleBuff.damageBonusPercent}%
+                      </small>
                     )}
                     {temporaryBattleBuff.damageReductionPercent > 0 && (
-                      <small>減傷 +{temporaryBattleBuff.damageReductionPercent}%</small>
+                      <small>
+                        減傷 +{temporaryBattleBuff.damageReductionPercent}%
+                      </small>
                     )}
                     {temporaryBattleBuff.dodgeRateBonusPercent > 0 && (
-                      <small>閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%</small>
+                      <small>
+                        閃避 +{temporaryBattleBuff.dodgeRateBonusPercent}%
+                      </small>
                     )}
                     {temporaryBattleBuff.healPercentMaxHealth > 0 && (
-                      <small>每回合恢復 {temporaryBattleBuff.healPercentMaxHealth}% 生命</small>
+                      <small>
+                        每回合恢復 {temporaryBattleBuff.healPercentMaxHealth}%
+                        生命
+                      </small>
                     )}
                   </span>
                 )}
                 {(battle.weaponTimedBuffs ?? []).map(buff => (
-                  <span className="battle-effect battle-effect-buff" key={buff.id}>
+                  <span
+                    className="battle-effect battle-effect-buff"
+                    key={buff.id}
+                  >
                     <strong>
                       {buff.id === "swiftfang-dagger" ? "迅捷牙襲" : "日輪灼燒"}
                     </strong>
@@ -9991,7 +12087,9 @@ export default function Home() {
                 {(battle.weaponPassiveState?.ironGuardStacks ?? 0) > 0 && (
                   <span className="battle-effect battle-effect-buff">
                     <strong>鐵壁防禦</strong>
-                    <small>{battle.weaponPassiveState?.ironGuardStacks} 層</small>
+                    <small>
+                      {battle.weaponPassiveState?.ironGuardStacks} 層
+                    </small>
                     <small>
                       物理減傷 +
                       {(battle.weaponPassiveState?.ironGuardStacks ?? 0) * 10}%
@@ -10009,7 +12107,9 @@ export default function Home() {
                 {(battle.weaponPassiveState?.fireVeinMarks ?? 0) > 0 && (
                   <span className="battle-effect battle-effect-buff">
                     <strong>炎脈印記</strong>
-                    <small>{battle.weaponPassiveState?.fireVeinMarks}/5 層</small>
+                    <small>
+                      {battle.weaponPassiveState?.fireVeinMarks}/5 層
+                    </small>
                   </span>
                 )}
                 {(battle.weaponPassiveState?.hunterCritStacks ?? 0) > 0 && (
@@ -10033,12 +12133,17 @@ export default function Home() {
                     <small>下一次技能傷害 +30%，不進入冷卻</small>
                   </span>
                 )}
-                {(battle.weaponPassiveState?.enemyAccuracyReductionNextPercent ?? 0) > 0 && (
+                {(battle.weaponPassiveState
+                  ?.enemyAccuracyReductionNextPercent ?? 0) > 0 && (
                   <span className="battle-effect battle-effect-buff">
                     <strong>月華迷矢</strong>
                     <small>
                       敵人下次攻擊命中率 -
-                      {battle.weaponPassiveState?.enemyAccuracyReductionNextPercent}%
+                      {
+                        battle.weaponPassiveState
+                          ?.enemyAccuracyReductionNextPercent
+                      }
+                      %
                     </small>
                   </span>
                 )}
@@ -10048,13 +12153,19 @@ export default function Home() {
                   <span className="battle-effect battle-effect-buff">
                     <strong>下一擊強化</strong>
                     {(battle.nextAttackDamageBonusPercent ?? 0) > 0 && (
-                      <small>傷害 +{battle.nextAttackDamageBonusPercent}%</small>
+                      <small>
+                        傷害 +{battle.nextAttackDamageBonusPercent}%
+                      </small>
                     )}
                     {(battle.nextAttackCritRateBonusPercent ?? 0) > 0 && (
-                      <small>暴擊率 +{battle.nextAttackCritRateBonusPercent}%</small>
+                      <small>
+                        暴擊率 +{battle.nextAttackCritRateBonusPercent}%
+                      </small>
                     )}
                     {(battle.nextAttackDefensePiercePercent ?? 0) > 0 && (
-                      <small>防禦穿透 +{battle.nextAttackDefensePiercePercent}%</small>
+                      <small>
+                        防禦穿透 +{battle.nextAttackDefensePiercePercent}%
+                      </small>
                     )}
                   </span>
                 ) : null}
@@ -10081,13 +12192,18 @@ export default function Home() {
                   !(battle.weaponPassiveState?.hunterCritStacks ?? 0) &&
                   !battle.weaponPassiveState?.moonstringArrowReady &&
                   !battle.weaponPassiveState?.arcaneEchoReady &&
-                  !(battle.weaponPassiveState?.enemyAccuracyReductionNextPercent ?? 0) &&
+                  !(
+                    battle.weaponPassiveState
+                      ?.enemyAccuracyReductionNextPercent ?? 0
+                  ) &&
                   !(battle.nextAttackDamageBonusPercent ?? 0) &&
                   !(battle.nextAttackCritRateBonusPercent ?? 0) &&
                   !(battle.nextAttackDefensePiercePercent ?? 0) &&
                   (battle.actionLockTurns ?? 0) === 0 &&
                   (!isArcher || state.archerDodgeFailStacks === 0) && (
-                    <span className="battle-effects-empty">目前沒有增益或負面效果</span>
+                    <span className="battle-effects-empty">
+                      目前沒有增益或負面效果
+                    </span>
                   )}
               </div>
             )}
@@ -10110,48 +12226,67 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
-                {battleSpecialSkills.some(skill => skill.effectType !== "passive") && (
+                {battleSpecialSkills.some(
+                  skill => skill.effectType !== "passive"
+                ) && (
                   <div className="battle-skill-panel">
                     <div className="battle-skill-heading">
                       <strong>職業特殊技能</strong>
-                        <small>技能可重複使用；每項技能依設定進入冷卻</small>
+                      <small>技能可重複使用；每項技能依設定進入冷卻</small>
                     </div>
                     <div className="battle-skill-list">
-                    {battleSpecialSkills.filter(skill => skill.effectType !== "passive").map(skill => {
-                        const cooldown = battle.skillCooldowns[skill.id] ?? 0;
-                        return (
-                          <button
-                            type="button"
-                            className="battle-skill-button"
-                            key={skill.id}
-                            disabled={cooldown > 0 || (battle.actionLockTurns ?? 0) > 0}
-                            onClick={() => runBattleTurn(skill.id)}
-                            aria-label={`使用${skill.name}，${skill.description}`}
-                          >
-                            <span>
-                              <strong>{skill.name}</strong>
-                              <small>
-                                {skill.effectType === "buff" ? "攻防增益" : `${skill.damageMultiplier.toFixed(2)}×${skill.damageType}`}
-                              </small>
-                              {skill.statusEffect && (
-                                <small className="skill-element-effect">
-                                  {skill.statusEffect.element}元素 · {skill.statusEffect.kind} ·
-                                  {Math.round(skill.statusEffect.chance * 100)}% ·
-                                  {skill.statusEffect.durationTurns}回合
-                                  {skill.statusEffect.damagePerTurn > 0
-                                    ? ` · 每回合 ${skill.statusEffect.damagePerTurn} 傷害`
-                                    : skill.statusEffect.damagePercentOfSkill
-                                      ? ` · 每回合該技能 ${skill.statusEffect.damagePercentOfSkill}% 傷害`
-                                        : skill.statusEffect.kind === "冰凍" || skill.statusEffect.kind === "石化"
-                                        ? " · 無法反擊"
-                                        : " · 持續中"}
+                      {battleSpecialSkills
+                        .filter(skill => skill.effectType !== "passive")
+                        .map(skill => {
+                          const cooldown = battle.skillCooldowns[skill.id] ?? 0;
+                          return (
+                            <button
+                              type="button"
+                              className="battle-skill-button"
+                              key={skill.id}
+                              disabled={
+                                cooldown > 0 ||
+                                (battle.actionLockTurns ?? 0) > 0
+                              }
+                              onClick={() => runBattleTurn(skill.id)}
+                              aria-label={`使用${skill.name}，${skill.description}`}
+                            >
+                              <span>
+                                <strong>{skill.name}</strong>
+                                <small>
+                                  {skill.effectType === "buff"
+                                    ? "攻防增益"
+                                    : `${skill.damageMultiplier.toFixed(2)}×${skill.damageType}`}
                                 </small>
-                              )}
-                            </span>
-                            <small>{cooldown > 0 ? `冷卻 ${cooldown} 回合` : skill.effectType === "buff" ? `持續 ${skill.durationTurns} 回合` : `破防 ${skill.defensePiercePercent}%`}</small>
-                          </button>
-                        );
-                      })}
+                                {skill.statusEffect && (
+                                  <small className="skill-element-effect">
+                                    {skill.statusEffect.element}元素 ·{" "}
+                                    {skill.statusEffect.kind} ·
+                                    {Math.round(
+                                      skill.statusEffect.chance * 100
+                                    )}
+                                    % ·{skill.statusEffect.durationTurns}回合
+                                    {skill.statusEffect.damagePerTurn > 0
+                                      ? ` · 每回合 ${skill.statusEffect.damagePerTurn} 傷害`
+                                      : skill.statusEffect.damagePercentOfSkill
+                                        ? ` · 每回合該技能 ${skill.statusEffect.damagePercentOfSkill}% 傷害`
+                                        : skill.statusEffect.kind === "冰凍" ||
+                                            skill.statusEffect.kind === "石化"
+                                          ? " · 無法反擊"
+                                          : " · 持續中"}
+                                  </small>
+                                )}
+                              </span>
+                              <small>
+                                {cooldown > 0
+                                  ? `冷卻 ${cooldown} 回合`
+                                  : skill.effectType === "buff"
+                                    ? `持續 ${skill.durationTurns} 回合`
+                                    : `破防 ${skill.defensePiercePercent}%`}
+                              </small>
+                            </button>
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -10159,7 +12294,10 @@ export default function Home() {
                   className="primary-button battle-action-button"
                   onClick={() => runBattleTurn()}
                 >
-                  {(battle.actionLockTurns ?? 0) > 0 ? "停滯中 · 跳過本回合" : `普通攻擊 · 第 ${battle.turn} 回合`} <ChevronRight size={16} />
+                  {(battle.actionLockTurns ?? 0) > 0
+                    ? "停滯中 · 跳過本回合"
+                    : `普通攻擊 · 第 ${battle.turn} 回合`}{" "}
+                  <ChevronRight size={16} />
                 </button>
               </>
             ) : (
@@ -10204,13 +12342,16 @@ export default function Home() {
                   {battle.lootDrop ? (
                     <>
                       <span>戰利品掉落</span>
-                    <strong>{battle.lootDrop.name}</strong>
-                    <small>
-                      {battle.lootDrop.rarity} · {battle.lootDrop.kind === "equipment" ? battle.lootDrop.bonus : `出售可得 ${battle.lootDrop.sellValue} 金幣`}
-                      {battle.lootDrop.affixes?.length
-                        ? ` · 詞綴：${battle.lootDrop.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
-                        : ""}
-                    </small>
+                      <strong>{battle.lootDrop.name}</strong>
+                      <small>
+                        {battle.lootDrop.rarity} ·{" "}
+                        {battle.lootDrop.kind === "equipment"
+                          ? battle.lootDrop.bonus
+                          : `出售可得 ${battle.lootDrop.sellValue} 金幣`}
+                        {battle.lootDrop.affixes?.length
+                          ? ` · 詞綴：${battle.lootDrop.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
+                          : ""}
+                      </small>
                     </>
                   ) : (
                     <>
@@ -10348,11 +12489,7 @@ export default function Home() {
             if (event.target === event.currentTarget) setModal(null);
           }}
         >
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-          >
+          <div className="modal-card" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div>
                 <span className="mini-kicker">
@@ -10360,15 +12497,15 @@ export default function Home() {
                     ? "NEW QUEST"
                     : modal.kind === "profile"
                       ? "PROFILE SETTINGS"
-                    : modal.kind === "refresh"
+                      : modal.kind === "refresh"
                         ? "REFRESH SETTINGS"
                         : modal.kind === "notifications"
                           ? "MOBILE APP"
-                        : modal.kind === "saves"
-                          ? "SAVE PROFILES"
-                          : modal.kind === "reward" && modal.rewardId
-                            ? "EDIT REWARD"
-                            : "NEW REWARD"}
+                          : modal.kind === "saves"
+                            ? "SAVE PROFILES"
+                            : modal.kind === "reward" && modal.rewardId
+                              ? "EDIT REWARD"
+                              : "NEW REWARD"}
                 </span>
                 <h2>
                   {modal.kind === "task"
@@ -10381,11 +12518,11 @@ export default function Home() {
                         ? "調整刷新時間"
                         : modal.kind === "notifications"
                           ? "手機 App 與通知"
-                        : modal.kind === "saves"
-                          ? "冒險存檔"
-                          : modal.kind === "reward" && modal.rewardId
-                            ? "編輯獎勵"
-                            : "建立自訂獎勵"}
+                          : modal.kind === "saves"
+                            ? "冒險存檔"
+                            : modal.kind === "reward" && modal.rewardId
+                              ? "編輯獎勵"
+                              : "建立自訂獎勵"}
                 </h2>
               </div>
               <button
@@ -10416,7 +12553,10 @@ export default function Home() {
                   </span>
                   <input
                     type="checkbox"
-                    checked={notificationSettings.enabled && notificationPermission === "granted"}
+                    checked={
+                      notificationSettings.enabled &&
+                      notificationPermission === "granted"
+                    }
                     onChange={() => {
                       if (notificationPermission !== "granted") {
                         void requestNotificationAccess();
@@ -10437,7 +12577,10 @@ export default function Home() {
                   <input
                     type="checkbox"
                     checked={notificationSettings.dailyTaskReminder}
-                    disabled={!notificationSettings.enabled || notificationPermission !== "granted"}
+                    disabled={
+                      !notificationSettings.enabled ||
+                      notificationPermission !== "granted"
+                    }
                     onChange={event =>
                       setNotificationSettings(previous => ({
                         ...previous,
@@ -10447,7 +12590,9 @@ export default function Home() {
                   />
                 </label>
                 <small className="form-help">
-                  通知使用瀏覽器權限與本機 Service Worker；若瀏覽器限制背景執行，請重新開啟 QuestBoard 以接收最新提醒。
+                  通知使用瀏覽器權限與本機 Service
+                  Worker；若瀏覽器限制背景執行，請重新開啟 QuestBoard
+                  以接收最新提醒。
                 </small>
                 <div className="save-manager-actions">
                   {notificationPermission !== "granted" && (
@@ -10705,7 +12850,8 @@ export default function Home() {
                     onChange={event => setRefreshDraft(event.target.value)}
                   />
                   <small className="form-help">
-                    時間到會刪除九宮格內全部任務，再將「每天重複」任務重新生成到九宮格；累積 XP、計時資料與九宮格外任務會保留。
+                    時間到會刪除九宮格內全部任務，再將「每天重複」任務重新生成到九宮格；累積
+                    XP、計時資料與九宮格外任務會保留。
                   </small>
                 </label>
                 <div className="refresh-setting-note">
@@ -10770,7 +12916,10 @@ export default function Home() {
                   className="primary-button modal-submit"
                   onClick={saveReward}
                 >
-                  {modal.kind === "reward" && modal.rewardId ? "保存獎勵設定" : "放入獎勵寶庫"} <ChevronRight size={16} />
+                  {modal.kind === "reward" && modal.rewardId
+                    ? "保存獎勵設定"
+                    : "放入獎勵寶庫"}{" "}
+                  <ChevronRight size={16} />
                 </button>
               </div>
             )}

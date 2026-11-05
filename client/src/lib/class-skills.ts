@@ -2,7 +2,24 @@ export type SkillJobClass = "warrior" | "archer" | "mage" | "rogue";
 export type SpecialSkillDamageType = "物理" | "魔法";
 export type SpecialSkillEffectType = "damage" | "buff" | "passive";
 export type SkillTargetMode = "single" | "two" | "all";
-export type SkillStatusKind = "中毒" | "冰凍" | "燃燒" | "感電" | "石化" | "災厄" | "暈眩" | "麻痺" | "致盲" | "虛弱";
+export type SkillStatusKind =
+  | "中毒"
+  | "冰凍"
+  | "燃燒"
+  | "感電"
+  | "石化"
+  | "災厄"
+  | "暈眩"
+  | "麻痺"
+  | "致盲"
+  | "虛弱"
+  | "繳械"
+  | "太陽印記"
+  | "光束殘影"
+  | "聖光陣界"
+  | "月蝕印記"
+  | "流血"
+  | "霜月遲緩";
 export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
 export type SkillStatusEffect = {
   kind: SkillStatusKind;
@@ -15,6 +32,7 @@ export type SkillStatusEffect = {
   breakDamageThreshold?: number;
   breakDamage?: number;
   armorReductionPercent?: number;
+  defenseBonusPercent?: number;
   outgoingDamageReductionPercent?: number;
   healingReceivedReductionPercent?: number;
   accuracyReductionPercent?: number;
@@ -86,7 +104,8 @@ export function getNextSkillUnlockThreshold(
     ).length;
     return rogueSkillUnlockThresholds[unlockedCount] ?? null;
   }
-  if (jobClass === "warrior" && safeAttributeValue(strength) >= 100) return null;
+  if (jobClass === "warrior" && safeAttributeValue(strength) >= 100)
+    return null;
   if (jobClass === "archer") {
     const unlockedCount = Math.min(
       archerSkillNames.length,
@@ -111,7 +130,12 @@ export function getUnlockedSpecialSkills(
   critRate = 0,
   critDamage = 0
 ): SpecialCombatSkill[] {
-  if (jobClass !== "warrior" && jobClass !== "archer" && jobClass !== "mage" && jobClass !== "rogue")
+  if (
+    jobClass !== "warrior" &&
+    jobClass !== "archer" &&
+    jobClass !== "mage" &&
+    jobClass !== "rogue"
+  )
     return [];
 
   const isRogue = jobClass === "rogue";
@@ -130,20 +154,28 @@ export function getUnlockedSpecialSkills(
       ? warriorSkillNames
       : isArcher
         ? archerSkillNames
-      : jobClass === "mage"
-        ? mageSkillNames
-        : rogueSkillNames;
+        : jobClass === "mage"
+          ? mageSkillNames
+          : rogueSkillNames;
   const currentValue = safeAttributeValue(
-    isRogue ? critDamage : isArcher ? critRate : jobClass === "warrior" ? strength : intelligence
+    isRogue
+      ? critDamage
+      : isArcher
+        ? critRate
+        : jobClass === "warrior"
+          ? strength
+          : intelligence
   );
   const skillStep = isArcher ? 5 : SKILL_STEP;
   const skillCount = isArcher
     ? Math.min(archerSkillNames.length, Math.floor(currentValue / skillStep))
     : jobClass === "warrior"
-    ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
-    : isRogue
-    ? rogueSkillUnlockThresholds.filter(threshold => currentValue >= threshold).length
-    : Math.floor(currentValue / skillStep);
+      ? Math.min(WARRIOR_SKILL_LIMIT, Math.floor(currentValue / skillStep))
+      : isRogue
+        ? rogueSkillUnlockThresholds.filter(
+            threshold => currentValue >= threshold
+          ).length
+        : Math.floor(currentValue / skillStep);
 
   return Array.from({ length: skillCount }, (_, index) => {
     const requiredValue = isRogue
@@ -164,32 +196,57 @@ export function getUnlockedSpecialSkills(
       ? 5
       : isArcherPiercingShot || isArcherRapidVolley
         ? 4
-          : isArcherDawnShot || isMageMeteor
-            ? 5
-          : isWarriorSlash
-        ? 4
-        : jobClass === "warrior" && index === 3
+        : isArcherDawnShot || isMageMeteor
           ? 5
-          : 3 + (index % 3);
-    const statusEffect = jobClass === "mage"
-      ? isMageFireball
-        ? { kind: "燃燒" as const, element: "火焰" as const, chance: 1, durationTurns: 3, damagePerTurn: 8 + index * 2 }
-        : index === 1
-          ? { kind: "冰凍" as const, element: "冰霜" as const, chance: 0.7, durationTurns: 1, damagePerTurn: 0 }
-          : index === 2
-            ? { kind: "感電" as const, element: "雷電" as const, chance: 0.85, durationTurns: 2, damagePerTurn: 6 }
-            : isMageMeteor
+          : isWarriorSlash
+            ? 4
+            : jobClass === "warrior" && index === 3
+              ? 5
+              : 3 + (index % 3);
+    const statusEffect =
+      jobClass === "mage"
+        ? isMageFireball
+          ? {
+              kind: "燃燒" as const,
+              element: "火焰" as const,
+              chance: 1,
+              durationTurns: 3,
+              damagePerTurn: 8 + index * 2,
+            }
+          : index === 1
+            ? {
+                kind: "冰凍" as const,
+                element: "冰霜" as const,
+                chance: 0.7,
+                durationTurns: 1,
+                damagePerTurn: 0,
+              }
+            : index === 2
               ? {
-                  kind: "石化" as const,
-                  element: "奧術" as const,
-                  chance: 1,
+                  kind: "感電" as const,
+                  element: "雷電" as const,
+                  chance: 0.85,
                   durationTurns: 2,
-                  damagePerTurn: 5,
-                  breakDamageThreshold: 200,
-                  breakDamage: 25,
+                  damagePerTurn: 6,
                 }
-              : { kind: "中毒" as const, element: "自然" as const, chance: 0.9, durationTurns: 4, damagePerTurn: 7 }
-      : undefined;
+              : isMageMeteor
+                ? {
+                    kind: "石化" as const,
+                    element: "奧術" as const,
+                    chance: 1,
+                    durationTurns: 2,
+                    damagePerTurn: 5,
+                    breakDamageThreshold: 200,
+                    breakDamage: 25,
+                  }
+                : {
+                    kind: "中毒" as const,
+                    element: "自然" as const,
+                    chance: 0.9,
+                    durationTurns: 4,
+                    damagePerTurn: 7,
+                  }
+        : undefined;
     const statusDescription = statusEffect
       ? statusEffect.kind === "石化"
         ? "元素效果：石化（100% 對手無法行動，每回合受到5點石化傷害，持續2回合；若受到的一次性傷害>200，則提早解除石化並受到25點石化傷害）"
@@ -202,54 +259,56 @@ export function getUnlockedSpecialSkills(
       attributeName,
       requiredValue,
       damageType,
-      damageMultiplier: isKnightHeart || isArcherFocus
-        ? 0
-        : isArcherPiercingShot
-          ? 1.6
-          : isArcherRapidVolley
-            ? 2
-            : isArcherDawnShot
-              ? 3
-        : isMageFireball
-          ? 1.5
-          : isMageMeteor
-            ? 3
-        : isRogue
-        ? 2 + index * 0.3
-        : isWarriorSlash
-          ? 1.5
-          : 1.5 + requiredValue / 100,
-      defensePiercePercent: isKnightHeart || isArcherFocus
-        ? 0
-        : isArcher
-          ? isArcherPiercingShot
-          ? 30
-            : isArcherRapidVolley
-              ? 40
-            : 0
-        : isRogueShunyingDart
+      damageMultiplier:
+        isKnightHeart || isArcherFocus
           ? 0
-          : clampDefensePiercePercent(
-              isRogue ? 35 + index * 15 : 20 + index * 10
-          ),
+          : isArcherPiercingShot
+            ? 1.6
+            : isArcherRapidVolley
+              ? 2
+              : isArcherDawnShot
+                ? 3
+                : isMageFireball
+                  ? 1.5
+                  : isMageMeteor
+                    ? 3
+                    : isRogue
+                      ? 2 + index * 0.3
+                      : isWarriorSlash
+                        ? 1.5
+                        : 1.5 + requiredValue / 100,
+      defensePiercePercent:
+        isKnightHeart || isArcherFocus
+          ? 0
+          : isArcher
+            ? isArcherPiercingShot
+              ? 30
+              : isArcherRapidVolley
+                ? 40
+                : 0
+            : isRogueShunyingDart
+              ? 0
+              : clampDefensePiercePercent(
+                  isRogue ? 35 + index * 15 : 20 + index * 10
+                ),
       effectType: isKnightHeart ? "buff" : isArcherFocus ? "passive" : "damage",
       description: isKnightHeart
         ? "自身造成傷害 +20%，受到傷害 −20%，持續 3 回合；冷卻 5 回合。"
         : isArcherFocus
           ? "暴擊傷害增加 30%。"
-        : isArcherPiercingShot
-          ? "物理技能，對兩個敵人各造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
-        : isArcherRapidVolley
-          ? "物理技能，對所有敵人各造成 2.00 倍傷害，防禦穿透 40%；冷卻 4 回合。"
-        : isMageMeteor
-          ? "魔法技能，對所有敵人各造成 3.00 倍魔法傷害，魔法防禦穿透 50%；100% 石化 2 回合，每回合 5 點石化傷害；冷卻 5 回合。"
-        : isRogueShunyingDart
-          ? "物理技能，對所有敵人各造成 2.30 倍物理傷害，無防禦穿透。"
-        : isArcherDawnShot
-          ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
-        : isWarriorSlash
-          ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
-          : `${damageType}技能，造成 ${isMageFireball ? "1.50" : isMageMeteor ? "3.00" : isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
+          : isArcherPiercingShot
+            ? "物理技能，對兩個敵人各造成 1.60 倍傷害，防禦穿透 30%；冷卻 4 回合。"
+            : isArcherRapidVolley
+              ? "物理技能，對所有敵人各造成 2.00 倍傷害，防禦穿透 40%；冷卻 4 回合。"
+              : isMageMeteor
+                ? "魔法技能，對所有敵人各造成 3.00 倍魔法傷害，魔法防禦穿透 50%；100% 石化 2 回合，每回合 5 點石化傷害；冷卻 5 回合。"
+                : isRogueShunyingDart
+                  ? "物理技能，對所有敵人各造成 2.30 倍物理傷害，無防禦穿透。"
+                  : isArcherDawnShot
+                    ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
+                    : isWarriorSlash
+                      ? `造成自身1.5倍的傷害；冷卻 ${cooldownTurns} 回合。`
+                      : `${damageType}技能，造成 ${isMageFireball ? "1.50" : isMageMeteor ? "3.00" : isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
       cooldownTurns,
       durationTurns: isKnightHeart ? 3 : 0,
       damageBonusPercent: isKnightHeart ? 20 : 0,
@@ -262,16 +321,25 @@ export function getUnlockedSpecialSkills(
           ? "two"
           : isArcherRapidVolley
             ? "all"
-        : isRogueShunyingDart
-          ? "all"
-            : "single",
+            : isRogueShunyingDart
+              ? "all"
+              : "single",
       statusEffect,
     };
   });
 }
 
-export function getAllSpecialSkills(jobClass: SkillJobClass): SpecialCombatSkill[] {
-  const maxValue = jobClass === "rogue" ? 250 : jobClass === "warrior" ? 100 : jobClass === "archer" ? 20 : 100;
+export function getAllSpecialSkills(
+  jobClass: SkillJobClass
+): SpecialCombatSkill[] {
+  const maxValue =
+    jobClass === "rogue"
+      ? 250
+      : jobClass === "warrior"
+        ? 100
+        : jobClass === "archer"
+          ? 20
+          : 100;
   return getUnlockedSpecialSkills(
     jobClass,
     jobClass === "warrior" ? maxValue : 0,
@@ -286,9 +354,9 @@ export function calculateSpecialSkillDamage(
   enemyDefense: number,
   skill: SpecialCombatSkill
 ) {
-  const amplifiedDamage = Math.round(
-    Math.max(1, baseDamage) * skill.damageMultiplier
-  ) + skill.flatDamageBonus;
+  const amplifiedDamage =
+    Math.round(Math.max(1, baseDamage) * skill.damageMultiplier) +
+    skill.flatDamageBonus;
   const remainingDefense = Math.max(
     0,
     enemyDefense * (1 - skill.defensePiercePercent / 100)
