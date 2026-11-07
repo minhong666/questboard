@@ -76,6 +76,7 @@ import {
   getActiveEquipmentSpecialEffects,
   getEquipmentSpecialAbility,
   getLeviathanHealing,
+  resolveAstralEnergyAction,
   getStarCoreShieldGain,
   resolveStarCoreShieldDamage,
   resolveDivineShieldDamage,
@@ -204,6 +205,7 @@ type CombatStats = {
   castSpeedPercent?: number;
   damageReductionPercent?: number;
   magicPenetrationPercent?: number;
+  damageBonusPercent?: number;
 };
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
@@ -248,6 +250,21 @@ type Monster = {
 type LeggingPassiveBattleState = {
   asuraCritStackTurns: number[];
   nextGaleAttackBonusDamage: number;
+  stormNextAttackBonusDamage: number;
+  azureDragonNextAttackBonusDamage: number;
+};
+type TitanBastionBattleState = {
+  helmetShield: number;
+  helmetShieldTurnsRemaining: number;
+  guardianHitCount: number;
+  guardianCooldownTurnsRemaining: number;
+  guardianShield: number;
+  guardianShieldTurnsRemaining: number;
+  staffShield: number;
+  staffShieldTurnsRemaining: number;
+  staffFieldTurnsRemaining: number;
+  setInvincibilityTurnsRemaining: number;
+  setLethalProtectionUsed: boolean;
 };
 type BattleState = {
   monsterId: string;
@@ -279,6 +296,16 @@ type BattleState = {
   galeSetLastEvasionTurn?: number;
   timeReversalUsed?: boolean;
   starCoreShield?: number;
+  astralSageShield?: number;
+  dawnWardenShield?: number;
+  dawnWardenShieldTurnsRemaining?: number;
+  azureDragonShield?: number;
+  azureDragonShieldTurnsRemaining?: number;
+  azureDragonShieldLastTriggeredTurn?: number;
+  moonStalkerSetDodgeStacks?: number;
+  moonStalkerSetDodgeTurnsRemaining?: number;
+  deepSeaStarCoreUsed?: boolean;
+  astralEnergyStacks?: number;
   dawnArmorStacks?: number;
   shadowmoonAttackBonusPercent?: number;
   shadowmoonAttackBonusTurns?: number;
@@ -287,6 +314,11 @@ type BattleState = {
   shadowmoonStealthActive?: boolean;
   moonStalkerGuaranteedHitsRemaining?: number;
   moonStalkerStaffDamageTurns?: number;
+  titanBastionState?: TitanBastionBattleState;
+  stormSwordSoulGuaranteedCritsRemaining?: number;
+  stormSwordSoulChestStacks?: number;
+  stormSwordSoulAmuletStacks?: number[];
+  stormSwordSoulSetStacks?: number[];
   actionLockTurns?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
@@ -317,6 +349,9 @@ type BattleStatus = {
   outgoingDamageReductionPercent?: number;
   healingReceivedReductionPercent?: number;
   accuracyReductionPercent?: number;
+  magicResistanceReductionPercent?: number;
+  incomingDamageTakenBonusPercent?: number;
+  critDamageTakenBonusPercent?: number;
 };
 type BattleFx = {
   id: number;
@@ -371,6 +406,18 @@ function applyBattleStatusEffects(
         existing.accuracyReductionPercent ?? 0,
         effect.accuracyReductionPercent ?? 0
       );
+      existing.magicResistanceReductionPercent = Math.max(
+        existing.magicResistanceReductionPercent ?? 0,
+        effect.magicResistanceReductionPercent ?? 0
+      );
+      existing.incomingDamageTakenBonusPercent = Math.max(
+        existing.incomingDamageTakenBonusPercent ?? 0,
+        effect.incomingDamageTakenBonusPercent ?? 0
+      );
+      existing.critDamageTakenBonusPercent = Math.max(
+        existing.critDamageTakenBonusPercent ?? 0,
+        effect.critDamageTakenBonusPercent ?? 0
+      );
     } else {
       next.push({
         kind: effect.kind,
@@ -385,6 +432,9 @@ function applyBattleStatusEffects(
         outgoingDamageReductionPercent: effect.outgoingDamageReductionPercent,
         healingReceivedReductionPercent: effect.healingReceivedReductionPercent,
         accuracyReductionPercent: effect.accuracyReductionPercent,
+        magicResistanceReductionPercent: effect.magicResistanceReductionPercent,
+        incomingDamageTakenBonusPercent: effect.incomingDamageTakenBonusPercent,
+        critDamageTakenBonusPercent: effect.critDamageTakenBonusPercent,
       });
     }
   }
@@ -2861,12 +2911,89 @@ export default function Home() {
   const equippedHelmetAbility = getEquippedSpecialAbility("頭盔");
   const equippedChestAbility = getEquippedSpecialAbility("胸甲");
   const equippedLeggingsAbility = getEquippedSpecialAbility("護腿");
+  const equippedAmuletAbility = getEquippedSpecialAbility("護身符");
   const activeLegendarySetBonuses = getActiveLegendaryEquipmentSetBonuses(
     equippedHelmetAbility?.id,
     equippedChestAbility?.id,
     equippedLeggingsAbility?.id
   );
+  const astralSageActiveSets = (["傳說", "神話"] as const).flatMap(rarity => {
+    const equippedCount = equippedItems.filter(
+      item => item.setId === `astral-sage-${rarity}`
+    ).length;
+    return equippedCount >= 2 ? [{ rarity, equippedCount }] : [];
+  });
+  const astralSageTwoPieceActive = astralSageActiveSets.length > 0;
+  const astralSageFourPieceActive = astralSageActiveSets.some(
+    set => set.equippedCount >= 4
+  );
+  const dawnWardenActiveSets = (["傳說", "神話"] as const).flatMap(rarity => {
+    const equippedCount = equippedItems.filter(
+      item => item.setId === `dawn-warden-${rarity}`
+    ).length;
+    return equippedCount >= 2 ? [{ rarity, equippedCount }] : [];
+  });
+  const dawnWardenTwoPieceActive = dawnWardenActiveSets.length > 0;
+  const dawnWardenFourPieceActive = dawnWardenActiveSets.some(
+    set => set.equippedCount >= 4
+  );
+  const moonStalkerActiveSets = (["傳說", "神話"] as const).flatMap(rarity => {
+    const equippedCount = equippedItems.filter(
+      item => item.setId === `moon-stalker-${rarity}`
+    ).length;
+    return equippedCount >= 2 ? [{ rarity, equippedCount }] : [];
+  });
+  const moonStalkerTwoPieceActive = moonStalkerActiveSets.length > 0;
+  const moonStalkerFourPieceActive = moonStalkerActiveSets.some(
+    set => set.equippedCount >= 4
+  );
+  const titanBastionActiveSets = (["傳說", "神話"] as const).flatMap(rarity => {
+    const equippedCount = equippedItems.filter(
+      item => item.setId === `titan-bastion-${rarity}`
+    ).length;
+    return equippedCount >= 2 ? [{ rarity, equippedCount }] : [];
+  });
+  const titanBastionTwoPieceActive = titanBastionActiveSets.length > 0;
+  const titanBastionFourPieceActive = titanBastionActiveSets.some(
+    set => set.equippedCount >= 4
+  );
+  const stormSwordSoulActiveSets = (["傳說", "神話"] as const).flatMap(
+    rarity => {
+      const equippedCount = equippedItems.filter(
+        item => item.setId === `storm-sword-${rarity}`
+      ).length;
+      return equippedCount >= 2 ? [{ rarity, equippedCount }] : [];
+    }
+  );
+  const stormSwordSoulTwoPieceActive = stormSwordSoulActiveSets.length > 0;
+  const stormSwordSoulFourPieceActive = stormSwordSoulActiveSets.some(
+    set => set.equippedCount >= 4
+  );
+  const titanBastionAnyFourPieceActive = [
+    "普通",
+    "精良",
+    "稀有",
+    "史詩",
+    "傳說",
+    "神話",
+  ].some(
+    rarity =>
+      equippedItems.filter(item => item.setId === `titan-bastion-${rarity}`)
+        .length >= 4
+  );
   const activeLegendarySpecialSetEntries = [
+    ...dawnWardenActiveSets.map(set => ({
+      active: true,
+      name: `曙光聖衛·${set.rarity}`,
+      pieceCount: set.equippedCount >= 4 ? 4 : 2,
+      description: `${set.equippedCount >= 2 ? "2 件【聖光護體】：受到傷害時有 20% 機率生成持續 2 回合、可吸收該次傷害 50% 的護盾。" : ""}${set.equippedCount >= 4 ? " 4 件【曙光反噬】：受到傷害時，將該次實際承受傷害的 10% 以真實傷害反彈給攻擊者。" : ""}`,
+    })),
+    ...moonStalkerActiveSets.map(set => ({
+      active: true,
+      name: `影月獵行·${set.rarity}`,
+      pieceCount: set.equippedCount >= 4 ? 4 : 2,
+      description: `${set.equippedCount >= 2 ? "2 件【影化步法】：每次成功閃避後，下一擊物理／魔法傷害 +15%，並無視目標 10% 防禦。" : ""}${set.equippedCount >= 4 ? " 4 件【月影殘響】：暴擊時有 30% 機率將該次暴擊傷害的 25% 擴散至周圍敵人，並獲得 1 層閃避率 +5%（持續 2 回合，最多 3 層）。" : ""}`,
+    })),
     {
       active: activeLegendarySetBonuses.asura,
       name: "阿修羅戰神套裝",
@@ -2877,11 +3004,24 @@ export default function Home() {
       name: "夜魔主宰套裝",
       description: "閃避率 +10% · 每 3 回合追加自身攻擊力 × 當前閃避率的傷害",
     },
-    {
-      active: activeLegendarySetBonuses.astral,
-      name: "星辰智者套裝",
-      description: "智力 +10% · 技能冷卻額外減少 1 回合",
-    },
+    ...astralSageActiveSets.map(set => ({
+      active: true,
+      name: `星界賢者·${set.rarity}｜星能效果`,
+      pieceCount: set.equippedCount >= 4 ? 4 : 2,
+      description: `${set.equippedCount >= 2 ? "2 件【星能湧動】：每次施放技能獲得 1 層星能（最多 4 層），每層提升魔法傷害 3% 與技能暴擊率 2%。" : ""}${set.equippedCount >= 4 ? " 4 件【星辰隕落】：星能滿 4 層後，下次施放傷害技能額外召喚星辰隕石，對目標及周圍敵人造成智力 300% 的範圍奧術傷害。" : ""}`,
+    })),
+    ...titanBastionActiveSets.map(set => ({
+      active: true,
+      name: `鐵壁巨神·${set.rarity}`,
+      pieceCount: set.equippedCount >= 4 ? 4 : 2,
+      description: `${set.equippedCount >= 2 ? "2 件【鐵壁防護】：受到傷害降低 25%；首次受到致命傷害時啟動 2 回合無敵（每場戰鬥 1 次）。" : ""}${set.equippedCount >= 4 ? " 4 件【不動震懾】：受到攻擊時有 30% 機率使攻擊者造成傷害降低 20%，持續 2 回合；並有 50% 機率使其暈眩 1 回合。" : ""}`,
+    })),
+    ...stormSwordSoulActiveSets.map(set => ({
+      active: true,
+      name: `風暴劍魂·${set.rarity}`,
+      pieceCount: set.equippedCount >= 4 ? 4 : 2,
+      description: `${set.equippedCount >= 2 ? "2 件【雷霆感應】：攻擊命中時有 20% 機率使目標感電，受到的所有傷害提高 15%，持續 3 回合。" : ""}${set.equippedCount >= 4 ? " 4 件【風暴連擊】：每次暴擊使自身攻擊 +5%、暴擊傷害 +4%，最多 5 層，持續 3 回合。" : ""}`,
+    })),
     {
       active: activeLegendarySetBonuses.mountain,
       name: "永恆山脈套裝",
@@ -2902,6 +3042,40 @@ export default function Home() {
     state.abilities.intelligence +
     classDefinition.bonuses.intelligence +
     equipmentBonuses.abilities.intelligence;
+  const strengthBeforeLegendarySet =
+    state.abilities.strength +
+    classDefinition.bonuses.strength +
+    equipmentBonuses.abilities.strength;
+  const azureDragonConversionPercent =
+    equippedAmuletAbility?.id === "azure-dragon-amulet"
+      ? (equippedAmuletAbility.effects.azureDragonAmuletConversionPercent ??
+          20) / 100
+      : 0;
+  const azureDragonConvertedStrength = Math.floor(
+    intelligenceBeforeLegendarySet * azureDragonConversionPercent
+  );
+  const azureDragonConvertedIntelligence = Math.floor(
+    strengthBeforeLegendarySet * azureDragonConversionPercent
+  );
+  const titanBastionConvertedDefense =
+    equippedAmuletAbility?.id === "titan-bastion-amulet"
+      ? Math.floor(
+          (state.abilities.defense +
+            classDefinition.bonuses.defense +
+            equipmentBonuses.abilities.defense +
+            (equippedLeggingsAbility?.id === "titan-bastion-leggings"
+              ? Math.round(
+                  (state.abilities.defense +
+                    classDefinition.bonuses.defense +
+                    equipmentBonuses.abilities.defense) *
+                    0.1
+                )
+              : 0)) *
+            ((equippedAmuletAbility.effects.titanAmuletDefenseToAttackPercent ??
+              15) /
+              100)
+        )
+      : 0;
   const effectiveAbilities: CharacterAbilities = {
     health:
       state.abilities.health +
@@ -2910,16 +3084,17 @@ export default function Home() {
     strength:
       state.abilities.strength +
       classDefinition.bonuses.strength +
-      equipmentBonuses.abilities.strength,
+      equipmentBonuses.abilities.strength +
+      titanBastionConvertedDefense +
+      azureDragonConvertedStrength,
     defense:
       state.abilities.defense +
       classDefinition.bonuses.defense +
       equipmentBonuses.abilities.defense,
     intelligence:
       intelligenceBeforeLegendarySet +
-      (activeLegendarySetBonuses.astral
-        ? Math.floor(intelligenceBeforeLegendarySet * 0.1)
-        : 0),
+      titanBastionConvertedDefense +
+      azureDragonConvertedIntelligence,
   };
   const archerTalentBonuses = getArcherTalentBonuses(
     state.archerDodgeFailStacks
@@ -4327,10 +4502,39 @@ export default function Home() {
       leggingsPassiveState: {
         asuraCritStackTurns: [],
         nextGaleAttackBonusDamage: 0,
+        stormNextAttackBonusDamage: 0,
+        azureDragonNextAttackBonusDamage: 0,
       },
       galeSetLastEvasionTurn: 0,
       timeReversalUsed: false,
       starCoreShield: 0,
+      astralSageShield: 0,
+      dawnWardenShield: 0,
+      dawnWardenShieldTurnsRemaining: 0,
+      azureDragonShield: 0,
+      azureDragonShieldTurnsRemaining: 0,
+      azureDragonShieldLastTriggeredTurn: 0,
+      titanBastionState: {
+        helmetShield: 0,
+        helmetShieldTurnsRemaining: 0,
+        guardianHitCount: 0,
+        guardianCooldownTurnsRemaining: 0,
+        guardianShield: 0,
+        guardianShieldTurnsRemaining: 0,
+        staffShield: 0,
+        staffShieldTurnsRemaining: 0,
+        staffFieldTurnsRemaining: 0,
+        setInvincibilityTurnsRemaining: 0,
+        setLethalProtectionUsed: false,
+      },
+      stormSwordSoulGuaranteedCritsRemaining: 0,
+      stormSwordSoulChestStacks: 0,
+      stormSwordSoulAmuletStacks: [],
+      stormSwordSoulSetStacks: [],
+      moonStalkerSetDodgeStacks: 0,
+      moonStalkerSetDodgeTurnsRemaining: 0,
+      astralEnergyStacks: 0,
+      deepSeaStarCoreUsed: false,
       dawnArmorStacks: 0,
       shadowmoonAttackBonusPercent: 0,
       shadowmoonAttackBonusTurns: 0,
@@ -4366,6 +4570,19 @@ export default function Home() {
       showToast("目前職業或能力尚未解鎖這項技能");
       return;
     }
+    const astralEnergyResolution = resolveAstralEnergyAction(
+      battle.astralEnergyStacks ?? 0,
+      Boolean(selectedSkill && !actionLocked),
+      Boolean(
+        selectedSkill?.effectType === "damage" &&
+          selectedSkill.damageMultiplier > 0
+      ),
+      astralSageTwoPieceActive,
+      astralSageFourPieceActive
+    );
+    const astralEnergyStacksForAction =
+      astralEnergyResolution.energyStacksForAction;
+    const astralMeteorTriggered = astralEnergyResolution.meteorTriggered;
     const helmetItem = equippedItems.find(item => item.slot === "頭盔");
     const helmetAbility = helmetItem
       ? getEquipmentSpecialAbility(
@@ -4406,9 +4623,77 @@ export default function Home() {
           amuletItem.specialAbilityId
         )
       : undefined;
+    const azureDragonShieldTriggeredAtStart = Boolean(
+      helmetAbility?.id === "azure-dragon-helmet" &&
+        battle.playerHealth <
+          effectiveAbilities.health *
+            ((helmetAbility.effects
+              .azureDragonShieldBelowHealthThresholdPercent ?? 40) /
+              100) &&
+        battle.azureDragonShieldLastTriggeredTurn !== battle.turn
+    );
+    const azureDragonShieldTurnsAtStart = azureDragonShieldTriggeredAtStart
+      ? (helmetAbility?.effects.azureDragonShieldDurationTurns ?? 3)
+      : Math.max(0, battle.azureDragonShieldTurnsRemaining ?? 0);
+    const azureDragonShieldAtStart =
+      (azureDragonShieldTurnsAtStart > 0
+        ? (battle.azureDragonShield ?? 0)
+        : 0) +
+      (azureDragonShieldTriggeredAtStart
+        ? Math.floor(
+            effectiveAbilities.health *
+              ((helmetAbility?.effects
+                .azureDragonShieldBelow40HealthPercentMaxHealth ?? 10) /
+                100)
+          )
+        : 0);
+    const titanBastionState = battle.titanBastionState ?? {
+      helmetShield: 0,
+      helmetShieldTurnsRemaining: 0,
+      guardianHitCount: 0,
+      guardianCooldownTurnsRemaining: 0,
+      guardianShield: 0,
+      guardianShieldTurnsRemaining: 0,
+      staffShield: 0,
+      staffShieldTurnsRemaining: 0,
+      staffFieldTurnsRemaining: 0,
+      setInvincibilityTurnsRemaining: 0,
+      setLethalProtectionUsed: false,
+    };
+    const titanBastionInvincibleAtStart =
+      titanBastionState.setInvincibilityTurnsRemaining > 0;
+    const titanBastionTotalDefense = Math.round(
+      effectiveAbilities.defense *
+        (leggingsAbility?.id === "titan-bastion-leggings" ? 1.1 : 1)
+    );
+    const titanBastionStaffCast = Boolean(
+      weaponAbility?.id === "titan-bastion-staff" &&
+        selectedSkill &&
+        !actionLocked
+    );
+    const stormSwordSoulChestStacksAtStart =
+      chestAbility?.id === "storm-sword-soul-chest"
+        ? Math.min(
+            chestAbility.effects.stormChestMaxStacks ?? 5,
+            battle.stormSwordSoulChestStacks ?? 0
+          )
+        : 0;
+    const stormSwordSoulAmuletStacksAtStart =
+      amuletAbility?.id === "storm-sword-soul-amulet"
+        ? (battle.stormSwordSoulAmuletStacks ?? []).filter(turns => turns > 0)
+        : [];
+    const stormSwordSoulSetStacksAtStart = stormSwordSoulFourPieceActive
+      ? (battle.stormSwordSoulSetStacks ?? []).filter(turns => turns > 0)
+      : [];
+    const stormPhoenixCritsAtStart =
+      helmetAbility?.id === "storm-sword-soul-helmet"
+        ? (battle.stormSwordSoulGuaranteedCritsRemaining ?? 0)
+        : 0;
     const leggingsPassiveState = battle.leggingsPassiveState ?? {
       asuraCritStackTurns: [],
       nextGaleAttackBonusDamage: 0,
+      stormNextAttackBonusDamage: 0,
+      azureDragonNextAttackBonusDamage: 0,
     };
     const weaponPassiveState = battle.weaponPassiveState ?? {
       ...INITIAL_WEAPON_PASSIVE_BATTLE_STATE,
@@ -4443,10 +4728,15 @@ export default function Home() {
         }
       : undefined;
     const arcaneEchoTriggered = Boolean(
-      weaponAbility?.id === "starlight-staff" &&
+      (weaponAbility?.id === "starlight-staff" ||
+        weaponAbility?.id === "astral-sage-staff") &&
         selectedSkill?.effectType === "damage" &&
         weaponPassiveState.arcaneEchoReady
     );
+    const arcaneEchoThreshold =
+      weaponAbility?.id === "astral-sage-staff"
+        ? (weaponAbility.effects.astralSageStaffCastsPerEcho ?? 2)
+        : (weaponAbility?.effects.starlightStaffCastsPerEcho ?? 3);
     const moonstringArrowReady = Boolean(
       weaponAbility?.id === "moonstring-bow" &&
         (weaponPassiveState.moonstringArrowReady ||
@@ -4484,6 +4774,14 @@ export default function Home() {
         (chestAbility?.effects.doubleCastSkillChancePercent ?? 0) > 0 &&
         rollTruthDoubleCast(chestAbility)
     );
+    const astralSageVisionTriggered = Boolean(
+      helmetAbility?.id === "astral-sage-vision" &&
+        selectedSkill &&
+        !actionLocked &&
+        rollPercentChance(
+          helmetAbility.effects.astralSageSkillProcChancePercent ?? 30
+        )
+    );
     const usedSkillIds = battle.usedSkillIds;
     const nextSkillCooldowns = Object.fromEntries(
       Object.entries(battle.skillCooldowns).map(([id, turns]) => [
@@ -4493,16 +4791,19 @@ export default function Home() {
     );
     if (selectedSkill && selectedSkill.cooldownTurns > 0) {
       const passiveCooldownReduction =
-        (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) +
-        (activeLegendarySetBonuses.astral ? 1 : 0);
+        helmetAbility?.effects.cooldownReductionOnSkill ?? 0;
       const cooldownReduction =
         (selectedSkill.damageType === "魔法"
           ? Math.floor((effectiveCombatStats.castSpeedPercent ?? 0) / 10)
-          : 0) + passiveCooldownReduction;
+          : 0) +
+        passiveCooldownReduction +
+        (astralSageVisionTriggered
+          ? (helmetAbility?.effects.astralSageCooldownReductionTurns ?? 2)
+          : 0);
       nextSkillCooldowns[selectedSkill.id] = arcaneEchoTriggered
         ? 0
         : Math.max(
-            passiveCooldownReduction > 0 ? 0 : 1,
+            passiveCooldownReduction > 0 || astralSageVisionTriggered ? 0 : 1,
             selectedSkill.cooldownTurns - cooldownReduction
           );
     }
@@ -4543,10 +4844,17 @@ export default function Home() {
       targetGroupMember?.physicalResistancePercent ??
       monster.physicalResistancePercent ??
       0;
-    const targetMagicResistance =
-      targetGroupMember?.magicResistancePercent ??
-      monster.magicResistancePercent ??
-      0;
+    const targetMagicResistance = Math.max(
+      0,
+      (targetGroupMember?.magicResistancePercent ??
+        monster.magicResistancePercent ??
+        0) -
+        (battle.monsterStatuses ?? []).reduce(
+          (total, status) =>
+            total + (status.magicResistanceReductionPercent ?? 0),
+          0
+        )
+    );
     const dawnArmorStacksAtStart = Math.min(
       chestAbility?.effects.dawnArmorMaxStacks ?? 0,
       battle.dawnArmorStacks ?? 0
@@ -4554,17 +4862,77 @@ export default function Home() {
     const monsterDisarmed = (battle.monsterStatuses ?? []).some(
       status => status.kind === "繳械"
     );
-    const playerStatusTick = tickBattleStatuses(battle.playerStatuses ?? []);
-    const statusDamageTaken = Math.min(
+    const monsterStunned = (battle.monsterStatuses ?? []).some(
+      status => status.kind === "暈眩" || status.kind === "麻痺"
+    );
+    const playerStatusTick = tickBattleStatuses(
+      leggingsAbility?.id === "titan-bastion-leggings" ||
+        titanBastionInvincibleAtStart
+        ? []
+        : (battle.playerStatuses ?? [])
+    );
+    const titanHelmetShieldAtStart =
+      titanBastionState.helmetShieldTurnsRemaining > 0
+        ? titanBastionState.helmetShield
+        : 0;
+    const titanGuardianShieldAtStart =
+      titanBastionState.guardianShieldTurnsRemaining > 0
+        ? titanBastionState.guardianShield
+        : 0;
+    const titanStaffShieldAtStart =
+      titanBastionState.staffShieldTurnsRemaining > 0
+        ? titanBastionState.staffShield
+        : 0;
+    const titanStaffShieldGain = titanBastionStaffCast
+      ? Math.floor(
+          titanBastionTotalDefense *
+            ((weaponAbility?.effects.titanStaffShieldDefensePercent ?? 150) /
+              100)
+        )
+      : 0;
+    const statusDamageBeforeTitanReduction = Math.min(
       playerStatusTick.damage,
       battle.playerHealth
     );
-    const starCoreStatusShieldResolution = resolveStarCoreShieldDamage(
-      battle.starCoreShield ?? 0,
+    const statusDamageTaken = titanBastionTwoPieceActive
+      ? Math.floor(statusDamageBeforeTitanReduction * 0.75)
+      : statusDamageBeforeTitanReduction;
+    const azureDragonStatusShieldResolution = resolveStarCoreShieldDamage(
+      azureDragonShieldAtStart,
       statusDamageTaken
     );
+    const titanHelmetStatusShieldResolution = resolveStarCoreShieldDamage(
+      titanHelmetShieldAtStart,
+      azureDragonStatusShieldResolution.damageRemaining
+    );
+    const titanGuardianStatusShieldResolution = resolveStarCoreShieldDamage(
+      titanGuardianShieldAtStart,
+      titanHelmetStatusShieldResolution.damageRemaining
+    );
+    const titanStaffStatusShieldResolution = resolveStarCoreShieldDamage(
+      titanStaffShieldAtStart,
+      titanGuardianStatusShieldResolution.damageRemaining
+    );
+    const starCoreStatusShieldResolution = resolveStarCoreShieldDamage(
+      battle.starCoreShield ?? 0,
+      titanStaffStatusShieldResolution.damageRemaining
+    );
+    const astralStatusShieldResolution = resolveStarCoreShieldDamage(
+      battle.astralSageShield ?? 0,
+      starCoreStatusShieldResolution.damageRemaining
+    );
     const statusDamageAfterStarCoreShield =
-      starCoreStatusShieldResolution.damageRemaining;
+      astralStatusShieldResolution.damageRemaining;
+    const titanHelmetShieldAfterStatus =
+      titanHelmetStatusShieldResolution.shieldRemaining;
+    const titanGuardianShieldAfterStatus =
+      titanGuardianStatusShieldResolution.shieldRemaining;
+    const titanStaffShieldAfterStatus =
+      titanStaffStatusShieldResolution.shieldRemaining;
+    const azureDragonShieldAfterStatus =
+      azureDragonStatusShieldResolution.shieldRemaining;
+    const astralSageShieldAfterStatus =
+      astralStatusShieldResolution.shieldRemaining;
     const starCoreShieldGain = getStarCoreShieldGain(
       amuletAbility,
       effectiveAbilities.intelligence,
@@ -4674,6 +5042,18 @@ export default function Home() {
     const targetIsPetrified = (battle.monsterStatuses ?? []).some(
       status => status.kind === "石化"
     );
+    const targetIncomingDamageTakenBonusPercent = (
+      battle.monsterStatuses ?? []
+    ).reduce(
+      (total, status) => total + (status.incomingDamageTakenBonusPercent ?? 0),
+      0
+    );
+    const targetCritDamageTakenBonusPercent = (
+      battle.monsterStatuses ?? []
+    ).reduce(
+      (total, status) => total + (status.critDamageTakenBonusPercent ?? 0),
+      0
+    );
     const hunterFangHighHealthTarget = Boolean(
       amuletAbility?.id === "hunter-king-fang" &&
         targetMonsterHealth >
@@ -4727,12 +5107,20 @@ export default function Home() {
         activeWeaponBuffBonuses.critRateBonusPercent +
         hunterCritBonusPercent +
         hunterFangCritRateBonus +
+        (selectedSkill?.effectType === "damage" && astralSageTwoPieceActive
+          ? astralEnergyStacksForAction * 2
+          : 0) +
         (targetIsMoonMarked
           ? (amuletAbility?.effects.moonStalkerMarkCritRateBonusPercent ?? 15)
           : 0) +
         (weaponAbility?.id === "moon-stalker-bow" &&
         (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0
           ? (weaponAbility.effects.moonStalkerBowCritRateBonusPercent ?? 10)
+          : 0) +
+        (leggingsAbility?.id === "azure-dragon-leggings" &&
+        leggingsPassiveState.azureDragonNextAttackBonusDamage > 0
+          ? (leggingsAbility.effects
+              .azureDragonLeggingsCritRateBonusOnDodgePercent ?? 25)
           : 0) +
         pendingAttackCritRateBonusPercent +
         pendingSkillCritRateBonusPercent
@@ -4741,6 +5129,8 @@ export default function Home() {
       effectiveCombatStats.critDamage +
       hunterCritDamageBonusPercent +
       kingSwordCritDamageBonusPercent +
+      targetCritDamageTakenBonusPercent +
+      stormSwordSoulSetStacksAtStart.length * 4 +
       (helmetAbility?.id === "moon-stalker-vision"
         ? (helmetAbility.effects.moonStalkerCriticalDamageBonusPercent ?? 20)
         : 0);
@@ -4765,7 +5155,9 @@ export default function Home() {
           )
         : 0;
     const monsterUsesSkill = Boolean(
-      monster.elementalAttack && (battle.monsterSkillCooldown ?? 0) <= 0
+      !monsterStunned &&
+        monster.elementalAttack &&
+        (battle.monsterSkillCooldown ?? 0) <= 0
     );
     const monsterAttackMultiplier = monsterUsesSkill
       ? (monster.elementalAttack?.skillDamagePercent ?? 100) / 100
@@ -4805,14 +5197,28 @@ export default function Home() {
         !monsterDodges &&
         rollPercentChance(weaponAbility.effects.dawnProcChancePercent ?? 20)
     );
+    const astralSageSwordBurstTriggered = Boolean(
+      weaponAbility?.id === "astral-sage-sword" &&
+        isDamageAction &&
+        !monsterDodges &&
+        rollPercentChance(
+          weaponAbility.effects.astralSageSwordBurstChancePercent ?? 25
+        )
+    );
     const attackCanCrit =
       !actionLocked && !monsterDodges && selectedSkill?.effectType !== "buff";
     const guaranteedCounterCritical =
-      Boolean(battle.nextAttackGuaranteedCrit) && attackCanCrit;
+      (Boolean(battle.nextAttackGuaranteedCrit) ||
+        stormPhoenixCritsAtStart > 0) &&
+      attackCanCrit;
     const criticalHit =
       attackCanCrit &&
       (guaranteedCounterCritical ||
-        ((!isMage || pendingSkillCritRateBonusPercent > 0) &&
+        ((!isMage ||
+          pendingSkillCritRateBonusPercent > 0 ||
+          (selectedSkill?.effectType === "damage" &&
+            astralSageTwoPieceActive &&
+            astralEnergyStacksForAction > 0)) &&
           Math.random() < effectiveCritRate / 100));
     const rawPlayerDamage = getAttackDamage(effectiveAbilities, state.jobClass);
     const basePlayerDamage = isArcher
@@ -4862,6 +5268,22 @@ export default function Home() {
       (shadowmoonStealthActive
         ? (leggingsAbility?.effects.moonStalkerStealthDamageBonusPercent ?? 50)
         : 0) +
+      (helmetAbility?.id === "azure-dragon-helmet" &&
+      healthAfterPlayerStatus > effectiveAbilities.health * 0.6
+        ? (helmetAbility.effects.azureDragonAttackBonusAbove60HealthPercent ??
+          10)
+        : 0) +
+      stormSwordSoulAmuletStacksAtStart.length *
+        (amuletAbility?.effects.stormAmuletAttackBonusPercent ?? 10) +
+      stormSwordSoulSetStacksAtStart.length * 5 +
+      targetIncomingDamageTakenBonusPercent +
+      (amuletAbility?.id === "titan-bastion-amulet" &&
+      targetMonsterHealth / targetMonsterMaxHealth >
+        healthAfterPlayerStatus / effectiveAbilities.health
+        ? (amuletAbility.effects.titanAmuletDamageBonusHigherHealthPercent ??
+          18)
+        : 0) +
+      (equipmentBonuses.combat.damageBonusPercent ?? 0) +
       forestwindDamageBonusPercent +
       medusaEyeDamageBonusPercent +
       (targetIsDawnMarked
@@ -4869,6 +5291,9 @@ export default function Home() {
         : 0) +
       (damageType === "魔法" && starCoreShieldAfterSkillCast > 0
         ? (amuletAbility?.effects.starCoreMagicDamageBonusPercent ?? 15)
+        : 0) +
+      (damageType === "魔法" && astralSageTwoPieceActive
+        ? astralEnergyStacksForAction * 3
         : 0) +
       (arcaneEchoTriggered
         ? (weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30)
@@ -4885,7 +5310,18 @@ export default function Home() {
         ? (weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20)
         : 0;
     const buffedPlayerDamage = Math.round(
-      damageBeforeDefense *
+      (damageBeforeDefense +
+        (damageType === "魔法" && weaponAbility?.id === "astral-sage-sword"
+          ? effectiveAbilities.strength *
+            ((weaponAbility.effects.astralSageSwordStrengthToMagicPercent ??
+              30) /
+              100)
+          : 0) +
+        (weaponAbility?.id === "titan-bastion-bow"
+          ? titanBastionTotalDefense *
+            ((weaponAbility.effects.titanBowDamageBonusDefensePercent ?? 100) /
+              100)
+          : 0)) *
         (1 + equipmentAttackBonusPercent / 100) *
         (1 + physicalDamageBonusPercent / 100) *
         (1 + frozenTargetDamageBonusPercent / 100) *
@@ -4906,7 +5342,11 @@ export default function Home() {
               (selectedSkill.hitCountMax - selectedSkill.hitCountMin + 1)
           )
         : 1;
-    const skillCastCount = truthDoubleCastTriggered ? 2 : 1;
+    const skillCastCount =
+      truthDoubleCastTriggered ||
+      (weaponAbility?.id === "astral-sage-staff" && arcaneEchoTriggered)
+        ? 2
+        : 1;
     const skillWithWeaponPierce = selectedSkill
       ? {
           ...selectedSkill,
@@ -5046,9 +5486,35 @@ export default function Home() {
       isDamageAction && damageType === "物理"
         ? leggingsPassiveState.nextGaleAttackBonusDamage
         : 0;
+    const stormLeggingsBonusRawDamage =
+      isDamageAction &&
+      damageType === "物理" &&
+      leggingsAbility?.id === "storm-sword-soul-leggings"
+        ? leggingsPassiveState.stormNextAttackBonusDamage
+        : 0;
+    const azureDragonLeggingsBonusRawDamage =
+      isDamageAction &&
+      damageType === "物理" &&
+      leggingsAbility?.id === "azure-dragon-leggings"
+        ? leggingsPassiveState.azureDragonNextAttackBonusDamage
+        : 0;
     const galeLeggingBonusAfterDefense = Math.max(
       0,
       galeLeggingBonusRawDamage -
+        getDefenseReduction(
+          targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+        )
+    );
+    const stormLeggingsBonusAfterDefense = Math.max(
+      0,
+      stormLeggingsBonusRawDamage -
+        getDefenseReduction(
+          targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
+        )
+    );
+    const azureDragonLeggingsBonusAfterDefense = Math.max(
+      0,
+      azureDragonLeggingsBonusRawDamage -
         getDefenseReduction(
           targetDefenseAfterDebuff * (1 - extraDefensePiercePercent / 100)
         )
@@ -5066,6 +5532,8 @@ export default function Home() {
           dawnBonusDamage +
           firmamentBonusDamage +
           galeLeggingBonusAfterDefense +
+          stormLeggingsBonusAfterDefense +
+          azureDragonLeggingsBonusAfterDefense +
           nightSetBonusAfterDefense +
           solarEyeBonusAfterDefense
         : baseRawDamageDealt;
@@ -5111,19 +5579,189 @@ export default function Home() {
             targetPhysicalResistance -
               (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           );
+    const astralSageSwordArcaneDamage = astralSageSwordBurstTriggered
+      ? Math.max(
+          1,
+          Math.round(
+            effectiveAbilities.strength *
+              ((weaponAbility?.effects
+                .astralSageSwordBurstDamagePercentStrength ?? 30) /
+                100) *
+              (1 -
+                Math.max(
+                  0,
+                  targetMagicResistance -
+                    (effectiveCombatStats.magicPenetrationPercent ?? 0)
+                ) /
+                  100)
+          )
+        )
+      : 0;
+    const astralSageBowArcaneDamage =
+      weaponAbility?.id === "astral-sage-bow" &&
+      !selectedSkill &&
+      baseRawDamageDealt > 0
+        ? Math.max(
+            1,
+            Math.round(
+              effectiveAbilities.intelligence *
+                ((weaponAbility.effects
+                  .astralSageBowBonusDamagePercentIntelligence ?? 120) /
+                  100) *
+                (1 -
+                  Math.max(
+                    0,
+                    targetMagicResistance -
+                      (effectiveCombatStats.magicPenetrationPercent ?? 0) -
+                      (weaponAbility.effects
+                        .astralSageBowMagicResistancePiercePercent ?? 20)
+                  ) /
+                    100)
+            )
+          )
+        : 0;
+    const titanSwordTrueDamage =
+      weaponAbility?.id === "titan-bastion-sword" && baseRawDamageDealt > 0
+        ? Math.max(
+            1,
+            Math.round(
+              titanBastionTotalDefense *
+                ((weaponAbility.effects.titanSwordTrueDamageDefensePercent ??
+                  80) /
+                  100) *
+                (1 + (equipmentBonuses.combat.damageBonusPercent ?? 0) / 100)
+            )
+          )
+        : 0;
+    const stormDaggerExtraHitTriggered = Boolean(
+      weaponAbility?.id === "storm-sword-soul-dagger" &&
+        criticalHit &&
+        baseRawDamageDealt > 0 &&
+        rollPercentChance(
+          weaponAbility.effects.stormDaggerProcChancePercent ?? 35
+        )
+    );
+    const stormDaggerTrueDamage = stormDaggerExtraHitTriggered
+      ? Math.max(
+          1,
+          Math.round(
+            buffedPlayerDamage *
+              ((weaponAbility?.effects.stormDaggerTrueDamagePercentAttack ??
+                80) /
+                100)
+          )
+        )
+      : 0;
     const damageDealt = instantExecute
       ? battle.monsterHealth
       : rawDamageDealt === 0
         ? 0
-        : weaponAbility?.id === "dawn-warden-bow"
-          ? dawnBowDamageAgainst(targetGroupMember)
-          : Math.max(
-              1,
-              Math.round(
-                rawDamageWithMoonStalkerBonus * (1 - resistancePercent / 100)
-              )
-            );
+        : (weaponAbility?.id === "dawn-warden-bow"
+            ? dawnBowDamageAgainst(targetGroupMember)
+            : Math.max(
+                1,
+                Math.round(
+                  rawDamageWithMoonStalkerBonus * (1 - resistancePercent / 100)
+                )
+              )) +
+          astralSageSwordArcaneDamage +
+          astralSageBowArcaneDamage +
+          titanSwordTrueDamage +
+          stormDaggerTrueDamage;
     const weaponHitLanded = isDamageAction && damageDealt > 0;
+    const titanSwordStunTriggered = Boolean(
+      weaponAbility?.id === "titan-bastion-sword" &&
+        criticalHit &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.titanSwordStunChanceOnCriticalPercent ?? 30
+        )
+    );
+    const stormSwordAoeTriggered = Boolean(
+      weaponAbility?.id === "storm-sword-soul-sword" &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.stormSwordProcChancePercent ?? 30
+        )
+    );
+    const stormBowTrueAoeTriggered = Boolean(
+      weaponAbility?.id === "storm-sword-soul-bow" &&
+        weaponHitLanded &&
+        rollPercentChance(weaponAbility.effects.stormBowProcChancePercent ?? 25)
+    );
+    const stormStaffChainTriggered = Boolean(
+      weaponAbility?.id === "storm-sword-soul-staff" &&
+        selectedSkill?.effectType === "damage" &&
+        weaponHitLanded &&
+        rollPercentChance(
+          weaponAbility.effects.stormStaffProcChancePercent ?? 30
+        )
+    );
+    const stormLeggingsParalysisTriggered = Boolean(
+      leggingsAbility?.id === "storm-sword-soul-leggings" &&
+        stormLeggingsBonusRawDamage > 0 &&
+        weaponHitLanded &&
+        rollPercentChance(
+          leggingsAbility.effects.stormLeggingsParalysisChancePercent ?? 50
+        )
+    );
+    const stormLeggingsStunTriggered = Boolean(
+      stormLeggingsParalysisTriggered && rollPercentChance(50)
+    );
+    const stormSwordSoulShockTriggered = Boolean(
+      stormSwordSoulTwoPieceActive && weaponHitLanded && rollPercentChance(20)
+    );
+    const stormSwordSoulSetStackTriggered = Boolean(
+      stormSwordSoulFourPieceActive && criticalHit && weaponHitLanded
+    );
+    const stormSwordSoulAmuletTriggered = Boolean(
+      amuletAbility?.id === "storm-sword-soul-amulet" &&
+        criticalHit &&
+        weaponHitLanded &&
+        rollPercentChance(
+          amuletAbility.effects.stormAmuletProcChancePercent ?? 25
+        )
+    );
+    const stormSwordSoulChestStacksAfterAction =
+      chestAbility?.id === "storm-sword-soul-chest"
+        ? Math.min(
+            chestAbility.effects.stormChestMaxStacks ?? 5,
+            stormSwordSoulChestStacksAtStart +
+              (selectedSkill && !actionLocked ? 1 : isDamageAction ? 1 : 0)
+          )
+        : 0;
+    const stormSwordSoulAmuletStacksAfterAction =
+      amuletAbility?.id === "storm-sword-soul-amulet"
+        ? [
+            ...stormSwordSoulAmuletStacksAtStart
+              .map(turns => Math.max(0, turns - 1))
+              .filter(turns => turns > 0),
+            ...(stormSwordSoulAmuletTriggered
+              ? [amuletAbility.effects.stormAmuletDurationTurns ?? 3]
+              : []),
+          ].slice(-(amuletAbility.effects.stormAmuletMaxStacks ?? 3))
+        : [];
+    const stormSwordSoulSetStacksAfterAction = stormSwordSoulFourPieceActive
+      ? [
+          ...stormSwordSoulSetStacksAtStart
+            .map(turns => Math.max(0, turns - 1))
+            .filter(turns => turns > 0),
+          ...(stormSwordSoulSetStackTriggered ? [3] : []),
+        ].slice(-5)
+      : [];
+    const stormPhoenixCritsAfterPlayerAction = Math.max(
+      0,
+      stormPhoenixCritsAtStart - (isDamageAction ? 1 : 0)
+    );
+    if (stormSwordSoulAmuletTriggered) {
+      for (const [cooldownSkillId, turnsRemaining] of Object.entries(
+        nextSkillCooldowns
+      )) {
+        if (turnsRemaining > 0) {
+          nextSkillCooldowns[cooldownSkillId] = Math.max(0, turnsRemaining - 1);
+        }
+      }
+    }
     const moonStalkerVisionTriggered = Boolean(
       helmetAbility?.id === "moon-stalker-vision" && weaponHitLanded
     );
@@ -5261,7 +5899,67 @@ export default function Home() {
           weaponAbility?.effects.sunwheelCritRateBonusPercent ?? 10,
       });
     }
+    if (
+      leggingsAbility?.id === "astral-sage-leggings" &&
+      isDamageAction &&
+      weaponHitLanded
+    ) {
+      triggeredWeaponTimedBuffs.push({
+        id: "astral-sage-leggings",
+        turnsRemaining:
+          leggingsAbility.effects.astralSageLeggingsDotDurationTurns ?? 3,
+        attackDamageBonusPercent:
+          leggingsAbility.effects.astralSageLeggingsAttackBonusPercent ?? 12,
+      });
+    }
     const weaponStatusEffects: SkillStatusEffect[] = [];
+    if (
+      weaponAbility?.id === "astral-sage-dagger" &&
+      criticalHit &&
+      weaponHitLanded
+    ) {
+      weaponStatusEffects.push({
+        kind: "星毒",
+        element: "奧術",
+        chance: 1,
+        durationTurns:
+          weaponAbility.effects.astralSageDaggerPoisonDurationTurns ?? 3,
+        damagePerTurn: Math.max(
+          1,
+          Math.round(
+            targetMonsterMaxHealth *
+              ((weaponAbility.effects.astralSageDaggerPoisonMaxHealthPercent ??
+                5) /
+                100)
+          )
+        ),
+        magicResistanceReductionPercent:
+          weaponAbility.effects
+            .astralSageDaggerMagicResistanceReductionPercent ?? 15,
+      });
+    }
+    if (
+      leggingsAbility?.id === "astral-sage-leggings" &&
+      isDamageAction &&
+      weaponHitLanded
+    ) {
+      weaponStatusEffects.push({
+        kind: "星光殘留",
+        element: "奧術",
+        chance: 1,
+        durationTurns:
+          leggingsAbility.effects.astralSageLeggingsDotDurationTurns ?? 3,
+        damagePerTurn: Math.max(
+          1,
+          Math.round(
+            effectiveAbilities.intelligence *
+              ((leggingsAbility.effects
+                .astralSageLeggingsDotDamagePercentIntelligence ?? 60) /
+                100)
+          )
+        ),
+      });
+    }
     if (moonStalkerVisionTriggered) {
       weaponStatusEffects.push({
         kind: "虛弱",
@@ -5485,8 +6183,63 @@ export default function Home() {
         }
       }
     }
+    if (stormSwordSoulShockTriggered) {
+      weaponStatusEffects.push({
+        kind: "感電",
+        element: "雷電",
+        chance: 1,
+        durationTurns: 3,
+        damagePerTurn: 0,
+        incomingDamageTakenBonusPercent: 15,
+      });
+    }
+    if (stormDaggerExtraHitTriggered) {
+      weaponStatusEffects.push({
+        kind: "虛弱",
+        element: "奧術",
+        chance: 1,
+        durationTurns: weaponAbility?.effects.stormDaggerDurationTurns ?? 2,
+        damagePerTurn: 0,
+        critDamageTakenBonusPercent:
+          weaponAbility?.effects.stormDaggerCriticalDamageTakenBonusPercent ??
+          20,
+      });
+    }
+    if (titanSwordStunTriggered) {
+      weaponStatusEffects.push({
+        kind: "暈眩",
+        element: "雷電",
+        chance: 1,
+        durationTurns: weaponAbility?.effects.titanSwordStunDurationTurns ?? 1,
+        damagePerTurn: 0,
+      });
+    }
+    if (weaponAbility?.id === "titan-bastion-bow" && weaponHitLanded) {
+      weaponStatusEffects.push({
+        kind: "虛弱",
+        element: "雷電",
+        chance: 1,
+        durationTurns: weaponAbility.effects.titanBowEffectDurationTurns ?? 2,
+        damagePerTurn: 0,
+        outgoingDamageReductionPercent:
+          weaponAbility.effects.titanBowEnemyDamageReductionPercent ?? 12,
+      });
+    }
+    if (stormBowTrueAoeTriggered) {
+      weaponStatusEffects.push({
+        kind: "虛弱",
+        element: "雷電",
+        chance: 1,
+        durationTurns: 2,
+        damagePerTurn: 0,
+        critDamageTakenBonusPercent: 20,
+      });
+    }
     const arcaneSkillCastThisTurn = Boolean(
-      weaponAbility?.id === "starlight-staff" && selectedSkill && !actionLocked
+      (weaponAbility?.id === "starlight-staff" ||
+        weaponAbility?.id === "astral-sage-staff") &&
+        selectedSkill &&
+        !actionLocked
     );
     const arcaneNextCastCount =
       weaponPassiveState.arcaneSkillCastsSinceEcho +
@@ -5503,20 +6256,20 @@ export default function Home() {
         weaponPassiveState.hunterCritStacks + (hunterCriticalTriggered ? 1 : 0),
       starrealmCritStacks,
       arcaneSkillCastsSinceEcho:
-        weaponAbility?.id === "starlight-staff"
+        weaponAbility?.id === "starlight-staff" ||
+        weaponAbility?.id === "astral-sage-staff"
           ? arcaneEchoTriggered
             ? 0
-            : arcaneNextCastCount >=
-                (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+            : arcaneNextCastCount >= arcaneEchoThreshold
               ? 0
               : arcaneNextCastCount
           : weaponPassiveState.arcaneSkillCastsSinceEcho,
       arcaneEchoReady:
-        weaponAbility?.id === "starlight-staff"
+        weaponAbility?.id === "starlight-staff" ||
+        weaponAbility?.id === "astral-sage-staff"
           ? arcaneEchoTriggered
             ? false
-            : arcaneNextCastCount >=
-                (weaponAbility.effects.starlightStaffCastsPerEcho ?? 3)
+            : arcaneNextCastCount >= arcaneEchoThreshold
               ? true
               : weaponPassiveState.arcaneEchoReady
           : weaponPassiveState.arcaneEchoReady,
@@ -5546,6 +6299,14 @@ export default function Home() {
         isDamageAction && damageType === "物理"
           ? 0
           : leggingsPassiveState.nextGaleAttackBonusDamage,
+      stormNextAttackBonusDamage:
+        isDamageAction && damageType === "物理"
+          ? 0
+          : leggingsPassiveState.stormNextAttackBonusDamage,
+      azureDragonNextAttackBonusDamage:
+        isDamageAction && damageType === "物理"
+          ? 0
+          : leggingsPassiveState.azureDragonNextAttackBonusDamage,
     };
     const nextMonsterStatuses = applyBattleStatusEffects(
       battle.monsterStatuses,
@@ -5582,29 +6343,78 @@ export default function Home() {
     let nextGroupMembers = groupDamageResult?.members;
     const primaryAppliedDamage =
       groupDamageResult?.totalDamageApplied ?? damageDealt + statusDamage;
+    const actualDamageDealtBeforeArea = groupDamageResult
+      ? Math.min(damageDealt, primaryAppliedDamage)
+      : damageDealt;
+    const moonStalkerEchoStacksAtStart =
+      (battle.moonStalkerSetDodgeTurnsRemaining ?? 0) > 0
+        ? (battle.moonStalkerSetDodgeStacks ?? 0)
+        : 0;
+    const moonStalkerEchoTriggered = Boolean(
+      moonStalkerFourPieceActive &&
+        criticalHit &&
+        actualDamageDealtBeforeArea > 0 &&
+        rollPercentChance(30)
+    );
+    const moonStalkerEchoTurnsRemainingAfterTurn = moonStalkerEchoTriggered
+      ? 2
+      : Math.max(0, (battle.moonStalkerSetDodgeTurnsRemaining ?? 0) - 1);
+    const moonStalkerEchoStacksAfterTurn = moonStalkerEchoTriggered
+      ? Math.min(3, moonStalkerEchoStacksAtStart + 1)
+      : moonStalkerEchoTurnsRemainingAfterTurn > 0
+        ? moonStalkerEchoStacksAtStart
+        : 0;
+    const moonStalkerEchoStacksForEnemyTurn = moonStalkerEchoTriggered
+      ? moonStalkerEchoStacksAfterTurn
+      : moonStalkerEchoStacksAtStart;
+    const moonStalkerEchoSplashDamage = moonStalkerEchoTriggered
+      ? Math.floor(actualDamageDealtBeforeArea * 0.25)
+      : 0;
     const weaponAreaDamageType =
-      fireVeinBurstTriggered || genesisChainTriggered ? "魔法" : "物理";
-    const weaponAreaRawDamage = dawnWardenSwordTriggered
-      ? Math.round(
-          basePlayerDamage *
-            ((weaponAbility?.effects.dawnWardenSwordAoeDamagePercentAttack ??
-              150) /
-              100)
-        )
-      : starrealmBurstTriggered
+      astralMeteorTriggered ||
+      fireVeinBurstTriggered ||
+      genesisChainTriggered ||
+      stormStaffChainTriggered
+        ? "魔法"
+        : "物理";
+    const weaponAreaRawDamage = astralMeteorTriggered
+      ? Math.round(effectiveAbilities.intelligence * 3)
+      : dawnWardenSwordTriggered
         ? Math.round(
             basePlayerDamage *
-              ((weaponAbility?.effects.starrealmAoeAttackPercent ?? 80) / 100)
+              ((weaponAbility?.effects.dawnWardenSwordAoeDamagePercentAttack ??
+                150) /
+                100)
           )
-        : fireVeinBurstTriggered
+        : starrealmBurstTriggered
           ? Math.round(
               basePlayerDamage *
-                ((weaponAbility?.effects.fireVeinAoeMagicAttackPercent ?? 100) /
-                  100)
+                ((weaponAbility?.effects.starrealmAoeAttackPercent ?? 80) / 100)
             )
-          : genesisChainTriggered
-            ? (weaponAbility?.effects.genesisStaffBonusMagicDamage ?? 30)
-            : 0;
+          : fireVeinBurstTriggered
+            ? Math.round(
+                basePlayerDamage *
+                  ((weaponAbility?.effects.fireVeinAoeMagicAttackPercent ??
+                    100) /
+                    100)
+              )
+            : stormSwordAoeTriggered
+              ? Math.round(
+                  effectiveAbilities.strength *
+                    ((weaponAbility?.effects
+                      .stormSwordAoeDamagePercentStrength ?? 80) /
+                      100)
+                )
+              : stormStaffChainTriggered
+                ? Math.round(
+                    buffedPlayerDamage *
+                      ((weaponAbility?.effects
+                        .stormStaffChainDamagePercentSkill ?? 50) /
+                        100)
+                  )
+                : genesisChainTriggered
+                  ? (weaponAbility?.effects.genesisStaffBonusMagicDamage ?? 30)
+                  : 0;
     const weaponAreaResistancePercent =
       weaponAreaDamageType === "魔法"
         ? Math.max(
@@ -5623,23 +6433,44 @@ export default function Home() {
         ? Math.max(
             1,
             Math.round(
-              Math.max(
-                1,
-                weaponAreaRawDamage -
-                  getDefenseReduction(targetDefenseAfterDebuff)
-              ) *
+              (astralMeteorTriggered
+                ? weaponAreaRawDamage
+                : Math.max(
+                    1,
+                    weaponAreaRawDamage -
+                      getDefenseReduction(targetDefenseAfterDebuff)
+                  )) *
                 (1 - weaponAreaResistancePercent / 100)
             )
           )
         : 0;
-    const weaponAreaTargetLimit = genesisChainTriggered
-      ? Math.min(
-          Number.POSITIVE_INFINITY,
-          1 + (weaponAbility?.effects.genesisStaffMaxAdditionalTargets ?? 3)
-        )
-      : Number.POSITIVE_INFINITY;
+    const weaponAreaTargetLimit = stormStaffChainTriggered
+      ? 1 + (weaponAbility?.effects.stormStaffMaxAdditionalBounces ?? 2)
+      : genesisChainTriggered
+        ? 1 + (weaponAbility?.effects.genesisStaffMaxAdditionalTargets ?? 3)
+        : Number.POSITIVE_INFINITY;
     let weaponAreaDamageApplied = 0;
-    if (weaponAreaDamagePerTarget > 0 && nextGroupMembers) {
+    if (astralMeteorTriggered && nextGroupMembers) {
+      const meteorResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        member => {
+          const memberMagicResistance = Math.max(
+            0,
+            (member.magicResistancePercent ??
+              monster.magicResistancePercent ??
+              0) - (effectiveCombatStats.magicPenetrationPercent ?? 0)
+          );
+          return Math.max(
+            1,
+            Math.round(weaponAreaRawDamage * (1 - memberMagicResistance / 100))
+          );
+        }
+      );
+      nextGroupMembers = meteorResult.members;
+      weaponAreaDamageApplied = meteorResult.totalDamageApplied;
+    } else if (astralMeteorTriggered && !battle.groupMembers) {
+      weaponAreaDamageApplied = weaponAreaDamagePerTarget;
+    } else if (weaponAreaDamagePerTarget > 0 && nextGroupMembers) {
       const areaDamageResult = applyMonsterGroupAreaDamage(
         nextGroupMembers,
         weaponAreaDamagePerTarget,
@@ -5653,6 +6484,128 @@ export default function Home() {
         Math.max(0, battle.monsterHealth - primaryAppliedDamage)
       );
     }
+    const titanStaffFieldActive = Boolean(
+      weaponAbility?.id === "titan-bastion-staff" &&
+        (titanBastionStaffCast ||
+          titanBastionState.staffFieldTurnsRemaining > 0)
+    );
+    const titanStaffFieldRawDamage = titanStaffFieldActive
+      ? Math.round(
+          (titanBastionTotalDefense + effectiveAbilities.intelligence) *
+            ((weaponAbility?.effects
+              .titanStaffAoeDamagePercentDefenseAndIntelligence ?? 50) /
+              100)
+        )
+      : 0;
+    if (titanStaffFieldRawDamage > 0 && nextGroupMembers) {
+      const staffFieldResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        member => {
+          const resistance = Math.max(
+            0,
+            (member.magicResistancePercent ??
+              monster.magicResistancePercent ??
+              0) - (effectiveCombatStats.magicPenetrationPercent ?? 0)
+          );
+          return Math.max(
+            1,
+            Math.round(titanStaffFieldRawDamage * (1 - resistance / 100))
+          );
+        }
+      );
+      nextGroupMembers = staffFieldResult.members;
+      weaponAreaDamageApplied += staffFieldResult.totalDamageApplied;
+    } else if (titanStaffFieldRawDamage > 0 && !battle.groupMembers) {
+      const resistance = Math.max(
+        0,
+        targetMagicResistance -
+          (effectiveCombatStats.magicPenetrationPercent ?? 0)
+      );
+      const fieldDamage = Math.max(
+        1,
+        Math.round(titanStaffFieldRawDamage * (1 - resistance / 100))
+      );
+      weaponAreaDamageApplied += Math.min(
+        fieldDamage,
+        Math.max(
+          0,
+          battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied
+        )
+      );
+    }
+    if (stormBowTrueAoeTriggered && nextGroupMembers) {
+      const stormBowAreaResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        () =>
+          Math.max(
+            1,
+            Math.round(
+              buffedPlayerDamage *
+                ((weaponAbility?.effects.stormBowTrueDamagePercentAttack ??
+                  50) /
+                  100)
+            )
+          )
+      );
+      nextGroupMembers = stormBowAreaResult.members;
+      weaponAreaDamageApplied += stormBowAreaResult.totalDamageApplied;
+    } else if (stormBowTrueAoeTriggered && !battle.groupMembers) {
+      weaponAreaDamageApplied += Math.min(
+        Math.max(
+          1,
+          Math.round(
+            buffedPlayerDamage *
+              ((weaponAbility?.effects.stormBowTrueDamagePercentAttack ?? 50) /
+                100)
+          )
+        ),
+        Math.max(
+          0,
+          battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied
+        )
+      );
+    }
+    const stormStaffSingleTargetExplosion = Boolean(
+      stormStaffChainTriggered &&
+        (!battle.groupMembers ||
+          getLivingMonsterGroupMembers(battle.groupMembers).length === 1)
+    );
+    if (stormStaffSingleTargetExplosion) {
+      const resistance = Math.max(
+        0,
+        targetMagicResistance -
+          (effectiveCombatStats.magicPenetrationPercent ?? 0)
+      );
+      const explosionDamage = Math.max(
+        1,
+        Math.round(
+          effectiveAbilities.intelligence *
+            ((weaponAbility?.effects
+              .stormStaffSingleTargetExplosionPercentIntelligence ?? 100) /
+              100) *
+            (1 - resistance / 100)
+        )
+      );
+      if (nextGroupMembers && targetGroupMember?.id) {
+        const soloExplosionResult = applyMonsterGroupDamage(
+          nextGroupMembers,
+          explosionDamage,
+          targetGroupMember.id
+        );
+        nextGroupMembers = soloExplosionResult.members;
+        weaponAreaDamageApplied += soloExplosionResult.totalDamageApplied;
+      } else if (!battle.groupMembers) {
+        weaponAreaDamageApplied += Math.min(
+          explosionDamage,
+          Math.max(
+            0,
+            battle.monsterHealth -
+              primaryAppliedDamage -
+              weaponAreaDamageApplied
+          )
+        );
+      }
+    }
     if (weaponAbility?.id === "dawn-warden-bow" && nextGroupMembers) {
       const bowAreaResult = applyMonsterGroupMappedAreaDamage(
         nextGroupMembers,
@@ -5661,6 +6614,19 @@ export default function Home() {
       );
       nextGroupMembers = bowAreaResult.members;
       weaponAreaDamageApplied += bowAreaResult.totalDamageApplied;
+    }
+    if (
+      moonStalkerEchoSplashDamage > 0 &&
+      nextGroupMembers &&
+      targetGroupMember?.id
+    ) {
+      const echoAreaResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        () => moonStalkerEchoSplashDamage,
+        targetGroupMember.id
+      );
+      nextGroupMembers = echoAreaResult.members;
+      weaponAreaDamageApplied += echoAreaResult.totalDamageApplied;
     }
     const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied;
     const hunterFangKillTriggered = Boolean(
@@ -5743,6 +6709,15 @@ export default function Home() {
         )
       : 0;
     const leggingsSkillHealing = astralSkillResolution.healing;
+    const titanLeggingsHealing =
+      leggingsAbility?.id === "titan-bastion-leggings"
+        ? Math.floor(
+            effectiveAbilities.health *
+              ((leggingsAbility.effects.titanLeggingsHealMaxHealthPercent ??
+                5) /
+                100)
+          )
+        : 0;
     const mountainSetHealing = activeLegendarySetBonuses.mountain
       ? Math.max(1, Math.floor(effectiveAbilities.health * 0.02))
       : 0;
@@ -5768,14 +6743,31 @@ export default function Home() {
               ((amuletAbility.effects.dawnMarkLifestealPercent ?? 10) / 100)
           )
         : 0;
+    const azureDragonAmuletTriggered = Boolean(
+      amuletAbility?.id === "azure-dragon-amulet" &&
+        (Boolean(selectedSkill) || criticalHit) &&
+        rollPercentChance(
+          amuletAbility.effects.azureDragonAmuletHealChancePercent ?? 35
+        )
+    );
+    const azureDragonAmuletHealing = azureDragonAmuletTriggered
+      ? Math.floor(
+          effectiveAbilities.health *
+            ((amuletAbility?.effects.azureDragonAmuletHealMaxHealthPercent ??
+              3) /
+              100)
+        )
+      : 0;
     const healingBeforeDawnArmorBonus =
       lifestealHealing +
       dawnMarkLifestealHealing +
       activeBuffHealing +
       natureHealing +
       leggingsSkillHealing +
+      titanLeggingsHealing +
       mountainSetHealing +
-      leviathanHealing;
+      leviathanHealing +
+      azureDragonAmuletHealing;
     const dawnArmorHealingReceivedBonus =
       chestAbility?.id === "dawn-guardian-armor"
         ? Math.floor(
@@ -5827,8 +6819,17 @@ export default function Home() {
       truthDoubleCastTriggered
         ? `【${chestAbility?.name}】真理開悟：技能同回合施放兩次`
         : "",
+      astralSageVisionTriggered
+        ? `【${helmetAbility?.name}】星辰啟示：技能冷卻 -${helmetAbility?.effects.astralSageCooldownReductionTurns ?? 2} 回合，下一擊傷害 +${helmetAbility?.effects.astralSageNextAttackDamageBonusPercent ?? 15}%`
+        : "",
       guaranteedCounterCritical && actualDamageDealt > 0
         ? `【${chestAbility?.name}】深淵反擊：必定暴擊，傷害 +${counterDamageBonusPercent}%`
+        : "",
+      azureDragonShieldTriggeredAtStart
+        ? `【${helmetAbility?.name}】天命護盾觸發，獲得 ${Math.floor(effectiveAbilities.health * ((helmetAbility?.effects.azureDragonShieldBelow40HealthPercentMaxHealth ?? 10) / 100))} 點護盾`
+        : "",
+      azureDragonAmuletHealing > 0
+        ? `【${amuletAbility?.name}】恢復 ${azureDragonAmuletHealing} 生命`
         : "",
       helmetLifestealHealing > 0
         ? `【${helmetAbility?.name}】吸血回復 ${helmetLifestealHealing} 生命`
@@ -5838,13 +6839,17 @@ export default function Home() {
       (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
         ? `【${helmetAbility?.name}】技能冷卻額外減少 ${helmetAbility?.effects.cooldownReductionOnSkill} 回合`
         : "",
-      selectedSkill &&
-      selectedSkill.cooldownTurns > 0 &&
-      activeLegendarySetBonuses.astral
-        ? "【星辰智者套裝】套裝效果使技能冷卻額外減少 1 回合"
+      selectedSkill && astralSageTwoPieceActive
+        ? `【星界賢者·傳說】星能 ${astralEnergyResolution.nextEnergyStacks}/4${astralMeteorTriggered ? `；星辰隕落造成 ${weaponAreaDamageApplied} 點範圍奧術傷害` : ""}`
         : "",
       dawnProcTriggered
         ? `【${weaponAbility?.name}】額外造成 ${dawnBonusDamage} 點曙光傷害`
+        : "",
+      astralSageSwordBurstTriggered
+        ? `【${weaponAbility?.name}】星輝魔刃觸發，追加 ${astralSageSwordArcaneDamage} 點奧術傷害`
+        : "",
+      astralSageBowArcaneDamage > 0
+        ? `【${weaponAbility?.name}】月弦星箭追加 ${astralSageBowArcaneDamage} 點魔法傷害`
         : "",
       firmamentBonusDamage > 0
         ? `【${weaponAbility?.name}】天穹之箭額外造成 ${firmamentBonusDamage} 點傷害`
@@ -5882,6 +6887,14 @@ export default function Home() {
         : "",
       astralSkillResolution.triggered
         ? `【${leggingsAbility?.name}】恢復 ${leggingsSkillHealing} 生命，下一次傷害技能暴擊率 +${astralSkillResolution.nextSkillCritRateBonusPercent}%`
+        : "",
+      leggingsAbility?.id === "astral-sage-leggings" && weaponHitLanded
+        ? `【${leggingsAbility.name}】星軌步履留下星光殘留：下次攻擊 +${leggingsAbility.effects.astralSageLeggingsAttackBonusPercent ?? 12}%，奧術持續傷害已施加`
+        : "",
+      weaponAbility?.id === "astral-sage-dagger" &&
+      criticalHit &&
+      weaponHitLanded
+        ? `【${weaponAbility.name}】星毒已施加：每回合造成目標最大生命 5% 傷害，魔法抗性 -15%`
         : "",
       leggingsAbility?.id === "asura-leggings" && criticalHit && weaponHitLanded
         ? `【${leggingsAbility.name}】阿修羅戰意堆疊 ${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length}/3，物理傷害 +${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length * (leggingsAbility.effects.asuraPhysicalDamageBonusPerCritPercent ?? 8)}%`
@@ -5991,6 +7004,10 @@ export default function Home() {
           (moonshadowTriggered
             ? (weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ??
               20)
+            : 0) +
+          (astralSageVisionTriggered
+            ? (helmetAbility?.effects.astralSageNextAttackDamageBonusPercent ??
+              15)
             : 0),
         nextAttackCritRateBonusPercent:
           actualDamageDealt > 0
@@ -6006,6 +7023,20 @@ export default function Home() {
         leggingsPassiveState: leggingsPassiveStateAfterPlayerAction,
         divineShield: statusShieldResolution.state,
         starCoreShield: starCoreShieldAfterSkillCast,
+        astralSageShield: astralSageShieldAfterStatus,
+        dawnWardenShield: battle.dawnWardenShield ?? 0,
+        dawnWardenShieldTurnsRemaining:
+          battle.dawnWardenShieldTurnsRemaining ?? 0,
+        azureDragonShield: azureDragonShieldAtStart,
+        azureDragonShieldTurnsRemaining: azureDragonShieldTurnsAtStart,
+        azureDragonShieldLastTriggeredTurn: azureDragonShieldTriggeredAtStart
+          ? battle.turn
+          : (battle.azureDragonShieldLastTriggeredTurn ?? 0),
+        moonStalkerSetDodgeStacks: moonStalkerEchoStacksAfterTurn,
+        moonStalkerSetDodgeTurnsRemaining:
+          moonStalkerEchoTurnsRemainingAfterTurn,
+        astralEnergyStacks: astralEnergyResolution.nextEnergyStacks,
+        deepSeaStarCoreUsed: Boolean(battle.deepSeaStarCoreUsed),
         dawnArmorStacks: dawnArmorStacksAtStart,
         shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
         shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
@@ -6017,6 +7048,12 @@ export default function Home() {
         moonStalkerGuaranteedHitsRemaining:
           moonStalkerGuaranteedHitsAfterAction,
         moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+        titanBastionState,
+        stormSwordSoulGuaranteedCritsRemaining:
+          stormPhoenixCritsAfterPlayerAction,
+        stormSwordSoulChestStacks: stormSwordSoulChestStacksAfterAction,
+        stormSwordSoulAmuletStacks: stormSwordSoulAmuletStacksAfterAction,
+        stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
         timeReversalUsed: Boolean(battle.timeReversalUsed),
         monsterStatuses: statusTick.statuses,
         playerStatuses: playerStatusTick.statuses,
@@ -6027,6 +7064,11 @@ export default function Home() {
         logs: [
           ...logs,
           `${monster.name}倒下了！獲得 ${xpReward} XP。`,
+          ...(moonStalkerEchoTriggered
+            ? [
+                `【影月獵行】月影殘響觸發，閃避率 +5%（${moonStalkerEchoStacksAfterTurn}/3 層）。`,
+              ]
+            : []),
           lifestealHealing ? `吸血回復 ${lifestealHealing} 生命。` : "",
           activeBuffHealing
             ? `「${actionLabel}」恢復 ${activeBuffHealing} 生命。`
@@ -6167,6 +7209,9 @@ export default function Home() {
               25)
             : 0) +
           activeWeaponBuffBonuses.dodgeRateBonusPercent +
+          moonStalkerEchoStacksForEnemyTurn * 5 +
+          stormSwordSoulChestStacksAfterAction *
+            (chestAbility?.effects.stormChestDodgePercentPerStack ?? 3) +
           targetAccuracyReductionPercent +
           currentEnemyAccuracyReductionPercent +
           currentEnemyAttackDodgeBonusPercent
@@ -6186,6 +7231,8 @@ export default function Home() {
     const monsterCritical =
       !statusTick.frozen &&
       !dawnWardenSwordTriggered &&
+      !titanSwordStunTriggered &&
+      !stormLeggingsStunTriggered &&
       !(monsterDisarmed && !monsterUsesSkill) &&
       !playerEvadedBeforeLethalCheck &&
       Math.random() < (targetGroupMember?.critRate ?? monster.critRate) / 100;
@@ -6199,7 +7246,10 @@ export default function Home() {
       : monster.damage;
     const incomingBaseDamage =
       statusTick.frozen ||
+      monsterStunned ||
       dawnWardenSwordTriggered ||
+      titanSwordStunTriggered ||
+      stormLeggingsStunTriggered ||
       (monsterDisarmed && !monsterUsesSkill)
         ? 0
         : failedRequirement
@@ -6210,7 +7260,13 @@ export default function Home() {
         (1 +
           (activeHelmetEffects.defenseBonusPercent +
             activeChestEffects.defenseBonusPercent +
-            activeLeggingsEffects.defenseBonusPercent) /
+            activeLeggingsEffects.defenseBonusPercent +
+            (helmetAbility?.id === "azure-dragon-helmet" &&
+            healthAfterPlayerStatus > effectiveAbilities.health * 0.6
+              ? (helmetAbility.effects
+                  .azureDragonDefenseBonusAbove60HealthPercent ?? 10)
+              : 0) +
+            (leggingsAbility?.id === "titan-bastion-leggings" ? 10 : 0)) /
             100)
     );
     const reducedDamage =
@@ -6235,13 +7291,33 @@ export default function Home() {
         (leviathanLowHealth
           ? (amuletAbility?.effects.leviathanLowHealthResistancePercent ?? 20)
           : 0);
+    const azureDragonChestTriggered = Boolean(
+      chestAbility?.id === "azure-dragon-chest" &&
+        incomingBaseDamage > 0 &&
+        !playerEvadedBeforeLethalCheck &&
+        rollPercentChance(
+          chestAbility.effects.azureDragonChestProcChancePercent ?? 25
+        )
+    );
     const targetOutgoingDamageReductionPercent = Math.min(
       80,
       statusesBeforeTick.reduce(
         (total, status) => total + (status.outgoingDamageReductionPercent ?? 0),
         0
-      )
+      ) +
+        (azureDragonChestTriggered
+          ? (chestAbility?.effects.azureDragonEnemyDamageReductionPercent ?? 15)
+          : 0)
     );
+    const stormChestSingleTargetDamageReductionPercent =
+      chestAbility?.id === "storm-sword-soul-chest" &&
+      stormSwordSoulChestStacksAfterAction >=
+        (chestAbility.effects.stormChestMaxStacks ?? 5) &&
+      (!battle.groupMembers ||
+        getLivingMonsterGroupMembers(battle.groupMembers).length <= 1)
+        ? (chestAbility.effects
+            .stormChestSingleTargetDamageReductionAtMaxStacks ?? 15)
+        : 0;
     const ironGuardDamageReductionPercent = !monsterUsesSkill
       ? weaponPassiveState.ironGuardStacks *
         (weaponAbility?.effects.ironGuardDamageReductionPercentPerStack ?? 10)
@@ -6259,12 +7335,14 @@ export default function Home() {
                     (effectiveCombatStats.damageReductionPercent ?? 0) +
                       (activeBuff?.damageReductionPercent ?? 0) +
                       equipmentResistancePercent +
+                      (titanBastionTwoPieceActive ? 25 : 0) +
                       dawnArmorStacksAtStart *
                         (chestAbility?.effects
                           .dawnArmorDamageReductionPercentPerStack ?? 0) +
                       activeHelmetEffects.enemyDamageReductionPercent +
                       activeChestEffects.enemyDamageReductionPercent +
                       targetOutgoingDamageReductionPercent +
+                      stormChestSingleTargetDamageReductionPercent +
                       ironGuardDamageReductionPercent +
                       (activeLegendarySetBonuses.mountain ? 35 : 0)
                   ) /
@@ -6279,28 +7357,76 @@ export default function Home() {
                   : 1)
             )
           );
-    const incomingDamageTaken = statusTick.frozen
-      ? 0
-      : playerEvadedBeforeLethalCheck
+    const incomingDamageTaken =
+      titanBastionInvincibleAtStart || statusTick.frozen
         ? 0
-        : monsterCritical
-          ? Math.ceil(
-              (buffReducedDamage *
-                (targetGroupMember?.critDamage ?? monster.critDamage)) /
-                100
-            )
-          : buffReducedDamage;
-    const unmitigatedDamageTaken = incomingDamageTaken + reflectedDamage;
+        : playerEvadedBeforeLethalCheck
+          ? 0
+          : monsterCritical
+            ? Math.ceil(
+                (buffReducedDamage *
+                  (targetGroupMember?.critDamage ?? monster.critDamage)) /
+                  100
+              )
+            : buffReducedDamage;
+    const deepSeaStarCoreTriggered = Boolean(
+      amuletAbility?.id === "deep-sea-star-core" &&
+        !battle.deepSeaStarCoreUsed &&
+        healedPlayerHealth - incomingDamageTaken <
+          effectiveAbilities.health *
+            ((amuletAbility.effects.deepSeaStarCoreHealthThresholdPercent ??
+              40) /
+              100)
+    );
+    const deepSeaStarCoreShieldGain = deepSeaStarCoreTriggered
+      ? Math.floor(
+          effectiveAbilities.health *
+            ((amuletAbility?.effects.deepSeaStarCoreShieldMaxHealthPercent ??
+              10) /
+              100)
+        )
+      : 0;
+    const unmitigatedDamageTaken = titanBastionInvincibleAtStart
+      ? 0
+      : incomingDamageTaken + reflectedDamage;
+    const dawnWardenShieldAtStart =
+      (battle.dawnWardenShieldTurnsRemaining ?? 0) > 0
+        ? (battle.dawnWardenShield ?? 0)
+        : 0;
+    const dawnWardenShieldResolution = resolveStarCoreShieldDamage(
+      dawnWardenShieldAtStart,
+      unmitigatedDamageTaken
+    );
+    const azureDragonShieldResolution = resolveStarCoreShieldDamage(
+      azureDragonShieldAfterStatus,
+      dawnWardenShieldResolution.damageRemaining
+    );
+    const titanHelmetIncomingShieldResolution = resolveStarCoreShieldDamage(
+      titanHelmetShieldAfterStatus,
+      azureDragonShieldResolution.damageRemaining
+    );
+    const titanGuardianIncomingShieldResolution = resolveStarCoreShieldDamage(
+      titanGuardianShieldAfterStatus,
+      titanHelmetIncomingShieldResolution.damageRemaining
+    );
+    const titanStaffIncomingShieldResolution = resolveStarCoreShieldDamage(
+      titanStaffShieldAfterStatus + titanStaffShieldGain,
+      titanGuardianIncomingShieldResolution.damageRemaining
+    );
     const starCoreIncomingShieldResolution = resolveStarCoreShieldDamage(
       starCoreShieldAfterSkillCast,
-      unmitigatedDamageTaken
+      titanStaffIncomingShieldResolution.damageRemaining
+    );
+    const astralIncomingShieldResolution = resolveStarCoreShieldDamage(
+      astralSageShieldAfterStatus + deepSeaStarCoreShieldGain,
+      starCoreIncomingShieldResolution.damageRemaining
     );
     const potentialDivineShieldResolution = resolveDivineShieldDamage(
       chestAbility,
       statusShieldResolution.state,
       healedPlayerHealth,
       effectiveAbilities.health,
-      starCoreIncomingShieldResolution.damageRemaining,
+      astralIncomingShieldResolution.damageRemaining,
       true
     );
     const shadowmoonEvasion = resolveShadowmoonLethalEvasion(
@@ -6318,9 +7444,187 @@ export default function Home() {
           state: statusShieldResolution.state,
         }
       : potentialDivineShieldResolution;
-    const damageTaken = divineShieldResolution.damageTaken;
+    const damageTakenBeforeTitanSetProtection =
+      divineShieldResolution.damageTaken;
+    const titanSetLethalProtectionTriggered = Boolean(
+      titanBastionTwoPieceActive &&
+        !titanBastionState.setLethalProtectionUsed &&
+        !titanBastionInvincibleAtStart &&
+        damageTakenBeforeTitanSetProtection > 0 &&
+        healedPlayerHealth - damageTakenBeforeTitanSetProtection <= 0
+    );
+    const damageTaken = damageTakenBeforeTitanSetProtection;
+    const dawnWardenShieldTriggered = Boolean(
+      dawnWardenTwoPieceActive &&
+        incomingDamageTaken > 0 &&
+        !shadowmoonEvasion.triggered &&
+        rollPercentChance(20)
+    );
+    const dawnWardenShieldTurnsRemainingAfterTurn = dawnWardenShieldTriggered
+      ? 2
+      : Math.max(0, (battle.dawnWardenShieldTurnsRemaining ?? 0) - 1);
+    const dawnWardenShieldAfterTurn =
+      dawnWardenShieldTurnsRemainingAfterTurn > 0
+        ? (shadowmoonEvasion.triggered
+            ? dawnWardenShieldAtStart
+            : dawnWardenShieldResolution.shieldRemaining) +
+          (dawnWardenShieldTriggered
+            ? Math.floor(incomingDamageTaken * 0.5)
+            : 0)
+        : 0;
+    const dawnWardenReflectionDamage =
+      dawnWardenFourPieceActive && damageTaken > 0
+        ? Math.floor(damageTaken * 0.1)
+        : 0;
+    const titanHelmetShieldTriggered = Boolean(
+      helmetAbility?.id === "titan-bastion-helmet" && incomingDamageTaken > 0
+    );
+    const titanHelmetShieldTurnsRemainingAfterTurn = titanHelmetShieldTriggered
+      ? (helmetAbility?.effects.titanHelmetShieldDurationTurns ?? 3)
+      : Math.max(0, titanBastionState.helmetShieldTurnsRemaining - 1);
+    const titanHelmetShieldAfterTurn =
+      titanHelmetShieldTurnsRemainingAfterTurn > 0
+        ? (shadowmoonEvasion.triggered
+            ? titanHelmetShieldAfterStatus
+            : titanHelmetIncomingShieldResolution.shieldRemaining) +
+          (titanHelmetShieldTriggered
+            ? Math.floor(
+                incomingDamageTaken *
+                  ((helmetAbility?.effects.titanHelmetShieldFromDamagePercent ??
+                    12) /
+                    100)
+              )
+            : 0)
+        : 0;
+    const titanGuardianHitCountAfterHit =
+      incomingDamageTaken > 0
+        ? titanBastionState.guardianHitCount + 1
+        : titanBastionState.guardianHitCount;
+    const titanGuardianShieldTriggered = Boolean(
+      chestAbility?.id === "titan-bastion-chest" &&
+        incomingDamageTaken > 0 &&
+        titanGuardianHitCountAfterHit >=
+          (chestAbility.effects.titanChestHitsToTrigger ?? 4) &&
+        titanBastionState.guardianCooldownTurnsRemaining <= 0
+    );
+    const titanGuardianHitCountAfterTurn = titanGuardianShieldTriggered
+      ? 0
+      : titanGuardianHitCountAfterHit;
+    const titanGuardianCooldownTurnsRemainingAfterTurn =
+      titanGuardianShieldTriggered
+        ? (chestAbility?.effects.titanChestCooldownTurns ?? 5)
+        : Math.max(0, titanBastionState.guardianCooldownTurnsRemaining - 1);
+    const titanGuardianShieldTurnsRemainingAfterTurn =
+      titanGuardianShieldTriggered
+        ? (chestAbility?.effects.titanChestShieldDurationTurns ?? 2)
+        : Math.max(0, titanBastionState.guardianShieldTurnsRemaining - 1);
+    const titanGuardianShieldAfterTurn =
+      titanGuardianShieldTurnsRemainingAfterTurn > 0
+        ? (shadowmoonEvasion.triggered
+            ? titanGuardianShieldAfterStatus
+            : titanGuardianIncomingShieldResolution.shieldRemaining) +
+          (titanGuardianShieldTriggered
+            ? Math.floor(
+                titanBastionTotalDefense *
+                  ((chestAbility?.effects.titanChestShieldDefenseMultiplier ??
+                    300) /
+                    100)
+              )
+            : 0)
+        : 0;
+    const titanStaffShieldTurnsRemainingAfterTurn = titanBastionStaffCast
+      ? (weaponAbility?.effects.titanStaffEffectDurationTurns ?? 2)
+      : Math.max(0, titanBastionState.staffShieldTurnsRemaining - 1);
+    const titanStaffShieldAfterTurn =
+      titanStaffShieldTurnsRemainingAfterTurn > 0
+        ? (shadowmoonEvasion.triggered
+            ? titanStaffShieldAfterStatus
+            : titanStaffIncomingShieldResolution.shieldRemaining) +
+          titanStaffShieldGain
+        : 0;
+    const titanStaffFieldTurnsRemainingAfterTurn = titanBastionStaffCast
+      ? Math.max(
+          0,
+          (weaponAbility?.effects.titanStaffEffectDurationTurns ?? 2) - 1
+        )
+      : Math.max(0, titanBastionState.staffFieldTurnsRemaining - 1);
+    const titanSetInvincibilityTurnsRemainingAfterTurn =
+      titanSetLethalProtectionTriggered
+        ? 2
+        : titanBastionInvincibleAtStart
+          ? Math.max(0, titanBastionState.setInvincibilityTurnsRemaining - 1)
+          : 0;
+    const titanBastionStateAfterTurn: TitanBastionBattleState = {
+      helmetShield: titanHelmetShieldAfterTurn,
+      helmetShieldTurnsRemaining: titanHelmetShieldTurnsRemainingAfterTurn,
+      guardianHitCount: titanGuardianHitCountAfterTurn,
+      guardianCooldownTurnsRemaining:
+        titanGuardianCooldownTurnsRemainingAfterTurn,
+      guardianShield: titanGuardianShieldAfterTurn,
+      guardianShieldTurnsRemaining: titanGuardianShieldTurnsRemainingAfterTurn,
+      staffShield: titanStaffShieldAfterTurn,
+      staffShieldTurnsRemaining: titanStaffShieldTurnsRemainingAfterTurn,
+      staffFieldTurnsRemaining: titanStaffFieldTurnsRemainingAfterTurn,
+      setInvincibilityTurnsRemaining:
+        titanSetInvincibilityTurnsRemainingAfterTurn,
+      setLethalProtectionUsed:
+        titanBastionState.setLethalProtectionUsed ||
+        titanSetLethalProtectionTriggered,
+    };
+    const astralSageShieldAfterTurn =
+      (shadowmoonEvasion.triggered
+        ? astralSageShieldAfterStatus + deepSeaStarCoreShieldGain
+        : astralIncomingShieldResolution.shieldRemaining) +
+      (chestAbility?.id === "astral-sage-chest" && damageTaken > 0
+        ? Math.floor(
+            damageTaken *
+              ((chestAbility.effects.astralSageChestShieldConversionPercent ??
+                15) /
+                100)
+          )
+        : 0);
+    const azureDragonShieldTurnsRemainingAfterTurn =
+      azureDragonShieldTriggeredAtStart
+        ? Math.max(
+            0,
+            (helmetAbility?.effects.azureDragonShieldDurationTurns ?? 3) - 1
+          )
+        : Math.max(0, (battle.azureDragonShieldTurnsRemaining ?? 0) - 1);
+    const azureDragonShieldAfterTurn =
+      azureDragonShieldTurnsRemainingAfterTurn > 0
+        ? azureDragonShieldResolution.shieldRemaining
+        : 0;
     const playerEvaded =
       playerDodges || galeSetEvasionTriggered || shadowmoonEvasion.triggered;
+    const titanDaggerCounterTriggered = Boolean(
+      weaponAbility?.id === "titan-bastion-dagger" &&
+        (playerEvaded || incomingDamageTaken > 0) &&
+        rollPercentChance(
+          weaponAbility.effects.titanDaggerCounterChancePercent ?? 25
+        )
+    );
+    const titanDaggerCounterDamage = titanDaggerCounterTriggered
+      ? Math.max(
+          1,
+          Math.round(
+            Math.max(
+              1,
+              titanBastionTotalDefense *
+                ((weaponAbility?.effects
+                  .titanDaggerCounterDamageDefensePercent ?? 200) /
+                  100) -
+                getDefenseReduction(targetDefenseAfterDebuff)
+            ) *
+              (1 - targetPhysicalResistance / 100)
+          )
+        )
+      : 0;
+    const stormLeggingsEvasionTriggered = Boolean(
+      leggingsAbility?.id === "storm-sword-soul-leggings" && playerEvaded
+    );
+    const azureDragonLeggingsEvasionTriggered = Boolean(
+      leggingsAbility?.id === "azure-dragon-leggings" && playerEvaded
+    );
     const moonStalkerCounterTriggered = Boolean(
       weaponAbility?.id === "moon-stalker-sword" && playerEvaded
     );
@@ -6358,9 +7662,10 @@ export default function Home() {
                 100)
           )
         : 0;
-    const finalIncomingDamageTaken = shadowmoonEvasion.triggered
-      ? 0
-      : incomingDamageTaken;
+    const finalIncomingDamageTaken =
+      shadowmoonEvasion.triggered || titanSetLethalProtectionTriggered
+        ? 0
+        : incomingDamageTaken;
     const dawnArmorStacksAfterTurn =
       chestAbility?.id === "dawn-guardian-armor"
         ? Math.min(
@@ -6379,7 +7684,9 @@ export default function Home() {
     const groupMembersAfterDawnReflection = nextGroupMembers
       ? applyMonsterGroupDamage(
           nextGroupMembers,
-          moonStalkerCounterDamage,
+          moonStalkerCounterDamage +
+            dawnWardenReflectionDamage +
+            titanDaggerCounterDamage,
           targetGroupMember?.id
         ).members
       : undefined;
@@ -6424,28 +7731,35 @@ export default function Home() {
           0,
           Math.min(
             monster.health,
-            monsterHealth + monsterLifestealHealing - moonStalkerCounterDamage
+            monsterHealth +
+              monsterLifestealHealing -
+              moonStalkerCounterDamage -
+              dawnWardenReflectionDamage -
+              titanDaggerCounterDamage
           )
         );
-    const nextPlayerStatuses = applyBattleStatusEffects(
-      playerStatusTick.statuses,
-      monsterUsesSkill &&
-        monster.elementalAttack &&
-        finalIncomingDamageTaken > 0
-        ? [
-            {
-              element: monster.elementalAttack.element,
-              kind: "燃燒",
-              chance: 1,
-              durationTurns: monster.elementalAttack.durationTurns,
-              damagePerTurn: 0,
-              damagePercentOfSkill: monster.elementalAttack.damagePercent,
-              damageReductionPercent:
-                monster.elementalAttack.damageReductionPercent,
-            },
-          ]
-        : []
-    );
+    const nextPlayerStatuses =
+      leggingsAbility?.id === "titan-bastion-leggings"
+        ? []
+        : applyBattleStatusEffects(
+            playerStatusTick.statuses,
+            monsterUsesSkill &&
+              monster.elementalAttack &&
+              finalIncomingDamageTaken > 0
+              ? [
+                  {
+                    element: monster.elementalAttack.element,
+                    kind: "燃燒",
+                    chance: 1,
+                    durationTurns: monster.elementalAttack.durationTurns,
+                    damagePerTurn: 0,
+                    damagePercentOfSkill: monster.elementalAttack.damagePercent,
+                    damageReductionPercent:
+                      monster.elementalAttack.damageReductionPercent,
+                  },
+                ]
+              : []
+          );
     const burnApplied = Boolean(
       monsterUsesSkill &&
         monster.elementalAttack &&
@@ -6474,6 +7788,27 @@ export default function Home() {
                 100)
           )
         : leggingsPassiveStateAfterPlayerAction.nextGaleAttackBonusDamage,
+      stormNextAttackBonusDamage: stormLeggingsEvasionTriggered
+        ? Math.round(
+            effectiveAbilities.strength *
+              ((leggingsAbility?.effects
+                .stormLeggingsBonusDamagePercentStrength ?? 50) /
+                100)
+          )
+        : isDamageAction && damageType === "物理"
+          ? 0
+          : leggingsPassiveStateAfterPlayerAction.stormNextAttackBonusDamage,
+      azureDragonNextAttackBonusDamage: azureDragonLeggingsEvasionTriggered
+        ? Math.round(
+            (effectiveAbilities.strength + effectiveAbilities.intelligence) *
+              ((leggingsAbility?.effects
+                .azureDragonLeggingsBonusDamagePercentStrengthAndIntelligence ??
+                50) /
+                100)
+          )
+        : isDamageAction && damageType === "物理"
+          ? 0
+          : leggingsPassiveStateAfterPlayerAction.azureDragonNextAttackBonusDamage,
     };
     const divineShieldTriggered =
       statusShieldResolution.triggered || divineShieldResolution.triggered;
@@ -6549,13 +7884,18 @@ export default function Home() {
         : (battle.nextAttackDefensePiercePercent ?? 0)) +
       (phantomStepTriggered
         ? (weaponAbility?.effects.phantomStepDefensePiercePercent ?? 20)
-        : 0);
+        : 0) +
+      (moonStalkerTwoPieceActive && playerEvaded ? 10 : 0);
     const nextAttackDamageBonusPercent =
       nextDodgeCounterState.damageBonusPercent +
       (moonshadowTriggered
         ? (weaponAbility?.effects.moonshadowNextAttackDamageBonusPercent ?? 20)
         : 0) +
-      (galeSetEvasionTriggered ? 50 : 0);
+      (galeSetEvasionTriggered ? 50 : 0) +
+      (astralSageVisionTriggered
+        ? (helmetAbility?.effects.astralSageNextAttackDamageBonusPercent ?? 15)
+        : 0) +
+      (moonStalkerTwoPieceActive && playerEvaded ? 15 : 0);
     const nextWeaponTimedBuffs = weaponTimedBuffsAfterPlayerAction;
     const oracleStunTriggered = Boolean(
       chestAbility?.effects.oracleStunEnemiesOnHitAtTurnEnd &&
@@ -6573,6 +7913,14 @@ export default function Home() {
         rollPercentChance(
           leggingsAbility.effects.dawnStepDisarmChancePercent ?? 25
         )
+    );
+    const titanSetCrushTriggered = Boolean(
+      titanBastionFourPieceActive &&
+        finalIncomingDamageTaken > 0 &&
+        rollPercentChance(30)
+    );
+    const titanSetCrushStunTriggered = Boolean(
+      titanSetCrushTriggered && rollPercentChance(50)
     );
     const monsterTurnEndEffects: SkillStatusEffect[] = [
       ...(oracleStunTriggered
@@ -6675,6 +8023,85 @@ export default function Home() {
             },
           ]
         : []),
+      ...(azureDragonChestTriggered
+        ? [
+            {
+              kind: "虛弱" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns:
+                chestAbility?.effects.azureDragonChestDurationTurns ?? 2,
+              damagePerTurn: 0,
+              outgoingDamageReductionPercent:
+                chestAbility?.effects.azureDragonEnemyDamageReductionPercent ??
+                15,
+              armorReductionPercent:
+                chestAbility?.effects.azureDragonEnemyDefenseReductionPercent ??
+                10,
+            },
+          ]
+        : []),
+      ...(stormLeggingsParalysisTriggered
+        ? [
+            {
+              kind: "風雷麻痺" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns:
+                leggingsAbility?.effects.stormLeggingsParalysisDurationTurns ??
+                3,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
+      ...(stormLeggingsStunTriggered
+        ? [
+            {
+              kind: "暈眩" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
+      ...(titanDaggerCounterTriggered
+        ? [
+            {
+              kind: "虛弱" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns:
+                weaponAbility?.effects.titanDaggerEffectDurationTurns ?? 2,
+              damagePerTurn: 0,
+              armorReductionPercent:
+                weaponAbility?.effects.titanDaggerDefenseReductionPercent ?? 15,
+            },
+          ]
+        : []),
+      ...(titanSetCrushTriggered
+        ? [
+            {
+              kind: "威懾" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns: 2,
+              damagePerTurn: 0,
+              outgoingDamageReductionPercent: 20,
+            },
+          ]
+        : []),
+      ...(titanSetCrushStunTriggered
+        ? [
+            {
+              kind: "暈眩" as const,
+              element: "雷電" as const,
+              chance: 1,
+              durationTurns: 1,
+              damagePerTurn: 0,
+            },
+          ]
+        : []),
     ];
     const monsterStatusesAfterTurn =
       monsterTurnEndEffects.length > 0
@@ -6715,6 +8142,11 @@ export default function Home() {
       ...(statusShieldResolution.absorbedDamage > 0
         ? [`神聖護盾吸收 ${statusShieldResolution.absorbedDamage} 點持續傷害。`]
         : []),
+      ...(azureDragonStatusShieldResolution.absorbedDamage > 0
+        ? [
+            `【蒼龍天命】天命護盾吸收 ${azureDragonStatusShieldResolution.absorbedDamage} 點持續傷害。`,
+          ]
+        : []),
       ...(divineShieldTriggered
         ? [
             `【${chestAbility?.name}】神聖護盾觸發，持續 ${chestAbility?.effects.sacredShieldDurationTurns ?? 2} 回合（本場戰鬥僅一次）。`,
@@ -6727,6 +8159,52 @@ export default function Home() {
         ? [
             `【${amuletAbility?.name}】星核護盾吸收 ${starCoreIncomingShieldResolution.absorbedDamage} 點傷害。`,
           ]
+        : []),
+      ...(astralIncomingShieldResolution.absorbedDamage > 0
+        ? [
+            `星界護盾吸收 ${astralIncomingShieldResolution.absorbedDamage} 點傷害。`,
+          ]
+        : []),
+      ...(dawnWardenShieldResolution.absorbedDamage > 0
+        ? [
+            `【曙光聖衛】聖光護體護盾吸收 ${dawnWardenShieldResolution.absorbedDamage} 點傷害。`,
+          ]
+        : []),
+      ...(azureDragonShieldResolution.absorbedDamage > 0
+        ? [
+            `【蒼龍天命】天命護盾吸收 ${azureDragonShieldResolution.absorbedDamage} 點傷害。`,
+          ]
+        : []),
+      ...(azureDragonChestTriggered
+        ? [
+            `【${chestAbility?.name}】龍鎧反震：敵人造成傷害 -${chestAbility?.effects.azureDragonEnemyDamageReductionPercent ?? 15}%、防禦 -${chestAbility?.effects.azureDragonEnemyDefenseReductionPercent ?? 10}%`,
+          ]
+        : []),
+      ...(dawnWardenShieldTriggered
+        ? [
+            `【曙光聖衛】聖光護體觸發，生成 ${Math.floor(incomingDamageTaken * 0.5)} 點護盾，持續 2 回合。`,
+          ]
+        : []),
+      ...(dawnWardenReflectionDamage > 0
+        ? [
+            `【曙光聖衛】曙光反噬造成 ${dawnWardenReflectionDamage} 點真實傷害。`,
+          ]
+        : []),
+      ...(moonStalkerEchoTriggered
+        ? [
+            `【影月獵行】月影殘響觸發，擴散 ${moonStalkerEchoSplashDamage} 點暴擊傷害，閃避率 +5%（${moonStalkerEchoStacksAfterTurn}/3 層）。`,
+          ]
+        : []),
+      ...(moonStalkerTwoPieceActive && playerEvaded
+        ? ["【影月獵行】影化步法觸發：下一擊傷害 +15%、防禦穿透 +10%。"]
+        : []),
+      ...(deepSeaStarCoreTriggered
+        ? [
+            `【${amuletAbility?.name}】深海庇護觸發，獲得 ${deepSeaStarCoreShieldGain} 點護盾。`,
+          ]
+        : []),
+      ...(chestAbility?.id === "astral-sage-chest" && damageTaken > 0
+        ? [`【${chestAbility.name}】將所受傷害的 15% 轉為護盾。`]
         : []),
       ...(starCoreShieldGain > 0
         ? [
@@ -6751,6 +8229,11 @@ export default function Home() {
       ...(shadowmoonDodgeHealing > 0
         ? [
             `【${chestAbility?.name}】深淵護體恢復 ${shadowmoonDodgeHealing} 生命，獲得暗影殘像。`,
+          ]
+        : []),
+      ...(azureDragonLeggingsEvasionTriggered
+        ? [
+            `【${leggingsAbility?.name}】影月龍行觸發：下一擊暴擊率 +${leggingsAbility?.effects.azureDragonLeggingsCritRateBonusOnDodgePercent ?? 25}%，追加 ${leggingsPassiveStateAfterPlayerAction.azureDragonNextAttackBonusDamage} 點傷害。`,
           ]
         : []),
       ...(moonStalkerCounterTriggered
@@ -6848,7 +8331,7 @@ export default function Home() {
     if (playerHealth <= 0) {
       showBattleFx({
         action: selectedSkill ? "skill" : "attack",
-        monsterDamage: appliedDamage,
+        monsterDamage: appliedDamage + dawnWardenReflectionDamage,
         playerDamage: totalDamageTaken,
         healing:
           lifestealHealing +
@@ -6882,6 +8365,23 @@ export default function Home() {
           weaponTimedBuffs: nextWeaponTimedBuffs,
           leggingsPassiveState: nextLeggingsPassiveState,
           starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+          astralSageShield: astralSageShieldAfterTurn,
+          dawnWardenShield: dawnWardenShieldAfterTurn,
+          dawnWardenShieldTurnsRemaining:
+            dawnWardenShieldTurnsRemainingAfterTurn,
+          azureDragonShield: azureDragonShieldAfterTurn,
+          azureDragonShieldTurnsRemaining:
+            azureDragonShieldTurnsRemainingAfterTurn,
+          azureDragonShieldLastTriggeredTurn: azureDragonShieldTriggeredAtStart
+            ? battle.turn
+            : (battle.azureDragonShieldLastTriggeredTurn ?? 0),
+          moonStalkerSetDodgeStacks: moonStalkerEchoStacksAfterTurn,
+          moonStalkerSetDodgeTurnsRemaining:
+            moonStalkerEchoTurnsRemainingAfterTurn,
+          astralEnergyStacks: astralEnergyResolution.nextEnergyStacks,
+          deepSeaStarCoreUsed: Boolean(
+            battle.deepSeaStarCoreUsed || deepSeaStarCoreTriggered
+          ),
           dawnArmorStacks: dawnArmorStacksAfterTurn,
           shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
           shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
@@ -6893,6 +8393,12 @@ export default function Home() {
           moonStalkerGuaranteedHitsRemaining:
             moonStalkerGuaranteedHitsAfterAction,
           moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+          titanBastionState: titanBastionStateAfterTurn,
+          stormSwordSoulGuaranteedCritsRemaining:
+            stormPhoenixCritsAfterPlayerAction,
+          stormSwordSoulChestStacks: stormSwordSoulChestStacksAfterAction,
+          stormSwordSoulAmuletStacks: stormSwordSoulAmuletStacksAfterAction,
+          stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
 
           timeReversalUsed: Boolean(
             battle.timeReversalUsed || timeReversalTriggered
@@ -6911,7 +8417,11 @@ export default function Home() {
             ...nextLogs,
             `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`,
           ],
-          damageDealt: battle.damageDealt + appliedDamage,
+          damageDealt:
+            battle.damageDealt +
+            appliedDamage +
+            dawnWardenReflectionDamage +
+            titanDaggerCounterDamage,
           damageTaken: nextDamageTaken,
           criticalHits,
           dodges: dodges + (playerEvaded ? 1 : 0),
@@ -6955,6 +8465,16 @@ export default function Home() {
         weaponTimedBuffs: nextWeaponTimedBuffs,
         leggingsPassiveState: nextLeggingsPassiveState,
         starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+        astralSageShield: astralSageShieldAfterTurn,
+        dawnWardenShield: dawnWardenShieldAfterTurn,
+        dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
+        moonStalkerSetDodgeStacks: moonStalkerEchoStacksAfterTurn,
+        moonStalkerSetDodgeTurnsRemaining:
+          moonStalkerEchoTurnsRemainingAfterTurn,
+        astralEnergyStacks: astralEnergyResolution.nextEnergyStacks,
+        deepSeaStarCoreUsed: Boolean(
+          battle.deepSeaStarCoreUsed || deepSeaStarCoreTriggered
+        ),
         dawnArmorStacks: dawnArmorStacksAfterTurn,
         shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
         shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
@@ -6981,7 +8501,11 @@ export default function Home() {
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [...nextLogs, `你被${monster.name}擊倒了！`],
-        damageDealt: battle.damageDealt + appliedDamage,
+        damageDealt:
+          battle.damageDealt +
+          appliedDamage +
+          dawnWardenReflectionDamage +
+          titanDaggerCounterDamage,
         damageTaken: nextDamageTaken,
         criticalHits,
         dodges: dodges + (playerEvaded ? 1 : 0),
@@ -7007,7 +8531,8 @@ export default function Home() {
     }
     showBattleFx({
       action: selectedSkill ? "skill" : "attack",
-      monsterDamage: appliedDamage,
+      monsterDamage:
+        appliedDamage + dawnWardenReflectionDamage + titanDaggerCounterDamage,
       playerDamage: totalDamageTaken,
       healing:
         lifestealHealing +
@@ -7043,6 +8568,20 @@ export default function Home() {
       weaponTimedBuffs: nextWeaponTimedBuffs,
       leggingsPassiveState: nextLeggingsPassiveState,
       starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+      astralSageShield: astralSageShieldAfterTurn,
+      dawnWardenShield: dawnWardenShieldAfterTurn,
+      dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
+      azureDragonShield: azureDragonShieldAfterTurn,
+      azureDragonShieldTurnsRemaining: azureDragonShieldTurnsRemainingAfterTurn,
+      azureDragonShieldLastTriggeredTurn: azureDragonShieldTriggeredAtStart
+        ? battle.turn
+        : (battle.azureDragonShieldLastTriggeredTurn ?? 0),
+      moonStalkerSetDodgeStacks: moonStalkerEchoStacksAfterTurn,
+      moonStalkerSetDodgeTurnsRemaining: moonStalkerEchoTurnsRemainingAfterTurn,
+      astralEnergyStacks: astralEnergyResolution.nextEnergyStacks,
+      deepSeaStarCoreUsed: Boolean(
+        battle.deepSeaStarCoreUsed || deepSeaStarCoreTriggered
+      ),
       dawnArmorStacks: dawnArmorStacksAfterTurn,
       shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
       shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
@@ -7053,6 +8592,12 @@ export default function Home() {
       shadowmoonStealthActive,
       moonStalkerGuaranteedHitsRemaining: moonStalkerGuaranteedHitsAfterAction,
       moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
+      titanBastionState: titanBastionStateAfterTurn,
+      stormSwordSoulGuaranteedCritsRemaining:
+        stormPhoenixCritsAfterPlayerAction,
+      stormSwordSoulChestStacks: stormSwordSoulChestStacksAfterAction,
+      stormSwordSoulAmuletStacks: stormSwordSoulAmuletStacksAfterAction,
+      stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
 
       timeReversalUsed: Boolean(
         battle.timeReversalUsed || timeReversalTriggered
@@ -7072,7 +8617,8 @@ export default function Home() {
           : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
       logs: nextLogs,
-      damageDealt: battle.damageDealt + appliedDamage,
+      damageDealt:
+        battle.damageDealt + appliedDamage + dawnWardenReflectionDamage,
       damageTaken: nextDamageTaken,
       criticalHits,
       dodges: dodges + (playerEvaded ? 1 : 0),
@@ -8747,7 +10293,11 @@ export default function Home() {
                           <div className="equipment-set-card" key={set.name}>
                             <div className="equipment-set-card-top">
                               <strong>{set.name}</strong>
-                              <span>2 件</span>
+                              <span>
+                                {set.description.includes("4 件")
+                                  ? "4 件"
+                                  : "2 件"}
+                              </span>
                             </div>
                             <div className="equipment-set-effects">
                               <span>{set.description}</span>
@@ -12070,7 +13620,11 @@ export default function Home() {
                     key={buff.id}
                   >
                     <strong>
-                      {buff.id === "swiftfang-dagger" ? "迅捷牙襲" : "日輪灼燒"}
+                      {buff.id === "swiftfang-dagger"
+                        ? "迅捷牙襲"
+                        : buff.id === "astral-sage-leggings"
+                          ? "星軌步履"
+                          : "日輪灼燒"}
                     </strong>
                     <small>{buff.turnsRemaining} 回合</small>
                     {buff.attackDamageBonusPercent ? (
@@ -12129,8 +13683,189 @@ export default function Home() {
                 )}
                 {battle.weaponPassiveState?.arcaneEchoReady && (
                   <span className="battle-effect battle-effect-buff">
-                    <strong>星語共鳴已準備</strong>
-                    <small>下一次技能傷害 +30%，不進入冷卻</small>
+                    <strong>
+                      {getEquippedSpecialAbility("武器")?.id ===
+                      "astral-sage-staff"
+                        ? "奧術共鳴已準備"
+                        : "星語共鳴已準備"}
+                    </strong>
+                    <small>
+                      {getEquippedSpecialAbility("武器")?.id ===
+                      "astral-sage-staff"
+                        ? "下一次傷害技能連續施放兩次，且不進入冷卻"
+                        : "下一次技能傷害 +30%，不進入冷卻"}
+                    </small>
+                  </span>
+                )}
+                {(battle.astralSageShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>星界護盾</strong>
+                    <small>可吸收 {battle.astralSageShield} 點傷害</small>
+                  </span>
+                )}
+                {(battle.dawnWardenShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>聖光護體</strong>
+                    <small>
+                      可吸收 {battle.dawnWardenShield} 點傷害 · 剩餘
+                      {battle.dawnWardenShieldTurnsRemaining ?? 0} 回合
+                    </small>
+                  </span>
+                )}
+                {(battle.azureDragonShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>天命護盾</strong>
+                    <small>
+                      可吸收 {battle.azureDragonShield} 點傷害 · 剩餘
+                      {battle.azureDragonShieldTurnsRemaining ?? 0} 回合
+                    </small>
+                  </span>
+                )}
+                {(battle.leggingsPassiveState
+                  ?.azureDragonNextAttackBonusDamage ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>影月龍行</strong>
+                    <small>
+                      下一擊追加{" "}
+                      {
+                        battle.leggingsPassiveState
+                          ?.azureDragonNextAttackBonusDamage
+                      }{" "}
+                      點傷害與 25% 暴擊率
+                    </small>
+                  </span>
+                )}
+                {(battle.titanBastionState?.helmetShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>山脈硬化</strong>
+                    <small>
+                      臨時護甲 {battle.titanBastionState?.helmetShield} 點 ·
+                      剩餘
+                      {battle.titanBastionState?.helmetShieldTurnsRemaining ??
+                        0}{" "}
+                      回合
+                    </small>
+                  </span>
+                )}
+                {(battle.titanBastionState?.guardianShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>巨神守護</strong>
+                    <small>
+                      可吸收 {battle.titanBastionState?.guardianShield} 點傷害 ·
+                      剩餘
+                      {battle.titanBastionState?.guardianShieldTurnsRemaining ??
+                        0}{" "}
+                      回合
+                    </small>
+                  </span>
+                )}
+                {(battle.titanBastionState?.staffShield ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>炎脈盾壁</strong>
+                    <small>
+                      可吸收 {battle.titanBastionState?.staffShield} 點傷害 ·
+                      剩餘
+                      {battle.titanBastionState?.staffShieldTurnsRemaining ??
+                        0}{" "}
+                      回合
+                    </small>
+                    {(battle.titanBastionState?.staffFieldTurnsRemaining ?? 0) >
+                      0 && (
+                      <small>
+                        熔岩盾陣剩餘
+                        {
+                          battle.titanBastionState?.staffFieldTurnsRemaining
+                        }{" "}
+                        回合
+                      </small>
+                    )}
+                  </span>
+                )}
+                {(battle.titanBastionState?.setInvincibilityTurnsRemaining ??
+                  0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>鐵壁不屈</strong>
+                    <small>
+                      致命傷害無敵 · 剩餘
+                      {
+                        battle.titanBastionState?.setInvincibilityTurnsRemaining
+                      }{" "}
+                      回合
+                    </small>
+                  </span>
+                )}
+                {(battle.stormSwordSoulSetStacks ?? []).some(
+                  turns => turns > 0
+                ) && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>風暴疾風</strong>
+                    <small>
+                      {
+                        (battle.stormSwordSoulSetStacks ?? []).filter(
+                          turns => turns > 0
+                        ).length
+                      }
+                      /5 層 · 剩餘
+                      {Math.max(
+                        0,
+                        ...(battle.stormSwordSoulSetStacks ?? [])
+                      )}{" "}
+                      回合
+                    </small>
+                  </span>
+                )}
+                {(battle.stormSwordSoulChestStacks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>風暴胸甲蓄勢</strong>
+                    <small>{battle.stormSwordSoulChestStacks}/5 層</small>
+                  </span>
+                )}
+                {(battle.stormSwordSoulAmuletStacks ?? []).some(
+                  turns => turns > 0
+                ) && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>風暴徽記充能</strong>
+                    <small>
+                      {
+                        (battle.stormSwordSoulAmuletStacks ?? []).filter(
+                          turns => turns > 0
+                        ).length
+                      }
+                      /3 層 · 剩餘
+                      {Math.max(
+                        0,
+                        ...(battle.stormSwordSoulAmuletStacks ?? [])
+                      )}{" "}
+                      回合
+                    </small>
+                  </span>
+                )}
+                {(battle.moonStalkerSetDodgeStacks ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>月影殘響</strong>
+                    <small>
+                      閃避率 +{(battle.moonStalkerSetDodgeStacks ?? 0) * 5}% ·
+                      {battle.moonStalkerSetDodgeStacks}/3 層
+                    </small>
+                    <small>
+                      剩餘 {battle.moonStalkerSetDodgeTurnsRemaining ?? 0} 回合
+                    </small>
+                  </span>
+                )}
+                {astralSageTwoPieceActive && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>星能湧動</strong>
+                    <small>{battle.astralEnergyStacks ?? 0}/4 層</small>
+                    {(battle.astralEnergyStacks ?? 0) > 0 && (
+                      <small>
+                        魔法傷害 +{(battle.astralEnergyStacks ?? 0) * 3}% ·
+                        技能暴擊率 +{(battle.astralEnergyStacks ?? 0) * 2}%
+                      </small>
+                    )}
+                    {astralSageFourPieceActive &&
+                      (battle.astralEnergyStacks ?? 0) >= 4 && (
+                        <small>下一次傷害技能觸發星辰隕落</small>
+                      )}
                   </span>
                 )}
                 {(battle.weaponPassiveState
@@ -12185,6 +13920,30 @@ export default function Home() {
                   </span>
                 )}
                 {!temporaryBattleBuff &&
+                  !(battle.astralSageShield ?? 0) &&
+                  !(battle.dawnWardenShield ?? 0) &&
+                  !(battle.azureDragonShield ?? 0) &&
+                  !(
+                    battle.leggingsPassiveState
+                      ?.azureDragonNextAttackBonusDamage ?? 0
+                  ) &&
+                  !(battle.titanBastionState?.helmetShield ?? 0) &&
+                  !(battle.titanBastionState?.guardianShield ?? 0) &&
+                  !(battle.titanBastionState?.staffShield ?? 0) &&
+                  !(battle.titanBastionState?.staffFieldTurnsRemaining ?? 0) &&
+                  !(
+                    battle.titanBastionState?.setInvincibilityTurnsRemaining ??
+                    0
+                  ) &&
+                  !(battle.stormSwordSoulChestStacks ?? 0) &&
+                  !(battle.stormSwordSoulSetStacks ?? []).some(
+                    turns => turns > 0
+                  ) &&
+                  !(battle.stormSwordSoulAmuletStacks ?? []).some(
+                    turns => turns > 0
+                  ) &&
+                  !(battle.moonStalkerSetDodgeStacks ?? 0) &&
+                  !astralSageTwoPieceActive &&
                   !(battle.weaponTimedBuffs ?? []).length &&
                   !(battle.weaponPassiveState?.ironGuardStacks ?? 0) &&
                   !(battle.weaponPassiveState?.starrealmCritStacks ?? 0) &&

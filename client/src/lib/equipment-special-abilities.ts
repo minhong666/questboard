@@ -64,7 +64,36 @@ export type EquipmentSpecialAbilityId =
   | "moon-stalker-sword"
   | "moon-stalker-dagger"
   | "moon-stalker-bow"
-  | "moon-stalker-staff";
+  | "moon-stalker-staff"
+  | "astral-sage-vision"
+  | "astral-sage-chest"
+  | "astral-sage-leggings"
+  | "deep-sea-star-core"
+  | "astral-sage-sword"
+  | "astral-sage-dagger"
+  | "astral-sage-bow"
+  | "astral-sage-staff"
+  | "titan-bastion-helmet"
+  | "titan-bastion-chest"
+  | "titan-bastion-leggings"
+  | "titan-bastion-amulet"
+  | "titan-bastion-sword"
+  | "titan-bastion-dagger"
+  | "titan-bastion-bow"
+  | "titan-bastion-staff"
+  | "storm-sword-soul-helmet"
+  | "storm-sword-soul-chest"
+  | "storm-sword-soul-leggings"
+  | "storm-sword-soul-amulet"
+  | "storm-sword-soul-sword"
+  | "storm-sword-soul-dagger"
+  | "storm-sword-soul-bow"
+  | "storm-sword-soul-staff"
+  | "azure-dragon-helmet"
+  | "azure-dragon-chest"
+  | "azure-dragon-leggings"
+  | "azure-dragon-amulet"
+  | "azure-dragon-bow";
 
 export type EquipmentSpecialAbilityEffects = {
   damageBonusBelowHalfHealthPercent?: number;
@@ -227,6 +256,91 @@ export type EquipmentSpecialAbilityEffects = {
   moonStalkerStaffEnemyDamageReductionPercent?: number;
   moonStalkerStaffEnemyDefenseBonusPercent?: number;
   moonStalkerStaffBonusDamagePercent?: number;
+  astralSageSkillProcChancePercent?: number;
+  astralSageCooldownReductionTurns?: number;
+  astralSageNextAttackDamageBonusPercent?: number;
+  astralSageChestShieldConversionPercent?: number;
+  astralSageChestHighHealthThresholdPercent?: number;
+  astralSageChestDamageReductionPercent?: number;
+  astralSageLeggingsAttackBonusPercent?: number;
+  astralSageLeggingsDotDamagePercentIntelligence?: number;
+  astralSageLeggingsDotDurationTurns?: number;
+  deepSeaStarCoreHealthThresholdPercent?: number;
+  deepSeaStarCoreShieldMaxHealthPercent?: number;
+  astralSageSwordStrengthToMagicPercent?: number;
+  astralSageSwordBurstChancePercent?: number;
+  astralSageSwordBurstDamagePercentStrength?: number;
+  astralSageDaggerPoisonMaxHealthPercent?: number;
+  astralSageDaggerMagicResistanceReductionPercent?: number;
+  astralSageDaggerPoisonDurationTurns?: number;
+  astralSageBowBonusDamagePercentIntelligence?: number;
+  astralSageBowMagicResistancePiercePercent?: number;
+  astralSageStaffCastsPerEcho?: number;
+  titanHelmetShieldFromDamagePercent?: number;
+  titanHelmetShieldDurationTurns?: number;
+  titanChestHitsToTrigger?: number;
+  titanChestShieldDefenseMultiplier?: number;
+  titanChestShieldDurationTurns?: number;
+  titanChestCooldownTurns?: number;
+  titanLeggingsHealMaxHealthPercent?: number;
+  titanAmuletDefenseToAttackPercent?: number;
+  titanAmuletDamageBonusHigherHealthPercent?: number;
+  titanSwordTrueDamageDefensePercent?: number;
+  titanSwordStunChanceOnCriticalPercent?: number;
+  titanSwordStunDurationTurns?: number;
+  titanDaggerCounterChancePercent?: number;
+  titanDaggerCounterDamageDefensePercent?: number;
+  titanDaggerDefenseReductionPercent?: number;
+  titanDaggerEffectDurationTurns?: number;
+  titanBowDamageBonusDefensePercent?: number;
+  titanBowEnemyDamageReductionPercent?: number;
+  titanBowEffectDurationTurns?: number;
+  titanStaffShieldDefensePercent?: number;
+  titanStaffAoeDamagePercentDefenseAndIntelligence?: number;
+  titanStaffEffectDurationTurns?: number;
+  stormHelmetHealPercent?: number;
+  stormHelmetGuaranteedCritAttacks?: number;
+  stormChestMaxStacks?: number;
+  stormChestDodgePercentPerStack?: number;
+  stormChestSingleTargetDamageReductionAtMaxStacks?: number;
+  stormLeggingsBonusDamagePercentStrength?: number;
+  stormLeggingsParalysisChancePercent?: number;
+  stormLeggingsParalysisDurationTurns?: number;
+  stormAmuletProcChancePercent?: number;
+  stormAmuletCooldownReductionTurns?: number;
+  stormAmuletAttackBonusPercent?: number;
+  stormAmuletMaxStacks?: number;
+  stormAmuletDurationTurns?: number;
+  stormSwordProcChancePercent?: number;
+  stormSwordAoeDamagePercentStrength?: number;
+  stormDaggerProcChancePercent?: number;
+  stormDaggerTrueDamagePercentAttack?: number;
+  stormDaggerCriticalDamageTakenBonusPercent?: number;
+  stormDaggerDurationTurns?: number;
+  stormBowProcChancePercent?: number;
+  stormBowTrueDamagePercentAttack?: number;
+  stormStaffProcChancePercent?: number;
+  stormStaffChainDamagePercentSkill?: number;
+  stormStaffMaxAdditionalBounces?: number;
+  stormStaffSingleTargetExplosionPercentIntelligence?: number;
+  azureDragonAttackBonusAbove60HealthPercent?: number;
+  azureDragonDefenseBonusAbove60HealthPercent?: number;
+  azureDragonShieldBelowHealthThresholdPercent?: number;
+  azureDragonShieldBelow40HealthPercentMaxHealth?: number;
+  azureDragonShieldDurationTurns?: number;
+  azureDragonChestProcChancePercent?: number;
+  azureDragonEnemyDamageReductionPercent?: number;
+  azureDragonEnemyDefenseReductionPercent?: number;
+  azureDragonChestDurationTurns?: number;
+  azureDragonLeggingsCritRateBonusOnDodgePercent?: number;
+  azureDragonLeggingsBonusDamagePercentStrengthAndIntelligence?: number;
+  azureDragonAmuletConversionPercent?: number;
+  azureDragonAmuletHealChancePercent?: number;
+  azureDragonAmuletHealMaxHealthPercent?: number;
+  azureDragonBowProcChancePercent?: number;
+  azureDragonBowAoeDamagePercentStrengthAndIntelligence?: number;
+  azureDragonBowCritDamageTakenBonusPercent?: number;
+  azureDragonBowDurationTurns?: number;
 };
 
 export type EquipmentSpecialAbility = {
@@ -257,14 +371,42 @@ export function getActiveLegendaryEquipmentSetBonuses(
       helmetAbilityId === "low-health-lifesteal" &&
       leggingsAbilityId === "night-leggings",
     astral:
-      helmetAbilityId === "skill-cooldown" &&
-      leggingsAbilityId === "astral-leggings",
+      (helmetAbilityId === "skill-cooldown" &&
+        leggingsAbilityId === "astral-leggings") ||
+      (helmetAbilityId === "astral-sage-vision" &&
+        leggingsAbilityId === "astral-sage-leggings"),
     mountain:
       helmetAbilityId === "low-health-resistance" &&
       leggingsAbilityId === "mountain-leggings",
     gale:
       chestAbilityId === "gale-dancer" && leggingsAbilityId === "gale-leggings",
   };
+}
+
+export type AstralEnergyResolution = {
+  energyStacksForAction: number;
+  nextEnergyStacks: number;
+  meteorTriggered: boolean;
+};
+
+export function resolveAstralEnergyAction(
+  currentStacks: number,
+  castsSkill: boolean,
+  damageSkill: boolean,
+  twoPieceActive: boolean,
+  fourPieceActive: boolean
+): AstralEnergyResolution {
+  const current = Math.min(4, Math.max(0, Math.floor(currentStacks)));
+  const meteorTriggered = fourPieceActive && damageSkill && current >= 4;
+  const energyStacksForAction = twoPieceActive
+    ? Math.min(4, current + (castsSkill && !meteorTriggered ? 1 : 0))
+    : 0;
+  const nextEnergyStacks = !twoPieceActive
+    ? 0
+    : meteorTriggered
+      ? 0
+      : energyStacksForAction;
+  return { energyStacksForAction, nextEnergyStacks, meteorTriggered };
 }
 
 export type ActiveEquipmentSpecialEffects = {
@@ -516,6 +658,88 @@ const legendaryAbilities: Partial<
       moonStalkerMarkCritRateBonusPercent: 15,
     },
   },
+  "astral-sage-vision": {
+    id: "astral-sage-vision",
+    name: "星辰啟示",
+    description:
+      "施放技能後有 30% 機率使該技能冷卻立即減少 2 回合，並使下一擊傷害提高 15%。",
+    effects: {
+      astralSageSkillProcChancePercent: 30,
+      astralSageCooldownReductionTurns: 2,
+      astralSageNextAttackDamageBonusPercent: 15,
+    },
+  },
+  "astral-sage-chest": {
+    id: "astral-sage-chest",
+    name: "真理視界",
+    description:
+      "受到攻擊時將所受傷害的 15% 轉為護盾；生命高於 70% 時，奧術護盾使受到傷害降低 20%。",
+    effects: {
+      astralSageChestShieldConversionPercent: 15,
+      astralSageChestHighHealthThresholdPercent: 70,
+      astralSageChestDamageReductionPercent: 20,
+      enemyDamageReductionAbove70HealthPercent: 20,
+    },
+  },
+  "astral-sage-leggings": {
+    id: "astral-sage-leggings",
+    name: "星軌步履",
+    description:
+      "施放攻擊後留下星光殘留：攻擊提高 12%，目標每回合受到相當於智力 60% 的奧術傷害，持續 3 回合。",
+    effects: {
+      astralSageLeggingsAttackBonusPercent: 12,
+      astralSageLeggingsDotDamagePercentIntelligence: 60,
+      astralSageLeggingsDotDurationTurns: 3,
+    },
+  },
+  "deep-sea-star-core": {
+    id: "deep-sea-star-core",
+    name: "深海星核",
+    description:
+      "生命值低於 40% 時觸發深海庇護，獲得相當於最大生命值 10% 的護盾。",
+    effects: {
+      deepSeaStarCoreHealthThresholdPercent: 40,
+      deepSeaStarCoreShieldMaxHealthPercent: 10,
+    },
+  },
+  "astral-sage-sword": {
+    id: "astral-sage-sword",
+    name: "星輝魔刃",
+    description:
+      "力量的 30% 額外轉為魔法攻擊；普通攻擊與技能有 25% 機率造成物理與奧術雙重爆發。",
+    effects: {
+      astralSageSwordStrengthToMagicPercent: 30,
+      astralSageSwordBurstChancePercent: 25,
+      astralSageSwordBurstDamagePercentStrength: 30,
+    },
+  },
+  "astral-sage-dagger": {
+    id: "astral-sage-dagger",
+    name: "毒棘星閃",
+    description:
+      "暴擊時施加星毒 3 回合，每回合造成目標最大生命 5% 的真實奧術傷害，並降低魔法抗性 15%。",
+    effects: {
+      astralSageDaggerPoisonMaxHealthPercent: 5,
+      astralSageDaggerMagicResistanceReductionPercent: 15,
+      astralSageDaggerPoisonDurationTurns: 3,
+    },
+  },
+  "astral-sage-bow": {
+    id: "astral-sage-bow",
+    name: "月弦星箭",
+    description:
+      "普通攻擊額外造成相當於智力 120% 的魔法傷害，無視目標 20% 魔法防禦。",
+    effects: {
+      astralSageBowBonusDamagePercentIntelligence: 120,
+      astralSageBowMagicResistancePiercePercent: 20,
+    },
+  },
+  "astral-sage-staff": {
+    id: "astral-sage-staff",
+    name: "奧術共鳴",
+    description: "每連續施放 2 次技能後，第 3 次技能連續施放兩次且不進入冷卻。",
+    effects: { astralSageStaffCastsPerEcho: 2 },
+  },
   "low-health-damage": {
     id: "low-health-damage",
     name: "阿修羅戰意",
@@ -622,6 +846,136 @@ const legendaryAbilities: Partial<
       oracleStunEnemiesOnHitAtTurnEnd: true,
     },
   },
+  "titan-bastion-helmet": {
+    id: "titan-bastion-helmet",
+    name: "山脈硬化",
+    description: "受到傷害時，將該次傷害的 12% 轉化為護盾，持續 3 回合。",
+    effects: {
+      titanHelmetShieldFromDamagePercent: 12,
+      titanHelmetShieldDurationTurns: 3,
+    },
+  },
+  "titan-bastion-chest": {
+    id: "titan-bastion-chest",
+    name: "巨神守護",
+    description:
+      "每受擊 4 次，獲得總防禦力 300% 的護盾，持續 2 回合；冷卻 5 回合。",
+    effects: {
+      titanChestHitsToTrigger: 4,
+      titanChestShieldDefenseMultiplier: 300,
+      titanChestShieldDurationTurns: 2,
+      titanChestCooldownTurns: 5,
+    },
+  },
+  "titan-bastion-leggings": {
+    id: "titan-bastion-leggings",
+    name: "不動根基",
+    description:
+      "免疫所有負面與控制效果；每回合恢復最大生命值 5%，防禦力提高 10%。",
+    effects: { titanLeggingsHealMaxHealthPercent: 5 },
+  },
+  "titan-bastion-amulet": {
+    id: "titan-bastion-amulet",
+    name: "巨獸獵殺",
+    description:
+      "將總防禦力的 15% 轉化為額外力量與智力；攻擊生命百分比高於自己的敵人時，傷害提高 18%。",
+    effects: {
+      titanAmuletDefenseToAttackPercent: 15,
+      titanAmuletDamageBonusHigherHealthPercent: 18,
+    },
+  },
+  "storm-sword-soul-helmet": {
+    id: "storm-sword-soul-helmet",
+    name: "風暴涅槃",
+    description:
+      "受到致命傷害時免疫該次傷害並恢復 20% 生命值；接下來 3 次攻擊必定暴擊，每場戰鬥限一次。",
+    effects: {
+      preventLethalDamageOnce: true,
+      stormHelmetHealPercent: 20,
+      stormHelmetGuaranteedCritAttacks: 3,
+    },
+  },
+  "storm-sword-soul-chest": {
+    id: "storm-sword-soul-chest",
+    name: "疾風氣勁",
+    description:
+      "每次攻擊或施放技能獲得 1 層疾風（最多 5 層），每層閃避率 +3%；滿層時承受的單體傷害降低 15%。",
+    effects: {
+      stormChestMaxStacks: 5,
+      stormChestDodgePercentPerStack: 3,
+      stormChestSingleTargetDamageReductionAtMaxStacks: 15,
+    },
+  },
+  "storm-sword-soul-leggings": {
+    id: "storm-sword-soul-leggings",
+    name: "風雷一擊",
+    description:
+      "成功閃避後，下一次攻擊追加力量 50% 的物理傷害，並有 50% 機率使目標麻痺 3 回合；麻痺另有 50% 機率令目標暈眩 1 回合。",
+    effects: {
+      stormLeggingsBonusDamagePercentStrength: 50,
+      stormLeggingsParalysisChancePercent: 50,
+      stormLeggingsParalysisDurationTurns: 3,
+    },
+  },
+  "storm-sword-soul-amulet": {
+    id: "storm-sword-soul-amulet",
+    name: "時空雷印",
+    description:
+      "每次暴擊有 25% 機率使所有冷卻中的技能減少 1 回合，並獲得 1 層攻擊 +10% 增益（最多 3 層，持續 3 回合）。",
+    effects: {
+      stormAmuletProcChancePercent: 25,
+      stormAmuletCooldownReductionTurns: 1,
+      stormAmuletAttackBonusPercent: 10,
+      stormAmuletMaxStacks: 3,
+      stormAmuletDurationTurns: 3,
+    },
+  },
+  "azure-dragon-helmet": {
+    id: "azure-dragon-helmet",
+    name: "天穹龍威",
+    description:
+      "生命高於 60% 時攻擊力與防禦力 +10%；生命低於 40% 時獲得最大生命值 10% 的天命護盾，持續 3 回合，每回合最多觸發一次。",
+    effects: {
+      azureDragonAttackBonusAbove60HealthPercent: 10,
+      azureDragonDefenseBonusAbove60HealthPercent: 10,
+      azureDragonShieldBelowHealthThresholdPercent: 40,
+      azureDragonShieldBelow40HealthPercentMaxHealth: 10,
+      azureDragonShieldDurationTurns: 3,
+    },
+  },
+  "azure-dragon-chest": {
+    id: "azure-dragon-chest",
+    name: "神諭龍鎧",
+    description:
+      "受到攻擊時有 25% 機率使攻擊者造成傷害降低 15%、防禦力降低 10%，持續 2 回合。",
+    effects: {
+      azureDragonChestProcChancePercent: 25,
+      azureDragonEnemyDamageReductionPercent: 15,
+      azureDragonEnemyDefenseReductionPercent: 10,
+      azureDragonChestDurationTurns: 2,
+    },
+  },
+  "azure-dragon-leggings": {
+    id: "azure-dragon-leggings",
+    name: "影月龍行",
+    description:
+      "成功閃避後，下一次攻擊暴擊率 +25%，並額外造成自身力量與智力總和 50% 的傷害。",
+    effects: {
+      azureDragonLeggingsCritRateBonusOnDodgePercent: 25,
+      azureDragonLeggingsBonusDamagePercentStrengthAndIntelligence: 50,
+    },
+  },
+  "azure-dragon-amulet": {
+    id: "azure-dragon-amulet",
+    name: "星核龍脈",
+    description:
+      "力量的 20% 轉化為智力、智力的 20% 轉化為力量；每施放技能或觸發暴擊時有 35% 機率恢復最大生命值 3%。",
+    effects: {
+      azureDragonAmuletConversionPercent: 20,
+      azureDragonAmuletHealChancePercent: 35,
+      azureDragonAmuletHealMaxHealthPercent: 3,
+    },
+  },
 };
 
 const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
@@ -630,37 +984,37 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   夜魔主宰面具: "low-health-lifesteal",
   "影月獵行·傳說盔": "moon-stalker-vision",
   星辰智者之冠: "skill-cooldown",
-  "星界賢者·傳說盔": "skill-cooldown",
+  "星界賢者·傳說盔": "astral-sage-vision",
   永恆山脈巨盔: "low-health-resistance",
-  "鐵壁巨神·傳說盔": "low-health-resistance",
+  "鐵壁巨神·傳說盔": "titan-bastion-helmet",
   鳳凰涅槃面具: "phoenix-rebirth",
-  "風暴劍魂·傳說盔": "phoenix-rebirth",
+  "風暴劍魂·傳說盔": "storm-sword-soul-helmet",
   天穹王盔: "high-health-dominance",
-  "蒼龍天命·傳說盔": "high-health-dominance",
+  "蒼龍天命·傳說盔": "azure-dragon-helmet",
   帝王光輝聖甲: "imperial-pressure",
   "曙光聖衛·傳說胸甲": "dawn-guardian-armor",
   深淵獵手皮革: "abyssal-counter",
   "影月獵行·傳說胸甲": "moon-stalker-chest",
   真理之門法袍: "truth-awakening",
-  "星界賢者·傳說胸甲": "truth-awakening",
+  "星界賢者·傳說胸甲": "astral-sage-chest",
   神聖守護者之壁: "sacred-wall",
-  "鐵壁巨神·傳說胸甲": "sacred-wall",
+  "鐵壁巨神·傳說胸甲": "titan-bastion-chest",
   疾風劍聖法衣: "gale-dancer",
-  "風暴劍魂·傳說胸甲": "gale-dancer",
+  "風暴劍魂·傳說胸甲": "storm-sword-soul-chest",
   神諭聖甲: "oracle-blessing",
-  "蒼龍天命·傳說胸甲": "oracle-blessing",
+  "蒼龍天命·傳說胸甲": "azure-dragon-chest",
   阿修羅戰神護腿: "asura-leggings",
   "曙光聖衛·傳說護腿": "dawn-guardian-step",
   夜魔主宰護腿: "night-leggings",
   "影月獵行·傳說護腿": "moon-stalker-leggings",
   星辰智者長褲: "astral-leggings",
-  "星界賢者·傳說護腿": "astral-leggings",
+  "星界賢者·傳說護腿": "astral-sage-leggings",
   永恆山脈護腿: "mountain-leggings",
-  "鐵壁巨神·傳說護腿": "mountain-leggings",
+  "鐵壁巨神·傳說護腿": "titan-bastion-leggings",
   疾風劍聖護腿: "gale-leggings",
-  "風暴劍魂·傳說護腿": "gale-leggings",
+  "風暴劍魂·傳說護腿": "storm-sword-soul-leggings",
   影月護腿: "shadowmoon-leggings",
-  "蒼龍天命·傳說護腿": "shadowmoon-leggings",
+  "蒼龍天命·傳說護腿": "azure-dragon-leggings",
   太陽神之眼: "solar-eye",
   美杜莎之瞳: "medusa-eye",
   利維坦之心: "leviathan-heart",
@@ -668,7 +1022,11 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   時空交界水晶: "spacetime-crystal",
   永恆星核: "eternal-star-core",
   "曙光聖衛·傳說徽記": "dawn-guardian-sunmark",
+  "星界賢者·傳說徽記": "deep-sea-star-core",
   "影月獵行·傳說徽記": "moon-stalker-amulet",
+  "鐵壁巨神·傳說徽記": "titan-bastion-amulet",
+  "風暴劍魂·傳說徽記": "storm-sword-soul-amulet",
+  "蒼龍天命·傳說徽記": "azure-dragon-amulet",
 };
 
 export function getEquipmentSpecialAbilityIdByName(

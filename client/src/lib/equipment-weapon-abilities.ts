@@ -24,6 +24,32 @@ export const weaponAbilityIdsByEquipmentName: Record<
   "影月獵行·傳說短刀武器": "moon-stalker-dagger",
   "影月獵行·傳說弓武器": "moon-stalker-bow",
   "影月獵行·傳說法杖武器": "moon-stalker-staff",
+  "星界賢者·傳說劍武器": "astral-sage-sword",
+  "星界賢者·傳說短刀武器": "astral-sage-dagger",
+  "星界賢者·傳說弓武器": "astral-sage-bow",
+  "星界賢者·傳說法杖武器": "astral-sage-staff",
+  "星界賢者·傳說劍": "astral-sage-sword",
+  "星界賢者·傳說短刀": "astral-sage-dagger",
+  "星界賢者·傳說弓": "astral-sage-bow",
+  "星界賢者·傳說法杖": "astral-sage-staff",
+  "鐵壁巨神·傳說劍武器": "titan-bastion-sword",
+  "鐵壁巨神·傳說短刀武器": "titan-bastion-dagger",
+  "鐵壁巨神·傳說弓武器": "titan-bastion-bow",
+  "鐵壁巨神·傳說法杖武器": "titan-bastion-staff",
+  "風暴劍魂·傳說劍武器": "storm-sword-soul-sword",
+  "風暴劍魂·傳說短刀武器": "storm-sword-soul-dagger",
+  "風暴劍魂·傳說弓武器": "storm-sword-soul-bow",
+  "風暴劍魂·傳說法杖武器": "storm-sword-soul-staff",
+  "鐵壁巨神·傳說劍": "titan-bastion-sword",
+  "鐵壁巨神·傳說短刀": "titan-bastion-dagger",
+  "鐵壁巨神·傳說弓": "titan-bastion-bow",
+  "鐵壁巨神·傳說法杖": "titan-bastion-staff",
+  "風暴劍魂·傳說劍": "storm-sword-soul-sword",
+  "風暴劍魂·傳說短刀": "storm-sword-soul-dagger",
+  "風暴劍魂·傳說弓": "storm-sword-soul-bow",
+  "風暴劍魂·傳說法杖": "storm-sword-soul-staff",
+  "蒼龍天命·傳說弓武器": "azure-dragon-bow",
+  "蒼龍天命·傳說弓": "azure-dragon-bow",
   "傳說·曙光劍": "dawn-sword",
   "傳說·鐵衛劍": "iron-guard-sword",
   "傳說·月影劍": "moonshadow-sword",
@@ -58,6 +84,145 @@ export const legendaryWeaponAbilities: Partial<
       starfireBurnPercentOfCriticalDamage: 15,
       starfireDurationTurns: 3,
       starfireArmorReductionPercent: 10,
+    },
+  },
+  "astral-sage-sword": {
+    id: "astral-sage-sword",
+    name: "星輝魔刃",
+    description:
+      "力量的 30% 額外轉為魔法攻擊；普通攻擊與技能有 25% 機率造成物理與奧術雙重爆發。",
+    effects: {
+      astralSageSwordStrengthToMagicPercent: 30,
+      astralSageSwordBurstChancePercent: 25,
+      astralSageSwordBurstDamagePercentStrength: 30,
+    },
+  },
+  "astral-sage-dagger": {
+    id: "astral-sage-dagger",
+    name: "毒棘星閃",
+    description:
+      "暴擊時施加星毒 3 回合，每回合造成目標最大生命 5% 的真實奧術傷害，並降低魔法抗性 15%。",
+    effects: {
+      astralSageDaggerPoisonMaxHealthPercent: 5,
+      astralSageDaggerMagicResistanceReductionPercent: 15,
+      astralSageDaggerPoisonDurationTurns: 3,
+    },
+  },
+  "astral-sage-bow": {
+    id: "astral-sage-bow",
+    name: "月弦星箭",
+    description:
+      "普通攻擊額外造成相當於智力 120% 的魔法傷害，無視目標 20% 魔法防禦。",
+    effects: {
+      astralSageBowBonusDamagePercentIntelligence: 120,
+      astralSageBowMagicResistancePiercePercent: 20,
+    },
+  },
+  "astral-sage-staff": {
+    id: "astral-sage-staff",
+    name: "奧術共鳴",
+    description: "每連續施放 2 次技能後，第 3 次技能連續施放兩次且不進入冷卻。",
+    effects: { astralSageStaffCastsPerEcho: 2 },
+  },
+  "titan-bastion-sword": {
+    id: "titan-bastion-sword",
+    name: "王道重壓",
+    description:
+      "攻擊時附加總防禦力 80% 的真實物理傷害；暴擊時有 30% 機率暈眩目標 1 回合。",
+    effects: {
+      titanSwordTrueDamageDefensePercent: 80,
+      titanSwordStunChanceOnCriticalPercent: 30,
+      titanSwordStunDurationTurns: 1,
+    },
+  },
+  "titan-bastion-dagger": {
+    id: "titan-bastion-dagger",
+    name: "巨力招架",
+    description:
+      "受擊或成功閃避時有 25% 機率反擊，造成總防禦力 200% 的傷害，並使目標防禦降低 15%，持續 2 回合。",
+    effects: {
+      titanDaggerCounterChancePercent: 25,
+      titanDaggerCounterDamageDefensePercent: 200,
+      titanDaggerDefenseReductionPercent: 15,
+      titanDaggerEffectDurationTurns: 2,
+    },
+  },
+  "titan-bastion-bow": {
+    id: "titan-bastion-bow",
+    name: "天穹重弩",
+    description:
+      "箭矢傷害附加總防禦力 100%，並使目標造成的傷害降低 12%，持續 2 回合。",
+    effects: {
+      titanBowDamageBonusDefensePercent: 100,
+      titanBowEnemyDamageReductionPercent: 12,
+      titanBowEffectDurationTurns: 2,
+    },
+  },
+  "titan-bastion-staff": {
+    id: "titan-bastion-staff",
+    name: "炎脈盾壁",
+    description:
+      "施放技能時獲得可吸收總防禦力 150% 傷害的熔岩盾陣，持續 2 回合；同時每回合對敵人造成總防禦與智力之和 50% 的火焰傷害。",
+    effects: {
+      titanStaffShieldDefensePercent: 150,
+      titanStaffAoeDamagePercentDefenseAndIntelligence: 50,
+      titanStaffEffectDurationTurns: 2,
+    },
+  },
+  "storm-sword-soul-sword": {
+    id: "storm-sword-soul-sword",
+    name: "星界風雷斬",
+    description:
+      "普通攻擊與傷害技能命中時有 30% 機率召喚風雷劍氣，對目標及所有附近敵人造成力量 80% 的物理傷害。",
+    effects: {
+      stormSwordProcChancePercent: 30,
+      stormSwordAoeDamagePercentStrength: 80,
+    },
+  },
+  "storm-sword-soul-dagger": {
+    id: "storm-sword-soul-dagger",
+    name: "虛空瞬影殺",
+    description:
+      "暴擊時有 35% 機率追加一擊，造成攻擊傷害 80% 的真實傷害，並使目標受到的暴擊傷害提高 20%，持續 2 回合。",
+    effects: {
+      stormDaggerProcChancePercent: 35,
+      stormDaggerTrueDamagePercentAttack: 80,
+      stormDaggerCriticalDamageTakenBonusPercent: 20,
+      stormDaggerDurationTurns: 2,
+    },
+  },
+  "storm-sword-soul-bow": {
+    id: "storm-sword-soul-bow",
+    name: "日輪風暴箭",
+    description:
+      "遠程攻擊命中時有 25% 機率引發太陽雷暴，對所有敵人額外造成攻擊傷害 50% 的真實傷害。",
+    effects: {
+      stormBowProcChancePercent: 25,
+      stormBowTrueDamagePercentAttack: 50,
+    },
+  },
+  "storm-sword-soul-staff": {
+    id: "storm-sword-soul-staff",
+    name: "創世雷霆鏈",
+    description:
+      "施放技能時有 30% 機率造成相當於技能傷害 50% 的雷霆彈跳，可額外跳躍 2 次且不衰減；若戰場僅有一名敵人，另造成智力 100% 的天雷傷害。",
+    effects: {
+      stormStaffProcChancePercent: 30,
+      stormStaffChainDamagePercentSkill: 50,
+      stormStaffMaxAdditionalBounces: 2,
+      stormStaffSingleTargetExplosionPercentIntelligence: 100,
+    },
+  },
+  "azure-dragon-bow": {
+    id: "azure-dragon-bow",
+    name: "焚星蒼龍破",
+    description:
+      "暴擊時有 35% 機率對所有敵人造成力量與智力總和 50% 的蒼龍火焰傷害，並使其受到的暴擊傷害提高 20%，持續 2 回合。",
+    effects: {
+      azureDragonBowProcChancePercent: 35,
+      azureDragonBowAoeDamagePercentStrengthAndIntelligence: 50,
+      azureDragonBowCritDamageTakenBonusPercent: 20,
+      azureDragonBowDurationTurns: 2,
     },
   },
   "dawn-warden-sword": {

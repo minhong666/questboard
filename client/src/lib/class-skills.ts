@@ -10,6 +10,7 @@ export type SkillStatusKind =
   | "石化"
   | "災厄"
   | "暈眩"
+  | "威懾"
   | "麻痺"
   | "致盲"
   | "虛弱"
@@ -19,7 +20,10 @@ export type SkillStatusKind =
   | "聖光陣界"
   | "月蝕印記"
   | "流血"
-  | "霜月遲緩";
+  | "霜月遲緩"
+  | "星光殘留"
+  | "星毒"
+  | "風雷麻痺";
 export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
 export type SkillStatusEffect = {
   kind: SkillStatusKind;
@@ -36,6 +40,9 @@ export type SkillStatusEffect = {
   outgoingDamageReductionPercent?: number;
   healingReceivedReductionPercent?: number;
   accuracyReductionPercent?: number;
+  magicResistanceReductionPercent?: number;
+  incomingDamageTakenBonusPercent?: number;
+  critDamageTakenBonusPercent?: number;
 };
 
 export type SpecialCombatSkill = {

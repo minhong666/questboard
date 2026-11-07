@@ -10,6 +10,7 @@ import {
   getEquipmentSpecialAbility,
   getEquipmentSpecialAbilityIdByName,
   resolveAstralLeggingsSkillEffect,
+  resolveAstralEnergyAction,
   resolveDivineShieldDamage,
   resolveDodgeCounterState,
   resolveGaleStackCount,
@@ -81,10 +82,10 @@ describe("legendary helmet abilities", () => {
     const setHelmetPairs = [
       ["曙光聖衛·傳說盔", "曙光聖衛·神話盔", "dawn-guardian-vision"],
       ["影月獵行·傳說盔", "影月獵行·神話盔", "moon-stalker-vision"],
-      ["星界賢者·傳說盔", "星界賢者·神話盔", "skill-cooldown"],
-      ["鐵壁巨神·傳說盔", "鐵壁巨神·神話盔", "low-health-resistance"],
-      ["風暴劍魂·傳說盔", "風暴劍魂·神話盔", "phoenix-rebirth"],
-      ["蒼龍天命·傳說盔", "蒼龍天命·神話盔", "high-health-dominance"],
+      ["星界賢者·傳說盔", "星界賢者·神話盔", "astral-sage-vision"],
+      ["鐵壁巨神·傳說盔", "鐵壁巨神·神話盔", "titan-bastion-helmet"],
+      ["風暴劍魂·傳說盔", "風暴劍魂·神話盔", "storm-sword-soul-helmet"],
+      ["蒼龍天命·傳說盔", "蒼龍天命·神話盔", "azure-dragon-helmet"],
     ] as const;
 
     for (const [legendaryName, mythicName, abilityId] of setHelmetPairs) {
@@ -202,10 +203,30 @@ describe("legendary legging abilities", () => {
       "night-leggings",
       "moon-stalker-leggings",
     ],
-    ["星辰智者長褲", "星界賢者·傳說護腿", "astral-leggings"],
-    ["永恆山脈護腿", "鐵壁巨神·傳說護腿", "mountain-leggings"],
-    ["疾風劍聖護腿", "風暴劍魂·傳說護腿", "gale-leggings"],
-    ["影月護腿", "蒼龍天命·傳說護腿", "shadowmoon-leggings"],
+    [
+      "星辰智者長褲",
+      "星界賢者·傳說護腿",
+      "astral-leggings",
+      "astral-sage-leggings",
+    ],
+    [
+      "永恆山脈護腿",
+      "鐵壁巨神·傳說護腿",
+      "mountain-leggings",
+      "titan-bastion-leggings",
+    ],
+    [
+      "疾風劍聖護腿",
+      "風暴劍魂·傳說護腿",
+      "gale-leggings",
+      "storm-sword-soul-leggings",
+    ],
+    [
+      "影月護腿",
+      "蒼龍天命·傳說護腿",
+      "shadowmoon-leggings",
+      "azure-dragon-leggings",
+    ],
   ] as const;
 
   it("assigns all six passives to legendary leggings and their legendary set copies only", () => {
@@ -484,6 +505,14 @@ describe("legendary talisman abilities", () => {
           starCoreMagicDamageBonusPercent: 15,
         },
       ],
+      [
+        "星界賢者·傳說徽記",
+        "deep-sea-star-core",
+        {
+          deepSeaStarCoreHealthThresholdPercent: 40,
+          deepSeaStarCoreShieldMaxHealthPercent: 10,
+        },
+      ],
     ] as const;
 
     for (const [name, id, effects] of cases) {
@@ -552,10 +581,30 @@ describe("legendary chest armor abilities", () => {
         "abyssal-counter",
         "moon-stalker-chest",
       ],
-      ["真理之門法袍", "星界賢者·傳說胸甲", "truth-awakening"],
-      ["神聖守護者之壁", "鐵壁巨神·傳說胸甲", "sacred-wall"],
-      ["疾風劍聖法衣", "風暴劍魂·傳說胸甲", "gale-dancer"],
-      ["神諭聖甲", "蒼龍天命·傳說胸甲", "oracle-blessing"],
+      [
+        "真理之門法袍",
+        "星界賢者·傳說胸甲",
+        "truth-awakening",
+        "astral-sage-chest",
+      ],
+      [
+        "神聖守護者之壁",
+        "鐵壁巨神·傳說胸甲",
+        "sacred-wall",
+        "titan-bastion-chest",
+      ],
+      [
+        "疾風劍聖法衣",
+        "風暴劍魂·傳說胸甲",
+        "gale-dancer",
+        "storm-sword-soul-chest",
+      ],
+      [
+        "神諭聖甲",
+        "蒼龍天命·傳說胸甲",
+        "oracle-blessing",
+        "azure-dragon-chest",
+      ],
     ] as const;
 
     for (const [name, setName, abilityId, expectedSetAbilityId] of armorPairs) {
@@ -597,6 +646,13 @@ describe("legendary chest armor abilities", () => {
     expect(
       getEquipmentSpecialAbility("真理之門法袍", "傳說")?.effects
     ).toMatchObject({ doubleCastSkillChancePercent: 10 });
+    expect(
+      getEquipmentSpecialAbility("星界賢者·傳說胸甲", "傳說")?.effects
+    ).toMatchObject({
+      astralSageChestShieldConversionPercent: 15,
+      astralSageChestDamageReductionPercent: 20,
+      enemyDamageReductionAbove70HealthPercent: 20,
+    });
     expect(
       getEquipmentSpecialAbility("神聖守護者之壁", "傳說")?.effects
     ).toMatchObject({
@@ -781,6 +837,10 @@ describe("legendary weapon abilities", () => {
     "影月獵行·傳說短刀武器",
     "影月獵行·傳說弓武器",
     "影月獵行·傳說法杖武器",
+    "星界賢者·傳說劍武器",
+    "星界賢者·傳說短刀武器",
+    "星界賢者·傳說弓武器",
+    "星界賢者·傳說法杖武器",
   ];
 
   it("assigns every requested passive to its matching legendary weapon only", () => {
@@ -833,6 +893,28 @@ describe("legendary weapon abilities", () => {
       swiftfangDodgeRateBonusPercent: 5,
       swiftfangDurationTurns: 2,
     });
+    expect(
+      getEquipmentSpecialAbility("星界賢者·傳說劍武器", "傳說")?.effects
+    ).toMatchObject({
+      astralSageSwordStrengthToMagicPercent: 30,
+      astralSageSwordBurstChancePercent: 25,
+    });
+    expect(
+      getEquipmentSpecialAbility("星界賢者·傳說短刀武器", "傳說")?.effects
+    ).toMatchObject({
+      astralSageDaggerPoisonMaxHealthPercent: 5,
+      astralSageDaggerMagicResistanceReductionPercent: 15,
+      astralSageDaggerPoisonDurationTurns: 3,
+    });
+    expect(
+      getEquipmentSpecialAbility("星界賢者·傳說弓武器", "傳說")?.effects
+    ).toMatchObject({
+      astralSageBowBonusDamagePercentIntelligence: 120,
+      astralSageBowMagicResistancePiercePercent: 20,
+    });
+    expect(
+      getEquipmentSpecialAbility("星界賢者·傳說法杖武器", "傳說")?.effects
+    ).toMatchObject({ astralSageStaffCastsPerEcho: 2 });
     expect(
       getEquipmentSpecialAbility("傳說·創世法杖", "傳說")?.effects
     ).toMatchObject({
@@ -904,5 +986,138 @@ describe("legendary weapon abilities", () => {
         },
       ])
     ).toMatchObject([{ id: "swiftfang-dagger", turnsRemaining: 2 }]);
+  });
+});
+
+describe("astral sage set energy", () => {
+  it("gains one stack per skill, caps at four, and triggers a meteor on the next damage skill", () => {
+    expect(resolveAstralEnergyAction(0, true, true, true, true)).toEqual({
+      energyStacksForAction: 1,
+      nextEnergyStacks: 1,
+      meteorTriggered: false,
+    });
+    expect(resolveAstralEnergyAction(3, true, true, true, true)).toEqual({
+      energyStacksForAction: 4,
+      nextEnergyStacks: 4,
+      meteorTriggered: false,
+    });
+    expect(resolveAstralEnergyAction(4, true, true, true, true)).toEqual({
+      energyStacksForAction: 4,
+      nextEnergyStacks: 0,
+      meteorTriggered: true,
+    });
+  });
+
+  it("keeps four stacks through a non-damaging skill and disables without the two-piece set", () => {
+    expect(resolveAstralEnergyAction(4, true, false, true, true)).toEqual({
+      energyStacksForAction: 4,
+      nextEnergyStacks: 4,
+      meteorTriggered: false,
+    });
+    expect(resolveAstralEnergyAction(4, true, true, false, false)).toEqual({
+      energyStacksForAction: 0,
+      nextEnergyStacks: 0,
+      meteorTriggered: false,
+    });
+  });
+});
+
+describe("Titan Bastion legendary passives", () => {
+  it("configures the requested armor and amulet values", () => {
+    const cases = [
+      [
+        "鐵壁巨神·傳說盔",
+        "titan-bastion-helmet",
+        {
+          titanHelmetShieldFromDamagePercent: 12,
+          titanHelmetShieldDurationTurns: 3,
+        },
+      ],
+      [
+        "鐵壁巨神·傳說胸甲",
+        "titan-bastion-chest",
+        {
+          titanChestHitsToTrigger: 4,
+          titanChestShieldDefenseMultiplier: 300,
+          titanChestShieldDurationTurns: 2,
+          titanChestCooldownTurns: 5,
+        },
+      ],
+      [
+        "鐵壁巨神·傳說護腿",
+        "titan-bastion-leggings",
+        { titanLeggingsHealMaxHealthPercent: 5 },
+      ],
+      [
+        "鐵壁巨神·傳說徽記",
+        "titan-bastion-amulet",
+        {
+          titanAmuletDefenseToAttackPercent: 15,
+          titanAmuletDamageBonusHigherHealthPercent: 18,
+        },
+      ],
+    ] as const;
+
+    for (const [name, abilityId, effects] of cases) {
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBe(abilityId);
+      expect(getEquipmentSpecialAbility(name, "傳說")?.effects).toMatchObject(
+        effects
+      );
+      expect(
+        getEquipmentSpecialAbility(name, "神話", abilityId)
+      ).toBeUndefined();
+    }
+  });
+
+  it("configures each Titan Bastion weapon passive using the supplied values", () => {
+    const cases = [
+      [
+        "鐵壁巨神·傳說劍武器",
+        "titan-bastion-sword",
+        {
+          titanSwordTrueDamageDefensePercent: 80,
+          titanSwordStunChanceOnCriticalPercent: 30,
+          titanSwordStunDurationTurns: 1,
+        },
+      ],
+      [
+        "鐵壁巨神·傳說短刀武器",
+        "titan-bastion-dagger",
+        {
+          titanDaggerCounterChancePercent: 25,
+          titanDaggerCounterDamageDefensePercent: 200,
+          titanDaggerDefenseReductionPercent: 15,
+          titanDaggerEffectDurationTurns: 2,
+        },
+      ],
+      [
+        "鐵壁巨神·傳說弓武器",
+        "titan-bastion-bow",
+        {
+          titanBowDamageBonusDefensePercent: 100,
+          titanBowEnemyDamageReductionPercent: 12,
+          titanBowEffectDurationTurns: 2,
+        },
+      ],
+      [
+        "鐵壁巨神·傳說法杖武器",
+        "titan-bastion-staff",
+        {
+          titanStaffShieldDefensePercent: 150,
+          titanStaffAoeDamagePercentDefenseAndIntelligence: 50,
+          titanStaffEffectDurationTurns: 2,
+        },
+      ],
+    ] as const;
+
+    for (const [name, abilityId, effects] of cases) {
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBe(abilityId);
+      expect(getEquipmentSpecialAbility(name, "傳說")?.effects).toMatchObject(
+        effects
+      );
+      expect(
+        getEquipmentSpecialAbility(name.replace("武器", ""), "傳說")?.id
+      ).toBe(abilityId);
+    }
   });
 });
