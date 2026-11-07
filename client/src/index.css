@@ -7236,3 +7236,39 @@ h2 {
     text-align: center;
   }
 }
+
+/* Adventure shop */
+.shop-page { display: grid; gap: 22px; }
+.shop-heading { align-items: flex-end; }
+.shop-heading h2 { margin: 6px 0 5px; }
+.shop-heading p { margin: 0; color: #8490aa; font-size: 12px; }
+.shop-balance { display: grid; gap: 5px; min-width: 150px; padding: 12px 15px; border: 1px solid rgba(224,176,110,.22); border-radius: 10px; background: rgba(224,176,110,.08); }
+.shop-balance span, .shop-section-heading small, .shop-owned { color: #8b98b3; font-size: 10px; }
+.shop-balance strong { display: flex; align-items: center; gap: 6px; color: #f2c978; font-size: 18px; }
+.shop-notice { display: flex; align-items: center; gap: 10px; padding: 12px 14px; color: #b3c0d8; font-size: 11px; }
+.shop-notice svg { color: #dcb36c; flex: 0 0 auto; }
+.shop-section { display: grid; gap: 11px; }
+.shop-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.shop-section-heading h3 { margin: 4px 0 0; color: #e9edfa; font-size: 16px; }
+.shop-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.shop-item-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; }
+.shop-item-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; }
+.shop-icon-growth { color: #dcb36c; background: rgba(224,176,110,.12); }
+.shop-icon-potion { color: #82ddb5; background: rgba(107,228,171,.12); }
+.shop-icon-elixir { color: #b7a0ed; background: rgba(155,125,225,.13); }
+.shop-item-copy { min-width: 0; }
+.shop-item-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shop-item-title h4 { margin: 0; color: #e7ebf8; font-size: 12px; }
+.shop-item-title strong { color: #efc879; font-size: 11px; white-space: nowrap; }
+.shop-item-copy p { margin: 5px 0 4px; color: #8692aa; font-size: 10px; line-height: 1.55; }
+.shop-item-actions { display: flex; align-items: center; gap: 6px; }
+.shop-buy-button, .shop-use-button { min-height: 30px; padding: 7px 9px; font-size: 10px; white-space: nowrap; }
+.shop-buy-button:disabled, .shop-use-button:disabled { cursor: not-allowed; opacity: .42; }
+.shop-owned { display: inline-block; color: #92d8b5; }
+@media (max-width: 780px) {
+  .shop-heading { align-items: stretch; flex-direction: column; }
+  .shop-balance { min-width: 0; }
+  .shop-grid { grid-template-columns: 1fr; }
+  .shop-item-card { grid-template-columns: auto minmax(0, 1fr); }
+  .shop-item-actions { grid-column: 2; justify-content: flex-end; }
+}

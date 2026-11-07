@@ -17,6 +17,7 @@ import {
   Dumbbell,
   Flame,
   Filter,
+  FlaskConical,
   Gift,
   HeartPulse,
   Inbox,
@@ -30,6 +31,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  ShoppingCart,
   Skull,
   ScrollText,
   Settings2,
@@ -504,10 +506,79 @@ type RewardRedemption = {
   redeemedAt: number;
 };
 
+type ShopItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: "growth" | "potion" | "elixir";
+  icon: LucideIcon;
+};
+
+const SHOP_ITEMS: ShopItem[] = [
+  {
+    id: "ability-point",
+    name: "能力點數 ×1",
+    description: "立即獲得 1 點能力點，可自由分配至角色屬性。",
+    price: 180,
+    category: "growth",
+    icon: Brain,
+  },
+  {
+    id: "skill-point",
+    name: "技能點數 ×1",
+    description: "立即獲得 1 點技能升級點，可強化已解鎖技能。",
+    price: 240,
+    category: "growth",
+    icon: Sparkles,
+  },
+  {
+    id: "small-potion",
+    name: "小型治療藥水",
+    description: "使用後恢復 20% 最大生命值，戰鬥外可使用。",
+    price: 35,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "medium-potion",
+    name: "中型治療藥水",
+    description: "使用後恢復 40% 最大生命值，戰鬥外可使用。",
+    price: 70,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "strength-elixir",
+    name: "力量藥劑",
+    description: "下一場戰鬥物理傷害提高 10%。",
+    price: 80,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+  {
+    id: "spell-elixir",
+    name: "法術藥劑",
+    description: "下一場戰鬥魔法傷害提高 10%。",
+    price: 80,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+  {
+    id: "guard-elixir",
+    name: "鐵壁藥劑",
+    description: "下一場戰鬥受到的傷害降低 10%。",
+    price: 80,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+];
+
 type AppState = {
   tasks: Task[];
   rewards: Reward[];
   rewardRedemptions: RewardRedemption[];
+  shopInventory: Record<string, number>;
   weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
@@ -598,6 +669,7 @@ type ModalState =
 
 type PageKey =
   | "dashboard"
+  | "shop"
   | "abilities"
   | "skills"
   | "monsters"
@@ -1382,6 +1454,16 @@ function combatStatsBase(value?: Partial<CombatStats>): CombatStats {
         : defaultCombatStats.castSpeedPercent,
   };
 }
+
+function normalizeShopInventory(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, amount]) => typeof amount === "number" && Number.isFinite(amount))
+      .map(([id, amount]) => [id, Math.max(0, Math.floor(amount as number))])
+  );
+}
+
 function getEquipmentBonuses(items: EquipmentItem[]) {
   const abilities: CharacterAbilities = {
     health: 0,
@@ -1655,6 +1737,7 @@ const initialState: AppState = {
   tasks: defaultTasks,
   rewards: defaultRewards,
   rewardRedemptions: [],
+  shopInventory: {},
   weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
@@ -1930,6 +2013,7 @@ function loadState(): AppState {
       tasks,
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
       rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
+      shopInventory: normalizeShopInventory(parsed.shopInventory),
       weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
@@ -1977,6 +2061,7 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     weeklyStats: normalizeWeeklyStats(profileState.weeklyStats, new Date()),
     inventory,
     equippedItemIds,
+    shopInventory: normalizeShopInventory(profileState.shopInventory),
     skillUpgradePoints: Math.max(
       0,
       profileState.skillUpgradePoints ?? profileState.abilityLevel ?? 0
@@ -2500,6 +2585,7 @@ export default function Home() {
     allTasksBonusClaimed: false,
     inventory: [],
     equippedItemIds: [],
+    shopInventory: {},
     userName: name.slice(0, 24),
     jobClass,
   });
@@ -9630,6 +9716,64 @@ export default function Home() {
     showToast(`「${skillName}」已升級至 Lv.${currentLevel + 1}`);
   };
 
+  const buyShopItem = (item: ShopItem) => {
+    if (state.coins < item.price) {
+      showToast(`金幣不足，還需要 ${item.price - state.coins} 金幣`);
+      return;
+    }
+    if (!window.confirm(`確定購買「${item.name}」？\n價格：${item.price} 金幣`)) {
+      return;
+    }
+    setState(previous => ({
+      ...previous,
+      coins: previous.coins - item.price,
+      abilityPoints:
+        previous.abilityPoints + (item.id === "ability-point" ? 1 : 0),
+      skillUpgradePoints:
+        previous.skillUpgradePoints + (item.id === "skill-point" ? 1 : 0),
+      shopInventory: {
+        ...previous.shopInventory,
+        [item.id]: (previous.shopInventory[item.id] ?? 0) +
+          (item.category === "growth" ? 0 : 1),
+      },
+    }));
+    showToast(
+      item.category === "growth"
+        ? `已購買${item.name}`
+        : `已購買${item.name}，可在商城背包使用`
+    );
+  };
+
+  const useShopItem = (item: ShopItem) => {
+    const owned = state.shopInventory[item.id] ?? 0;
+    if (owned <= 0) {
+      showToast(`目前沒有${item.name}`);
+      return;
+    }
+    if (item.category !== "potion") {
+      showToast("藥劑會在戰鬥準備功能完成後使用，目前先保存在商城背包");
+      return;
+    }
+    const healPercent = item.id === "medium-potion" ? 40 : 20;
+    if (state.currentHealth >= effectiveAbilities.health) {
+      showToast("目前生命值已滿，無法使用治療藥水");
+      return;
+    }
+    const healedHealth = Math.min(
+      effectiveAbilities.health,
+      state.currentHealth + Math.max(1, Math.floor(effectiveAbilities.health * healPercent / 100))
+    );
+    setState(previous => ({
+      ...previous,
+      currentHealth: healedHealth,
+      shopInventory: {
+        ...previous.shopInventory,
+        [item.id]: owned - 1,
+      },
+    }));
+    showToast(`${item.name}生效，恢復 ${healedHealth - state.currentHealth} 生命`);
+  };
+
   const claimAchievement = (achievementId: string) => {
     const status = achievementStatuses.find(
       item => item.achievement.id === achievementId
@@ -9778,14 +9922,22 @@ export default function Home() {
               <span>任務總覽</span>
               {activePage === "dashboard" && <span className="active-dot" />}
             </button>
-            <button
-              className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
-              onClick={() => navigateTo("abilities")}
-            >
-              <ShieldCheck size={18} />
-              <span>角色</span>
-              {activePage === "abilities" && <span className="active-dot" />}
-            </button>
+          <button
+            className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
+            onClick={() => navigateTo("abilities")}
+          >
+            <ShieldCheck size={18} />
+            <span>角色</span>
+            {activePage === "abilities" && <span className="active-dot" />}
+          </button>
+          <button
+            className={`sidebar-link ${activePage === "shop" ? "active" : ""}`}
+            onClick={() => navigateTo("shop")}
+          >
+            <ShoppingCart size={18} />
+            <span>冒險商城</span>
+            {activePage === "shop" && <span className="active-dot" />}
+          </button>
             <button
               className={`sidebar-link ${activePage === "monsters" ? "active" : ""}`}
               onClick={() => navigateTo("monsters")}
@@ -9919,6 +10071,7 @@ export default function Home() {
               {
                 {
                   dashboard: "任務總覽",
+                  shop: "冒險商城",
                   abilities: "角色能力與技能",
                   skills: "角色能力與技能",
                   monsters: "怪物與魔王",
@@ -10114,6 +10267,45 @@ export default function Home() {
                 </button>
               </section>
             </>
+          )}
+
+          {activePage === "shop" && (
+            <section className="shop-page">
+              <div className="section-heading shop-heading">
+                <div>
+                  <div className="section-kicker"><ShoppingCart size={15} /> ADVENTURE SHOP</div>
+                  <h2>冒險商城</h2>
+                  <p>用任務與戰鬥累積的金幣，換取成長資源與戰鬥補給。</p>
+                </div>
+                <div className="shop-balance"><span>目前金幣</span><strong><Coins size={16} /> {state.coins.toLocaleString()}</strong></div>
+              </div>
+              <div className="shop-notice panel-card"><Sparkles size={18} /><span>成長商品會立即加入角色資源；藥水可在戰鬥外使用，藥劑會先存入商城背包。</span></div>
+              {([
+                ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
+                ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
+                ["elixir", "ELIXIRS", "戰鬥藥劑", "下一場戰鬥準備使用"],
+              ] as const).map(([category, kicker, title, note]) => (
+                <div className="shop-section" key={category}>
+                  <div className="shop-section-heading"><div><span className="mini-kicker">{kicker}</span><h3>{title}</h3></div><small>{note}</small></div>
+                  <div className="shop-grid">
+                    {SHOP_ITEMS.filter(item => item.category === category).map(item => {
+                      const Icon = item.icon;
+                      const owned = state.shopInventory[item.id] ?? 0;
+                      return (
+                        <article className="shop-item-card panel-card" key={item.id}>
+                          <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
+                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
+                          <div className="shop-item-actions">
+                            {category === "potion" && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
+                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price}><Coins size={14} /> 購買</button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
           )}
 
           {activePage === "abilities" && (
