@@ -322,6 +322,9 @@ type BattleState = {
   stormSwordSoulAmuletStacks?: number[];
   stormSwordSoulSetStacks?: number[];
   actionLockTurns?: number;
+  shopElixirIds?: string[];
+  shopShield?: number;
+  shopShieldTurnsRemaining?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
   monsterSkillCooldown?: number;
@@ -535,40 +538,56 @@ const SHOP_ITEMS: ShopItem[] = [
   {
     id: "small-potion",
     name: "小型治療藥水",
-    description: "使用後恢復 20% 最大生命值，戰鬥外可使用。",
-    price: 35,
+    description: "使用後恢復 10% 最大生命值，戰鬥外可使用。",
+    price: 50,
     category: "potion",
     icon: HeartPulse,
   },
   {
     id: "medium-potion",
     name: "中型治療藥水",
-    description: "使用後恢復 40% 最大生命值，戰鬥外可使用。",
-    price: 70,
+    description: "使用後恢復 20% 最大生命值，戰鬥外可使用。",
+    price: 100,
     category: "potion",
     icon: HeartPulse,
   },
   {
+    id: "large-potion",
+    name: "大型治療藥水",
+    description: "使用後恢復 30% 最大生命值，戰鬥外可使用。",
+    price: 200,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "holy-elixir",
+    name: "治療聖劑",
+    description: "恢復 50% 最大生命值，並獲得最大生命值 10% 護盾，持續 2 回合。",
+    price: 1000,
+    category: "potion",
+    icon: Sparkles,
+  },
+  {
     id: "strength-elixir",
     name: "力量藥劑",
-    description: "下一場戰鬥物理傷害提高 10%。",
-    price: 80,
+    description: "本場戰鬥物理傷害提高 10%。",
+    price: 100,
     category: "elixir",
     icon: FlaskConical,
   },
   {
     id: "spell-elixir",
     name: "法術藥劑",
-    description: "下一場戰鬥魔法傷害提高 10%。",
-    price: 80,
+    description: "本場戰鬥魔法傷害提高 10%。",
+    price: 100,
     category: "elixir",
     icon: FlaskConical,
   },
   {
     id: "guard-elixir",
     name: "鐵壁藥劑",
-    description: "下一場戰鬥受到的傷害降低 10%。",
-    price: 80,
+    description: "本場戰鬥受到的傷害降低 10%。",
+    price: 100,
     category: "elixir",
     icon: FlaskConical,
   },
@@ -4630,6 +4649,9 @@ export default function Home() {
       moonStalkerGuaranteedHitsRemaining: 0,
       moonStalkerStaffDamageTurns: 0,
       actionLockTurns: 0,
+      shopElixirIds: [],
+      shopShield: 0,
+      shopShieldTurnsRemaining: 0,
       monsterStatuses: [],
       playerStatuses: [],
       monsterSkillCooldown: 0,
@@ -5395,6 +5417,11 @@ export default function Home() {
       weaponAbility?.id === "sapphire-staff"
         ? (weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20)
         : 0;
+    const shopElixirDamageBonusPercent =
+      (damageType === "物理" && (battle.shopElixirIds ?? []).includes("strength-elixir")) ||
+      (damageType === "魔法" && (battle.shopElixirIds ?? []).includes("spell-elixir"))
+        ? 10
+        : 0;
     const buffedPlayerDamage = Math.round(
       (damageBeforeDefense +
         (damageType === "魔法" && weaponAbility?.id === "astral-sage-sword"
@@ -5411,6 +5438,7 @@ export default function Home() {
         (1 + equipmentAttackBonusPercent / 100) *
         (1 + physicalDamageBonusPercent / 100) *
         (1 + frozenTargetDamageBonusPercent / 100) *
+        (1 + shopElixirDamageBonusPercent / 100) *
         (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
         (1 - physicalDamageReductionPercent / 100)
     );
@@ -7142,9 +7170,9 @@ export default function Home() {
         stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
         timeReversalUsed: Boolean(battle.timeReversalUsed),
         monsterStatuses: statusTick.statuses,
-        playerStatuses: playerStatusTick.statuses,
-        monsterSkillCooldown: nextMonsterSkillCooldown,
-        activeBuff: nextActiveBuff,
+        playerStatuses: battle.playerStatuses,
+        monsterSkillCooldown: battle.monsterSkillCooldown,
+        activeBuff: battle.activeBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [
@@ -7420,6 +7448,7 @@ export default function Home() {
                     80,
                     (effectiveCombatStats.damageReductionPercent ?? 0) +
                       (activeBuff?.damageReductionPercent ?? 0) +
+                      ((battle.shopElixirIds ?? []).includes("guard-elixir") ? 10 : 0) +
                       equipmentResistancePercent +
                       (titanBastionTwoPieceActive ? 25 : 0) +
                       dawnArmorStacksAtStart *
@@ -7507,12 +7536,18 @@ export default function Home() {
       astralSageShieldAfterStatus + deepSeaStarCoreShieldGain,
       starCoreIncomingShieldResolution.damageRemaining
     );
+    const shopShieldAtStart =
+      (battle.shopShieldTurnsRemaining ?? 0) > 0 ? battle.shopShield ?? 0 : 0;
+    const shopShieldResolution = resolveStarCoreShieldDamage(
+      shopShieldAtStart,
+      astralIncomingShieldResolution.damageRemaining
+    );
     const potentialDivineShieldResolution = resolveDivineShieldDamage(
       chestAbility,
       statusShieldResolution.state,
       healedPlayerHealth,
       effectiveAbilities.health,
-      astralIncomingShieldResolution.damageRemaining,
+      shopShieldResolution.damageRemaining,
       true
     );
     const shadowmoonEvasion = resolveShadowmoonLethalEvasion(
@@ -7669,6 +7704,14 @@ export default function Home() {
                 100)
           )
         : 0);
+    const shopShieldTurnsRemainingAfterTurn = Math.max(
+      0,
+      (battle.shopShieldTurnsRemaining ?? 0) - 1
+    );
+    const shopShieldAfterTurn =
+      shopShieldTurnsRemainingAfterTurn > 0
+        ? shopShieldResolution.shieldRemaining
+        : 0;
     const azureDragonShieldTurnsRemainingAfterTurn =
       azureDragonShieldTriggeredAtStart
         ? Math.max(
@@ -8580,6 +8623,8 @@ export default function Home() {
           ? battle.turn
           : (battle.galeSetLastEvasionTurn ?? 0),
         divineShield: divineShieldResolution.state,
+        shopShield: shopShieldAfterTurn,
+        shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
         monsterStatuses: monsterStatusesAfterTurn,
         playerStatuses: nextPlayerStatuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
@@ -8655,6 +8700,8 @@ export default function Home() {
       leggingsPassiveState: nextLeggingsPassiveState,
       starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
       astralSageShield: astralSageShieldAfterTurn,
+      shopShield: shopShieldAfterTurn,
+      shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
       dawnWardenShield: dawnWardenShieldAfterTurn,
       dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
       azureDragonShield: azureDragonShieldAfterTurn,
@@ -9750,11 +9797,55 @@ export default function Home() {
       showToast(`目前沒有${item.name}`);
       return;
     }
-    if (item.category !== "potion") {
-      showToast("藥劑會在戰鬥準備功能完成後使用，目前先保存在商城背包");
+    if (item.id === "holy-elixir") {
+      if (!battle || battle.outcome !== "fighting") {
+        showToast("治療聖劑只能在戰鬥中使用");
+        return;
+      }
+      if ((battle.shopShieldTurnsRemaining ?? 0) > 0) {
+        showToast("治療聖劑的護盾效果尚未結束，不能重複疊加");
+        return;
+      }
+      const healedHealth = Math.min(
+        effectiveAbilities.health,
+        battle.playerHealth + Math.max(1, Math.floor(effectiveAbilities.health * 0.5))
+      );
+      setBattle(previous => previous ? {
+        ...previous,
+        playerHealth: healedHealth,
+        shopShield: Math.floor(effectiveAbilities.health * 0.1),
+        shopShieldTurnsRemaining: 2,
+        logs: [...previous.logs, `你使用治療聖劑，恢復 ${healedHealth - previous.playerHealth} 生命並獲得護盾。`],
+      } : previous);
+      setState(previous => ({
+        ...previous,
+        shopInventory: { ...previous.shopInventory, [item.id]: owned - 1 },
+      }));
+      showToast("治療聖劑生效：恢復 50% 生命並獲得 2 回合護盾");
       return;
     }
-    const healPercent = item.id === "medium-potion" ? 40 : 20;
+    if (item.category === "elixir") {
+      if (!battle || battle.outcome !== "fighting") {
+        showToast("戰鬥藥劑只能在戰鬥中使用");
+        return;
+      }
+      if ((battle.shopElixirIds ?? []).includes(item.id)) {
+        showToast(`${item.name}效果已生效，同一場戰鬥不會重複疊加`);
+        return;
+      }
+      setBattle(previous => previous ? {
+        ...previous,
+        shopElixirIds: [...(previous.shopElixirIds ?? []), item.id],
+        logs: [...previous.logs, `你使用${item.name}。`],
+      } : previous);
+      setState(previous => ({
+        ...previous,
+        shopInventory: { ...previous.shopInventory, [item.id]: owned - 1 },
+      }));
+      showToast(`${item.name}生效，本場戰鬥可持續使用其他不同藥劑`);
+      return;
+    }
+    const healPercent = item.id === "medium-potion" ? 20 : item.id === "large-potion" ? 30 : 10;
     if (state.currentHealth >= effectiveAbilities.health) {
       showToast("目前生命值已滿，無法使用治療藥水");
       return;
@@ -10279,7 +10370,7 @@ export default function Home() {
                 </div>
                 <div className="shop-balance"><span>目前金幣</span><strong><Coins size={16} /> {state.coins.toLocaleString()}</strong></div>
               </div>
-              <div className="shop-notice panel-card"><Sparkles size={18} /><span>成長商品會立即加入角色資源；藥水可在戰鬥外使用，藥劑會先存入商城背包。</span></div>
+              <div className="shop-notice panel-card"><Sparkles size={18} /><span>成長商品會立即加入角色資源；治療藥水可在戰鬥外使用，戰鬥藥劑可在戰鬥中不限次數使用，但同種效果不會疊加。</span></div>
               {([
                 ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
                 ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
@@ -10296,7 +10387,7 @@ export default function Home() {
                           <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
                           <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
                           <div className="shop-item-actions">
-                            {category === "potion" && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
+                            {(category === "potion" || category === "elixir") && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
                             <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price}><Coins size={14} /> 購買</button>
                           </div>
                         </article>
@@ -13806,6 +13897,27 @@ export default function Home() {
                     )}
                   </span>
                 )}
+                {(battle.shopElixirIds ?? []).map(elixirId => {
+                  const elixir = SHOP_ITEMS.find(item => item.id === elixirId);
+                  return elixir ? (
+                    <span className="battle-effect battle-effect-buff" key={elixirId}>
+                      <strong>{elixir.name}</strong>
+                      <small>
+                        {elixirId === "strength-elixir"
+                          ? "物理傷害 +10%"
+                          : elixirId === "spell-elixir"
+                            ? "魔法傷害 +10%"
+                            : "受到傷害 -10%"}
+                      </small>
+                    </span>
+                  ) : null;
+                })}
+                {(battle.shopShield ?? 0) > 0 && (battle.shopShieldTurnsRemaining ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>治療聖劑護盾</strong>
+                    <small>可吸收 {battle.shopShield} 點傷害 · 剩餘 {battle.shopShieldTurnsRemaining} 回合</small>
+                  </span>
+                )}
                 {(battle.weaponTimedBuffs ?? []).map(buff => (
                   <span
                     className="battle-effect battle-effect-buff"
@@ -14177,6 +14289,34 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
+                {(SHOP_ITEMS.some(item => item.category === "elixir" && (state.shopInventory[item.id] ?? 0) > 0) ||
+                  (state.shopInventory["holy-elixir"] ?? 0) > 0) && (
+                  <div className="battle-elixir-panel">
+                    <div className="battle-skill-heading">
+                      <strong>商城藥劑</strong>
+                      <small>每場戰鬥不限使用次數；同種效果不會疊加</small>
+                    </div>
+                    <div className="battle-elixir-list">
+                      {SHOP_ITEMS.filter(item => item.category === "elixir" || item.id === "holy-elixir").map(item => {
+                        const owned = state.shopInventory[item.id] ?? 0;
+                        const alreadyActive = item.category === "elixir" && (battle.shopElixirIds ?? []).includes(item.id);
+                        const shieldActive = item.id === "holy-elixir" && (battle.shopShieldTurnsRemaining ?? 0) > 0;
+                        return (
+                          <button
+                            type="button"
+                            className="battle-elixir-button"
+                            key={item.id}
+                            disabled={owned <= 0 || alreadyActive || shieldActive}
+                            onClick={() => useShopItem(item)}
+                          >
+                            <strong>{item.name}</strong>
+                            <small>{alreadyActive || shieldActive ? "效果中" : `持有 ${owned} · 使用`}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {battleSpecialSkills.some(
                   skill => skill.effectType !== "passive"
                 ) && (
