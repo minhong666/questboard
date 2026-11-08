@@ -17,6 +17,7 @@ import {
   Dumbbell,
   Flame,
   Filter,
+  FlaskConical,
   Gift,
   HeartPulse,
   Inbox,
@@ -30,6 +31,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  ShoppingCart,
   Skull,
   ScrollText,
   Settings2,
@@ -320,6 +322,9 @@ type BattleState = {
   stormSwordSoulAmuletStacks?: number[];
   stormSwordSoulSetStacks?: number[];
   actionLockTurns?: number;
+  shopElixirIds?: string[];
+  shopShield?: number;
+  shopShieldTurnsRemaining?: number;
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
   monsterSkillCooldown?: number;
@@ -504,10 +509,185 @@ type RewardRedemption = {
   redeemedAt: number;
 };
 
+type ShopItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: "growth" | "potion" | "elixir" | "equipment";
+  icon: LucideIcon;
+  equipment?: EquipmentItem;
+};
+
+const SHOP_EQUIPMENT_BASE_PRICES: Record<string, number> = {
+  頭盔: 40,
+  護腿: 60,
+  護身符: 50,
+  胸甲: 65,
+  武器: 75,
+};
+const SHOP_EQUIPMENT_RARITY_MULTIPLIERS: Partial<Record<LootRarity, number>> = {
+  普通: 1,
+  精良: 2,
+  稀有: 3,
+  史詩: 5,
+};
+
+function getShopEquipmentPrice(equipment: Pick<EquipmentItem, "slot" | "rarity">) {
+  const basePrice = SHOP_EQUIPMENT_BASE_PRICES[equipment.slot];
+  const multiplier = SHOP_EQUIPMENT_RARITY_MULTIPLIERS[equipment.rarity];
+  return basePrice && multiplier ? basePrice * multiplier : null;
+}
+
+const SHOP_ITEMS: ShopItem[] = [
+  {
+    id: "ability-point",
+    name: "能力點數 ×1",
+    description: "立即獲得 1 點能力點，可自由分配至角色屬性。",
+    price: 200,
+    category: "growth",
+    icon: Brain,
+  },
+  {
+    id: "skill-point",
+    name: "技能點數 ×1",
+    description: "立即獲得 1 點技能升級點，可強化已解鎖技能。",
+    price: 200,
+    category: "growth",
+    icon: Sparkles,
+  },
+  {
+    id: "small-potion",
+    name: "小型治療藥水",
+    description: "使用後恢復 10% 最大生命值，戰鬥外可使用。",
+    price: 50,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "medium-potion",
+    name: "中型治療藥水",
+    description: "使用後恢復 20% 最大生命值，戰鬥外可使用。",
+    price: 100,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "large-potion",
+    name: "大型治療藥水",
+    description: "使用後恢復 30% 最大生命值，戰鬥外可使用。",
+    price: 200,
+    category: "potion",
+    icon: HeartPulse,
+  },
+  {
+    id: "holy-elixir",
+    name: "治療聖劑",
+    description: "恢復 50% 最大生命值，並獲得最大生命值 10% 護盾，持續 2 回合。",
+    price: 1000,
+    category: "potion",
+    icon: Sparkles,
+  },
+  {
+    id: "strength-elixir",
+    name: "力量藥劑",
+    description: "本場戰鬥物理傷害提高 10%。",
+    price: 100,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+  {
+    id: "spell-elixir",
+    name: "法術藥劑",
+    description: "本場戰鬥魔法傷害提高 10%。",
+    price: 100,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+  {
+    id: "guard-elixir",
+    name: "鐵壁藥劑",
+    description: "本場戰鬥受到的傷害降低 10%。",
+    price: 100,
+    category: "elixir",
+    icon: FlaskConical,
+  },
+];
+
+const SHOP_EQUIPMENT_ITEMS: ShopItem[] = RPG_EQUIPMENT_TEMPLATES.flatMap(
+  (template, index) => {
+    const price = getShopEquipmentPrice(template);
+    if (price === null) return [];
+    const equipment: EquipmentItem = {
+      ...template,
+      id: `shop-template-${index}`,
+      kind: "equipment",
+    };
+    return [{
+      id: `shop-equipment-${index}`,
+      name: equipment.name,
+      description: `${equipment.description}商城可購買，購買後會加入戰利品庫。`,
+      price,
+      category: "equipment" as const,
+      icon: ShieldCheck,
+      equipment,
+    }];
+  }
+);
+
+const DAILY_SHOP_EQUIPMENT_COUNT = 6;
+const DAILY_SHOP_RARITY_CHANCES: Array<[LootRarity, number]> = [
+  ["普通", 55],
+  ["精良", 30],
+  ["稀有", 10],
+  ["史詩", 5],
+];
+
+function getShopDayKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function createDailyShopEquipmentOfferIds(dayKey: string) {
+  let seed = Array.from(dayKey).reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    2166136261
+  );
+  const nextRandom = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const selectedIds: string[] = [];
+  for (let index = 0; index < DAILY_SHOP_EQUIPMENT_COUNT; index += 1) {
+    const rarityRoll = nextRandom() * 100;
+    let cumulative = 0;
+    let rarity: LootRarity = "普通";
+    for (const [candidateRarity, chance] of DAILY_SHOP_RARITY_CHANCES) {
+      cumulative += chance;
+      if (rarityRoll < cumulative) {
+        rarity = candidateRarity;
+        break;
+      }
+    }
+    const sameRarity = SHOP_EQUIPMENT_ITEMS.filter(
+      item => item.equipment?.rarity === rarity && !selectedIds.includes(item.id)
+    );
+    const available = sameRarity.length
+      ? sameRarity
+      : SHOP_EQUIPMENT_ITEMS.filter(item => !selectedIds.includes(item.id));
+    if (!available.length) break;
+    selectedIds.push(available[Math.floor(nextRandom() * available.length)].id);
+  }
+  return selectedIds;
+}
+
 type AppState = {
   tasks: Task[];
   rewards: Reward[];
   rewardRedemptions: RewardRedemption[];
+  shopInventory: Record<string, number>;
+  shopEquipmentPeriodKey: string;
+  shopEquipmentOfferIds: string[];
+  shopEquipmentPurchasedIds: string[];
   weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
@@ -598,6 +778,7 @@ type ModalState =
 
 type PageKey =
   | "dashboard"
+  | "shop"
   | "abilities"
   | "skills"
   | "monsters"
@@ -669,6 +850,7 @@ const lootCategoryMeta: Record<
   護身符: { description: "飾品與特殊加成", icon: Star },
   寶物: { description: "可出售的冒險寶物", icon: Gift },
 };
+
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
@@ -1382,6 +1564,16 @@ function combatStatsBase(value?: Partial<CombatStats>): CombatStats {
         : defaultCombatStats.castSpeedPercent,
   };
 }
+
+function normalizeShopInventory(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, amount]) => typeof amount === "number" && Number.isFinite(amount))
+      .map(([id, amount]) => [id, Math.max(0, Math.floor(amount as number))])
+  );
+}
+
 function getEquipmentBonuses(items: EquipmentItem[]) {
   const abilities: CharacterAbilities = {
     health: 0,
@@ -1655,6 +1847,10 @@ const initialState: AppState = {
   tasks: defaultTasks,
   rewards: defaultRewards,
   rewardRedemptions: [],
+  shopInventory: {},
+  shopEquipmentPeriodKey: getShopDayKey(new Date()),
+  shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(getShopDayKey(new Date())),
+  shopEquipmentPurchasedIds: [],
   weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
@@ -1852,6 +2048,28 @@ function loadState(): AppState {
       typeof parsed.dailyResetMinutes === "number"
         ? normalizeResetMinutes(parsed.dailyResetMinutes)
         : initialState.dailyResetMinutes;
+    const shopEquipmentPeriodKey = getShopDayKey(new Date());
+    const storedShopPeriodKey =
+      typeof parsed.shopEquipmentPeriodKey === "string"
+        ? parsed.shopEquipmentPeriodKey
+        : "";
+    const storedShopOfferIds = Array.isArray(parsed.shopEquipmentOfferIds)
+      ? parsed.shopEquipmentOfferIds.filter(id =>
+          SHOP_EQUIPMENT_ITEMS.some(item => item.id === id)
+        )
+      : [];
+    const shopEquipmentOfferIds =
+      storedShopPeriodKey === shopEquipmentPeriodKey &&
+      storedShopOfferIds.length === DAILY_SHOP_EQUIPMENT_COUNT
+        ? storedShopOfferIds
+        : createDailyShopEquipmentOfferIds(shopEquipmentPeriodKey);
+    const shopEquipmentPurchasedIds =
+      storedShopPeriodKey === shopEquipmentPeriodKey &&
+      Array.isArray(parsed.shopEquipmentPurchasedIds)
+        ? parsed.shopEquipmentPurchasedIds.filter(id =>
+            shopEquipmentOfferIds.includes(id)
+          )
+        : [];
     return {
       ...initialState,
       ...parsed,
@@ -1930,6 +2148,10 @@ function loadState(): AppState {
       tasks,
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
       rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
+      shopInventory: normalizeShopInventory(parsed.shopInventory),
+      shopEquipmentPeriodKey,
+      shopEquipmentOfferIds,
+      shopEquipmentPurchasedIds,
       weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
@@ -1977,6 +2199,7 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     weeklyStats: normalizeWeeklyStats(profileState.weeklyStats, new Date()),
     inventory,
     equippedItemIds,
+    shopInventory: normalizeShopInventory(profileState.shopInventory),
     skillUpgradePoints: Math.max(
       0,
       profileState.skillUpgradePoints ?? profileState.abilityLevel ?? 0
@@ -2500,6 +2723,7 @@ export default function Home() {
     allTasksBonusClaimed: false,
     inventory: [],
     equippedItemIds: [],
+    shopInventory: {},
     userName: name.slice(0, 24),
     jobClass,
   });
@@ -3690,6 +3914,22 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const refreshDailyShop = () => {
+      const periodKey = getShopDayKey(new Date());
+      if (state.shopEquipmentPeriodKey === periodKey) return;
+      setState(previous => ({
+        ...previous,
+        shopEquipmentPeriodKey: periodKey,
+        shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(periodKey),
+        shopEquipmentPurchasedIds: [],
+      }));
+    };
+    refreshDailyShop();
+    const interval = window.setInterval(refreshDailyShop, 1000);
+    return () => window.clearInterval(interval);
+  }, [state.shopEquipmentPeriodKey]);
+
+  useEffect(() => {
     const running = state.runningTimer;
     const lockId = running
       ? `${running.activityId}:${running.startedAt}`
@@ -4315,11 +4555,10 @@ export default function Home() {
   };
 
   const sellTreasure = (item: TreasureItem) => {
-    if (
-      !inventory.some(
-        candidate => candidate.id === item.id && candidate.kind === "treasure"
-      )
-    ) {
+    if (!inventory.some(candidate => candidate.id === item.id && candidate.kind === "treasure")) {
+      return;
+    }
+    if (!window.confirm(`確定出售「${item.name}」？\n可獲得 ${item.sellValue} 金幣`)) {
       return;
     }
     setState(previous => {
@@ -4544,6 +4783,9 @@ export default function Home() {
       moonStalkerGuaranteedHitsRemaining: 0,
       moonStalkerStaffDamageTurns: 0,
       actionLockTurns: 0,
+      shopElixirIds: [],
+      shopShield: 0,
+      shopShieldTurnsRemaining: 0,
       monsterStatuses: [],
       playerStatuses: [],
       monsterSkillCooldown: 0,
@@ -5309,6 +5551,11 @@ export default function Home() {
       weaponAbility?.id === "sapphire-staff"
         ? (weaponAbility.effects.sapphireStaffDamageBonusVsFrozenPercent ?? 20)
         : 0;
+    const shopElixirDamageBonusPercent =
+      (damageType === "物理" && (battle.shopElixirIds ?? []).includes("strength-elixir")) ||
+      (damageType === "魔法" && (battle.shopElixirIds ?? []).includes("spell-elixir"))
+        ? 10
+        : 0;
     const buffedPlayerDamage = Math.round(
       (damageBeforeDefense +
         (damageType === "魔法" && weaponAbility?.id === "astral-sage-sword"
@@ -5325,6 +5572,7 @@ export default function Home() {
         (1 + equipmentAttackBonusPercent / 100) *
         (1 + physicalDamageBonusPercent / 100) *
         (1 + frozenTargetDamageBonusPercent / 100) *
+        (1 + shopElixirDamageBonusPercent / 100) *
         (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
         (1 - physicalDamageReductionPercent / 100)
     );
@@ -7056,9 +7304,9 @@ export default function Home() {
         stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
         timeReversalUsed: Boolean(battle.timeReversalUsed),
         monsterStatuses: statusTick.statuses,
-        playerStatuses: playerStatusTick.statuses,
-        monsterSkillCooldown: nextMonsterSkillCooldown,
-        activeBuff: nextActiveBuff,
+        playerStatuses: battle.playerStatuses,
+        monsterSkillCooldown: battle.monsterSkillCooldown,
+        activeBuff: battle.activeBuff,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [
@@ -7334,6 +7582,7 @@ export default function Home() {
                     80,
                     (effectiveCombatStats.damageReductionPercent ?? 0) +
                       (activeBuff?.damageReductionPercent ?? 0) +
+                      ((battle.shopElixirIds ?? []).includes("guard-elixir") ? 10 : 0) +
                       equipmentResistancePercent +
                       (titanBastionTwoPieceActive ? 25 : 0) +
                       dawnArmorStacksAtStart *
@@ -7421,12 +7670,18 @@ export default function Home() {
       astralSageShieldAfterStatus + deepSeaStarCoreShieldGain,
       starCoreIncomingShieldResolution.damageRemaining
     );
+    const shopShieldAtStart =
+      (battle.shopShieldTurnsRemaining ?? 0) > 0 ? battle.shopShield ?? 0 : 0;
+    const shopShieldResolution = resolveStarCoreShieldDamage(
+      shopShieldAtStart,
+      astralIncomingShieldResolution.damageRemaining
+    );
     const potentialDivineShieldResolution = resolveDivineShieldDamage(
       chestAbility,
       statusShieldResolution.state,
       healedPlayerHealth,
       effectiveAbilities.health,
-      astralIncomingShieldResolution.damageRemaining,
+      shopShieldResolution.damageRemaining,
       true
     );
     const shadowmoonEvasion = resolveShadowmoonLethalEvasion(
@@ -7583,6 +7838,14 @@ export default function Home() {
                 100)
           )
         : 0);
+    const shopShieldTurnsRemainingAfterTurn = Math.max(
+      0,
+      (battle.shopShieldTurnsRemaining ?? 0) - 1
+    );
+    const shopShieldAfterTurn =
+      shopShieldTurnsRemainingAfterTurn > 0
+        ? shopShieldResolution.shieldRemaining
+        : 0;
     const azureDragonShieldTurnsRemainingAfterTurn =
       azureDragonShieldTriggeredAtStart
         ? Math.max(
@@ -8494,6 +8757,8 @@ export default function Home() {
           ? battle.turn
           : (battle.galeSetLastEvasionTurn ?? 0),
         divineShield: divineShieldResolution.state,
+        shopShield: shopShieldAfterTurn,
+        shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
         monsterStatuses: monsterStatusesAfterTurn,
         playerStatuses: nextPlayerStatuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
@@ -8569,6 +8834,8 @@ export default function Home() {
       leggingsPassiveState: nextLeggingsPassiveState,
       starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
       astralSageShield: astralSageShieldAfterTurn,
+      shopShield: shopShieldAfterTurn,
+      shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
       dawnWardenShield: dawnWardenShieldAfterTurn,
       dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
       azureDragonShield: azureDragonShieldAfterTurn,
@@ -9630,6 +9897,134 @@ export default function Home() {
     showToast(`「${skillName}」已升級至 Lv.${currentLevel + 1}`);
   };
 
+  const buyShopItem = (item: ShopItem) => {
+    if (item.category === "equipment") {
+      if (!state.shopEquipmentOfferIds.includes(item.id)) {
+        showToast("這件裝備不是今日商城商品，請等待午夜刷新");
+        return;
+      }
+      if (state.shopEquipmentPurchasedIds.includes(item.id)) {
+        showToast("這件裝備今日已售出，請等待午夜刷新");
+        return;
+      }
+    }
+    if (state.coins < item.price) {
+      showToast(`金幣不足，還需要 ${item.price - state.coins} 金幣`);
+      return;
+    }
+    if (!window.confirm(`確定購買「${item.name}」？\n價格：${item.price} 金幣`)) {
+      return;
+    }
+    if (item.category === "equipment" && item.equipment) {
+      const purchasedEquipment: EquipmentItem = {
+        ...item.equipment,
+        id: `shop-purchase-${item.equipment.id}-${Date.now()}`,
+      };
+      setState(previous => ({
+        ...previous,
+        coins: previous.coins - item.price,
+        inventory: [...previous.inventory, purchasedEquipment],
+        shopEquipmentPurchasedIds: previous.shopEquipmentPurchasedIds.includes(item.id)
+          ? previous.shopEquipmentPurchasedIds
+          : [...previous.shopEquipmentPurchasedIds, item.id],
+      }));
+      showToast(`${item.name}已購買，已加入戰利品庫`);
+      return;
+    }
+    setState(previous => ({
+      ...previous,
+      coins: previous.coins - item.price,
+      abilityPoints:
+        previous.abilityPoints + (item.id === "ability-point" ? 1 : 0),
+      skillUpgradePoints:
+        previous.skillUpgradePoints + (item.id === "skill-point" ? 1 : 0),
+      shopInventory: {
+        ...previous.shopInventory,
+        [item.id]: (previous.shopInventory[item.id] ?? 0) +
+          (item.category === "growth" ? 0 : 1),
+      },
+    }));
+    showToast(
+      item.category === "growth"
+        ? `已購買${item.name}`
+        : `已購買${item.name}，可在商城背包使用`
+    );
+  };
+
+  const useShopItem = (item: ShopItem) => {
+    const owned = state.shopInventory[item.id] ?? 0;
+    if (owned <= 0) {
+      showToast(`目前沒有${item.name}`);
+      return;
+    }
+    if (item.id === "holy-elixir") {
+      if (!battle || battle.outcome !== "fighting") {
+        showToast("治療聖劑只能在戰鬥中使用");
+        return;
+      }
+      if ((battle.shopShieldTurnsRemaining ?? 0) > 0) {
+        showToast("治療聖劑的護盾效果尚未結束，不能重複疊加");
+        return;
+      }
+      const healedHealth = Math.min(
+        effectiveAbilities.health,
+        battle.playerHealth + Math.max(1, Math.floor(effectiveAbilities.health * 0.5))
+      );
+      setBattle(previous => previous ? {
+        ...previous,
+        playerHealth: healedHealth,
+        shopShield: Math.floor(effectiveAbilities.health * 0.1),
+        shopShieldTurnsRemaining: 2,
+        logs: [...previous.logs, `你使用治療聖劑，恢復 ${healedHealth - previous.playerHealth} 生命並獲得護盾。`],
+      } : previous);
+      setState(previous => ({
+        ...previous,
+        shopInventory: { ...previous.shopInventory, [item.id]: owned - 1 },
+      }));
+      showToast("治療聖劑生效：恢復 50% 生命並獲得 2 回合護盾");
+      return;
+    }
+    if (item.category === "elixir") {
+      if (!battle || battle.outcome !== "fighting") {
+        showToast("戰鬥藥劑只能在戰鬥中使用");
+        return;
+      }
+      if ((battle.shopElixirIds ?? []).includes(item.id)) {
+        showToast(`${item.name}效果已生效，同一場戰鬥不會重複疊加`);
+        return;
+      }
+      setBattle(previous => previous ? {
+        ...previous,
+        shopElixirIds: [...(previous.shopElixirIds ?? []), item.id],
+        logs: [...previous.logs, `你使用${item.name}。`],
+      } : previous);
+      setState(previous => ({
+        ...previous,
+        shopInventory: { ...previous.shopInventory, [item.id]: owned - 1 },
+      }));
+      showToast(`${item.name}生效，本場戰鬥可持續使用其他不同藥劑`);
+      return;
+    }
+    const healPercent = item.id === "medium-potion" ? 20 : item.id === "large-potion" ? 30 : 10;
+    if (state.currentHealth >= effectiveAbilities.health) {
+      showToast("目前生命值已滿，無法使用治療藥水");
+      return;
+    }
+    const healedHealth = Math.min(
+      effectiveAbilities.health,
+      state.currentHealth + Math.max(1, Math.floor(effectiveAbilities.health * healPercent / 100))
+    );
+    setState(previous => ({
+      ...previous,
+      currentHealth: healedHealth,
+      shopInventory: {
+        ...previous.shopInventory,
+        [item.id]: owned - 1,
+      },
+    }));
+    showToast(`${item.name}生效，恢復 ${healedHealth - state.currentHealth} 生命`);
+  };
+
   const claimAchievement = (achievementId: string) => {
     const status = achievementStatuses.find(
       item => item.achievement.id === achievementId
@@ -9778,14 +10173,22 @@ export default function Home() {
               <span>任務總覽</span>
               {activePage === "dashboard" && <span className="active-dot" />}
             </button>
-            <button
-              className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
-              onClick={() => navigateTo("abilities")}
-            >
-              <ShieldCheck size={18} />
-              <span>角色</span>
-              {activePage === "abilities" && <span className="active-dot" />}
-            </button>
+          <button
+            className={`sidebar-link ${activePage === "abilities" ? "active" : ""}`}
+            onClick={() => navigateTo("abilities")}
+          >
+            <ShieldCheck size={18} />
+            <span>角色</span>
+            {activePage === "abilities" && <span className="active-dot" />}
+          </button>
+          <button
+            className={`sidebar-link ${activePage === "shop" ? "active" : ""}`}
+            onClick={() => navigateTo("shop")}
+          >
+            <ShoppingCart size={18} />
+            <span>冒險商城</span>
+            {activePage === "shop" && <span className="active-dot" />}
+          </button>
             <button
               className={`sidebar-link ${activePage === "monsters" ? "active" : ""}`}
               onClick={() => navigateTo("monsters")}
@@ -9919,6 +10322,7 @@ export default function Home() {
               {
                 {
                   dashboard: "任務總覽",
+                  shop: "冒險商城",
                   abilities: "角色能力與技能",
                   skills: "角色能力與技能",
                   monsters: "怪物與魔王",
@@ -10114,6 +10518,54 @@ export default function Home() {
                 </button>
               </section>
             </>
+          )}
+
+          {activePage === "shop" && (
+            <section className="shop-page">
+              <div className="section-heading shop-heading">
+                <div>
+                  <div className="section-kicker"><ShoppingCart size={15} /> ADVENTURE SHOP</div>
+                  <h2>冒險商城</h2>
+                  <p>用任務與戰鬥累積的金幣，換取成長資源與戰鬥補給。</p>
+                </div>
+                <div className="shop-balance"><span>目前金幣</span><strong><Coins size={16} /> {state.coins.toLocaleString()}</strong></div>
+              </div>
+              <div className="shop-notice panel-card"><Sparkles size={18} /><span>每日提供 6 件隨機裝備，午夜 00:00 會刷新；裝備每日限購一次。治療藥水可在戰鬥外使用，戰鬥藥劑可在戰鬥中不限次數使用，但同種效果不會疊加。</span></div>
+              {([
+                ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
+                ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
+                ["elixir", "ELIXIRS", "戰鬥藥劑", "下一場戰鬥準備使用"],
+                ["equipment", "EQUIPMENT", "裝備商店", "每日 6 件 · 午夜 00:00 刷新 · 不提供寶物、傳說或神話裝備"],
+              ] as const).map(([category, kicker, title, note]) => (
+                <div className="shop-section" key={category}>
+                  <div className="shop-section-heading"><div><span className="mini-kicker">{kicker}</span><h3>{title}</h3></div><small>{note}</small></div>
+                  <div className="shop-grid">
+                    {(category === "equipment"
+                      ? state.shopEquipmentOfferIds
+                          .map(id => SHOP_EQUIPMENT_ITEMS.find(item => item.id === id))
+                          .filter((item): item is ShopItem => Boolean(item))
+                      : SHOP_ITEMS.filter(item => item.category === category)
+                    ).map(item => {
+                      const Icon = item.icon;
+                      const owned = state.shopInventory[item.id] ?? 0;
+                      const equipmentPurchased =
+                        category === "equipment" &&
+                        state.shopEquipmentPurchasedIds.includes(item.id);
+                      return (
+                        <article className="shop-item-card panel-card" key={item.id}>
+                          <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
+                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
+                          <div className="shop-item-actions">
+                            {(category === "potion" || category === "elixir") && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
+                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price || equipmentPurchased}><Coins size={14} /> {equipmentPurchased ? "今日已售出" : "購買"}</button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
           )}
 
           {activePage === "abilities" && (
@@ -12038,11 +12490,11 @@ export default function Home() {
                                 : `出售價 +${item.sellValue} 金幣`}
                             </strong>
                             <button
-                              className={`loot-equip-button ${item.kind === "equipment" && equippedItemIds.includes(item.id) ? "is-equipped" : ""} ${item.kind === "treasure" ? "loot-sell-button" : ""}`}
+                              className={`loot-equip-button ${item.kind === "equipment" && equippedItemIds.includes(item.id) ? "is-equipped" : ""}`}
                               disabled={
-                                item.kind === "equipment" &&
-                                !equippedItemIds.includes(item.id) &&
-                                !canEquipEquipment(item, state.jobClass)
+                                (item.kind === "equipment" &&
+                                  !equippedItemIds.includes(item.id) &&
+                                  !canEquipEquipment(item, state.jobClass))
                               }
                               title={
                                 item.kind === "equipment" &&
@@ -13614,6 +14066,27 @@ export default function Home() {
                     )}
                   </span>
                 )}
+                {(battle.shopElixirIds ?? []).map(elixirId => {
+                  const elixir = SHOP_ITEMS.find(item => item.id === elixirId);
+                  return elixir ? (
+                    <span className="battle-effect battle-effect-buff" key={elixirId}>
+                      <strong>{elixir.name}</strong>
+                      <small>
+                        {elixirId === "strength-elixir"
+                          ? "物理傷害 +10%"
+                          : elixirId === "spell-elixir"
+                            ? "魔法傷害 +10%"
+                            : "受到傷害 -10%"}
+                      </small>
+                    </span>
+                  ) : null;
+                })}
+                {(battle.shopShield ?? 0) > 0 && (battle.shopShieldTurnsRemaining ?? 0) > 0 && (
+                  <span className="battle-effect battle-effect-buff">
+                    <strong>治療聖劑護盾</strong>
+                    <small>可吸收 {battle.shopShield} 點傷害 · 剩餘 {battle.shopShieldTurnsRemaining} 回合</small>
+                  </span>
+                )}
                 {(battle.weaponTimedBuffs ?? []).map(buff => (
                   <span
                     className="battle-effect battle-effect-buff"
@@ -13985,6 +14458,34 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
+                {(SHOP_ITEMS.some(item => item.category === "elixir" && (state.shopInventory[item.id] ?? 0) > 0) ||
+                  (state.shopInventory["holy-elixir"] ?? 0) > 0) && (
+                  <div className="battle-elixir-panel">
+                    <div className="battle-skill-heading">
+                      <strong>商城藥劑</strong>
+                      <small>每場戰鬥不限使用次數；同種效果不會疊加</small>
+                    </div>
+                    <div className="battle-elixir-list">
+                      {SHOP_ITEMS.filter(item => item.category === "elixir" || item.id === "holy-elixir").map(item => {
+                        const owned = state.shopInventory[item.id] ?? 0;
+                        const alreadyActive = item.category === "elixir" && (battle.shopElixirIds ?? []).includes(item.id);
+                        const shieldActive = item.id === "holy-elixir" && (battle.shopShieldTurnsRemaining ?? 0) > 0;
+                        return (
+                          <button
+                            type="button"
+                            className="battle-elixir-button"
+                            key={item.id}
+                            disabled={owned <= 0 || alreadyActive || shieldActive}
+                            onClick={() => useShopItem(item)}
+                          >
+                            <strong>{item.name}</strong>
+                            <small>{alreadyActive || shieldActive ? "效果中" : `持有 ${owned} · 使用`}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {battleSpecialSkills.some(
                   skill => skill.effectType !== "passive"
                 ) && (
@@ -14105,7 +14606,7 @@ export default function Home() {
                       <small>
                         {battle.lootDrop.rarity} ·{" "}
                         {battle.lootDrop.kind === "equipment"
-                          ? battle.lootDrop.bonus
+                          ? `${battle.lootDrop.bonus} · 商城${getShopEquipmentPrice(battle.lootDrop) === null ? "不提供此品質" : `售價 ${getShopEquipmentPrice(battle.lootDrop)} 金幣`}`
                           : `出售可得 ${battle.lootDrop.sellValue} 金幣`}
                         {battle.lootDrop.affixes?.length
                           ? ` · 詞綴：${battle.lootDrop.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
