@@ -61,12 +61,14 @@ import {
   normalizeEquippedItemIds,
   parseLootInventory,
   prepareEquipmentFusion,
+  removeTreasureFromInventory,
   rollLoot,
   rollQuestChestLoot,
   toggleEquippedItemIds,
   type EquipmentItem,
   type LootItem,
   type LootRarity,
+  type TreasureItem,
 } from "../lib/loot";
 import { clampCurrentHealth } from "../lib/health";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
@@ -512,9 +514,30 @@ type ShopItem = {
   name: string;
   description: string;
   price: number;
-  category: "growth" | "potion" | "elixir";
+  category: "growth" | "potion" | "elixir" | "equipment";
   icon: LucideIcon;
+  equipment?: EquipmentItem;
 };
+
+const SHOP_EQUIPMENT_BASE_PRICES: Record<string, number> = {
+  頭盔: 40,
+  護腿: 60,
+  護身符: 50,
+  胸甲: 65,
+  武器: 75,
+};
+const SHOP_EQUIPMENT_RARITY_MULTIPLIERS: Partial<Record<LootRarity, number>> = {
+  普通: 1,
+  精良: 2,
+  稀有: 3,
+  史詩: 5,
+};
+
+function getShopEquipmentPrice(equipment: Pick<EquipmentItem, "slot" | "rarity">) {
+  const basePrice = SHOP_EQUIPMENT_BASE_PRICES[equipment.slot];
+  const multiplier = SHOP_EQUIPMENT_RARITY_MULTIPLIERS[equipment.rarity];
+  return basePrice && multiplier ? basePrice * multiplier : null;
+}
 
 const SHOP_ITEMS: ShopItem[] = [
   {
@@ -590,6 +613,27 @@ const SHOP_ITEMS: ShopItem[] = [
     icon: FlaskConical,
   },
 ];
+
+const SHOP_EQUIPMENT_ITEMS: ShopItem[] = RPG_EQUIPMENT_TEMPLATES.flatMap(
+  (template, index) => {
+    const price = getShopEquipmentPrice(template);
+    if (price === null) return [];
+    const equipment: EquipmentItem = {
+      ...template,
+      id: `shop-template-${index}`,
+      kind: "equipment",
+    };
+    return [{
+      id: `shop-equipment-${index}`,
+      name: equipment.name,
+      description: `${equipment.description}商城可購買，購買後會加入戰利品庫。`,
+      price,
+      category: "equipment" as const,
+      icon: ShieldCheck,
+      equipment,
+    }];
+  }
+);
 
 type AppState = {
   tasks: Task[];
@@ -756,29 +800,9 @@ const lootCategoryMeta: Record<
   武器: { description: "主要攻擊裝備", icon: Sword },
   護腿: { description: "腿部防具", icon: Shuffle },
   護身符: { description: "飾品與特殊加成", icon: Star },
-  寶物: { description: "不可販售的冒險寶物", icon: Gift },
+  寶物: { description: "可出售的冒險寶物", icon: Gift },
 };
 
-const EQUIPMENT_SELL_BASE_PRICES: Record<string, number> = {
-  頭盔: 40,
-  護腿: 60,
-  護身符: 50,
-  胸甲: 65,
-  武器: 75,
-};
-const EQUIPMENT_SELL_RARITY_MULTIPLIERS: Partial<Record<LootRarity, number>> = {
-  普通: 1,
-  精良: 2,
-  稀有: 3,
-  史詩: 5,
-};
-
-function getEquipmentSellValue(item: EquipmentItem): number | null {
-  const basePrice = EQUIPMENT_SELL_BASE_PRICES[item.slot];
-  const rarityMultiplier = EQUIPMENT_SELL_RARITY_MULTIPLIERS[item.rarity];
-  if (!basePrice || !rarityMultiplier) return null;
-  return basePrice * rarityMultiplier;
-}
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
@@ -2395,7 +2419,7 @@ function LootProbabilityGuide({
 
   const renderRarityTable = (kind: "equipment" | "treasure") => (
     <div className={`loot-probability-table-card loot-probability-${kind}`}>
-      <h4>{kind === "equipment" ? "裝備" : "不可販售寶藏"}</h4>
+      <h4>{kind === "equipment" ? "裝備" : "可販售寶藏"}</h4>
       <div className="loot-probability-table-scroll">
         <table>
           <thead>
@@ -2458,7 +2482,7 @@ function LootProbabilityGuide({
           <h3 id="loot-probability-title">戰利品掉落機率</h3>
           <p>
             掉落率以每次挑戰計；下方品質表列出單次挑戰取得該品質物品的機率。
-            寶藏僅供收藏，不可在戰利品庫出售。
+            寶藏可在戰利品庫出售換取金幣。
           </p>
         </div>
       </div>
@@ -2477,7 +2501,7 @@ function LootProbabilityGuide({
                 <b>{formatDropChance(summary.equipmentChance)}</b>
               </span>
               <span>
-                <small>不可販售寶藏</small>
+                <small>可販售寶藏</small>
                 <b>{formatDropChance(summary.treasureChance)}</b>
               </span>
               <span>
@@ -4438,33 +4462,28 @@ export default function Home() {
     });
   };
 
-  const sellEquipment = (item: EquipmentItem) => {
-    const saleValue = getEquipmentSellValue(item);
-    if (saleValue === null) {
-      showToast("普通、精良、稀有與史詩以外的裝備不可販售");
+  const sellTreasure = (item: TreasureItem) => {
+    if (!inventory.some(candidate => candidate.id === item.id && candidate.kind === "treasure")) {
       return;
     }
-    if (equippedItemIds.includes(item.id)) {
-      showToast("請先卸下裝備，再進行販售");
+    if (!window.confirm(`確定出售「${item.name}」？\n可獲得 ${item.sellValue} 金幣`)) {
       return;
     }
-    if (!inventory.some(candidate => candidate.id === item.id && candidate.kind === "equipment")) {
-      return;
-    }
-    if (!window.confirm(`確定出售「${item.name}」？\n可獲得 ${saleValue} 金幣`)) {
-      return;
-    }
-    setState(previous => ({
-      ...previous,
-      coins: previous.coins + saleValue,
-      weeklyStats: addWeeklyStats(
-        previous.weeklyStats,
-        { coinsEarned: saleValue },
-        new Date()
-      ),
-      inventory: previous.inventory.filter(candidate => candidate.id !== item.id),
-    }));
-    showToast(`${item.name}已售出，獲得 ${saleValue} 金幣`);
+    setState(previous => {
+      const sale = removeTreasureFromInventory(previous.inventory, item.id);
+      if (!sale.treasure) return previous;
+      return {
+        ...previous,
+        coins: previous.coins + sale.coinsEarned,
+        weeklyStats: addWeeklyStats(
+          previous.weeklyStats,
+          { coinsEarned: sale.coinsEarned },
+          new Date()
+        ),
+        inventory: sale.inventory,
+      };
+    });
+    showToast(`${item.name}已售出，獲得 ${item.sellValue} 金幣`);
   };
 
   const toggleFusionMaterial = (item: EquipmentItem) => {
@@ -9794,6 +9813,19 @@ export default function Home() {
     if (!window.confirm(`確定購買「${item.name}」？\n價格：${item.price} 金幣`)) {
       return;
     }
+    if (item.category === "equipment" && item.equipment) {
+      const purchasedEquipment: EquipmentItem = {
+        ...item.equipment,
+        id: `shop-purchase-${item.equipment.id}-${Date.now()}`,
+      };
+      setState(previous => ({
+        ...previous,
+        coins: previous.coins - item.price,
+        inventory: [...previous.inventory, purchasedEquipment],
+      }));
+      showToast(`${item.name}已購買，已加入戰利品庫`);
+      return;
+    }
     setState(previous => ({
       ...previous,
       coins: previous.coins - item.price,
@@ -10398,17 +10430,21 @@ export default function Home() {
                 ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
                 ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
                 ["elixir", "ELIXIRS", "戰鬥藥劑", "下一場戰鬥準備使用"],
+                ["equipment", "EQUIPMENT", "裝備商店", "不提供寶物、傳說或神話裝備"],
               ] as const).map(([category, kicker, title, note]) => (
                 <div className="shop-section" key={category}>
                   <div className="shop-section-heading"><div><span className="mini-kicker">{kicker}</span><h3>{title}</h3></div><small>{note}</small></div>
                   <div className="shop-grid">
-                    {SHOP_ITEMS.filter(item => item.category === category).map(item => {
+                    {(category === "equipment"
+                      ? SHOP_EQUIPMENT_ITEMS
+                      : SHOP_ITEMS.filter(item => item.category === category)
+                    ).map(item => {
                       const Icon = item.icon;
                       const owned = state.shopInventory[item.id] ?? 0;
                       return (
                         <article className="shop-item-card panel-card" key={item.id}>
                           <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
-                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
+                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
                           <div className="shop-item-actions">
                             {(category === "potion" || category === "elixir") && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
                             <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price}><Coins size={14} /> 購買</button>
@@ -12081,7 +12117,7 @@ export default function Home() {
                     <span className="mini-kicker">ACTIVE LOADOUT</span>
                     <h3>裝備欄位</h3>
                     <p>
-                      五個部位各可裝備一件；同部位換裝會自動替換，普通至史詩裝備可出售換取金幣。
+                      五個部位各可裝備一件；同部位換裝會自動替換，寶藏可出售換取金幣。
                     </p>
                   </div>
                   <strong>
@@ -12341,12 +12377,11 @@ export default function Home() {
                             <strong>
                               {item.kind === "equipment"
                                 ? item.bonus
-                                : "不可販售寶物"}
+                                : `出售價 +${item.sellValue} 金幣`}
                             </strong>
                             <button
                               className={`loot-equip-button ${item.kind === "equipment" && equippedItemIds.includes(item.id) ? "is-equipped" : ""}`}
                               disabled={
-                                item.kind === "treasure" ||
                                 (item.kind === "equipment" &&
                                   !equippedItemIds.includes(item.id) &&
                                   !canEquipEquipment(item, state.jobClass))
@@ -12360,7 +12395,7 @@ export default function Home() {
                               onClick={() =>
                                 item.kind === "equipment"
                                   ? toggleEquipItem(item)
-                                  : undefined
+                                  : sellTreasure(item)
                               }
                             >
                               {item.kind === "equipment"
@@ -12374,30 +12409,8 @@ export default function Home() {
                                         )
                                       ? "替換裝備"
                                       : "裝備"
-                                : "不可販售"}
+                                : `出售 +${item.sellValue} 金幣`}
                             </button>
-                            {item.kind === "equipment" && (
-                              <button
-                                type="button"
-                                className="loot-compare-button loot-sell-button"
-                                disabled={
-                                  equippedItemIds.includes(item.id) ||
-                                  getEquipmentSellValue(item) === null
-                                }
-                                onClick={() => sellEquipment(item)}
-                                title={
-                                  equippedItemIds.includes(item.id)
-                                    ? "請先卸下裝備"
-                                    : getEquipmentSellValue(item) === null
-                                      ? "傳說與神話裝備不可販售"
-                                      : undefined
-                                }
-                              >
-                                {getEquipmentSellValue(item) === null
-                                  ? "不可販售"
-                                  : `出售 +${getEquipmentSellValue(item)} 金幣`}
-                              </button>
-                            )}
                             {item.kind === "equipment" &&
                             !equippedItemIds.includes(item.id) &&
                             canEquipEquipment(item, state.jobClass) ? (
@@ -14483,8 +14496,8 @@ export default function Home() {
                       <small>
                         {battle.lootDrop.rarity} ·{" "}
                         {battle.lootDrop.kind === "equipment"
-                          ? `${battle.lootDrop.bonus} · ${getEquipmentSellValue(battle.lootDrop) === null ? "不可販售" : `可售 ${getEquipmentSellValue(battle.lootDrop)} 金幣`}`
-                          : "寶藏不可販售"}
+                          ? `${battle.lootDrop.bonus} · 商城${getShopEquipmentPrice(battle.lootDrop) === null ? "不提供此品質" : `售價 ${getShopEquipmentPrice(battle.lootDrop)} 金幣`}`
+                          : `出售可得 ${battle.lootDrop.sellValue} 金幣`}
                         {battle.lootDrop.affixes?.length
                           ? ` · 詞綴：${battle.lootDrop.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
                           : ""}
