@@ -635,11 +635,59 @@ const SHOP_EQUIPMENT_ITEMS: ShopItem[] = RPG_EQUIPMENT_TEMPLATES.flatMap(
   }
 );
 
+const DAILY_SHOP_EQUIPMENT_COUNT = 6;
+const DAILY_SHOP_RARITY_CHANCES: Array<[LootRarity, number]> = [
+  ["普通", 55],
+  ["精良", 30],
+  ["稀有", 10],
+  ["史詩", 5],
+];
+
+function getShopDayKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function createDailyShopEquipmentOfferIds(dayKey: string) {
+  let seed = Array.from(dayKey).reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    2166136261
+  );
+  const nextRandom = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const selectedIds: string[] = [];
+  for (let index = 0; index < DAILY_SHOP_EQUIPMENT_COUNT; index += 1) {
+    const rarityRoll = nextRandom() * 100;
+    let cumulative = 0;
+    let rarity: LootRarity = "普通";
+    for (const [candidateRarity, chance] of DAILY_SHOP_RARITY_CHANCES) {
+      cumulative += chance;
+      if (rarityRoll < cumulative) {
+        rarity = candidateRarity;
+        break;
+      }
+    }
+    const sameRarity = SHOP_EQUIPMENT_ITEMS.filter(
+      item => item.equipment?.rarity === rarity && !selectedIds.includes(item.id)
+    );
+    const available = sameRarity.length
+      ? sameRarity
+      : SHOP_EQUIPMENT_ITEMS.filter(item => !selectedIds.includes(item.id));
+    if (!available.length) break;
+    selectedIds.push(available[Math.floor(nextRandom() * available.length)].id);
+  }
+  return selectedIds;
+}
+
 type AppState = {
   tasks: Task[];
   rewards: Reward[];
   rewardRedemptions: RewardRedemption[];
   shopInventory: Record<string, number>;
+  shopEquipmentPeriodKey: string;
+  shopEquipmentOfferIds: string[];
+  shopEquipmentPurchasedIds: string[];
   weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
@@ -1800,6 +1848,9 @@ const initialState: AppState = {
   rewards: defaultRewards,
   rewardRedemptions: [],
   shopInventory: {},
+  shopEquipmentPeriodKey: getShopDayKey(new Date()),
+  shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(getShopDayKey(new Date())),
+  shopEquipmentPurchasedIds: [],
   weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
@@ -1997,6 +2048,28 @@ function loadState(): AppState {
       typeof parsed.dailyResetMinutes === "number"
         ? normalizeResetMinutes(parsed.dailyResetMinutes)
         : initialState.dailyResetMinutes;
+    const shopEquipmentPeriodKey = getShopDayKey(new Date());
+    const storedShopPeriodKey =
+      typeof parsed.shopEquipmentPeriodKey === "string"
+        ? parsed.shopEquipmentPeriodKey
+        : "";
+    const storedShopOfferIds = Array.isArray(parsed.shopEquipmentOfferIds)
+      ? parsed.shopEquipmentOfferIds.filter(id =>
+          SHOP_EQUIPMENT_ITEMS.some(item => item.id === id)
+        )
+      : [];
+    const shopEquipmentOfferIds =
+      storedShopPeriodKey === shopEquipmentPeriodKey &&
+      storedShopOfferIds.length === DAILY_SHOP_EQUIPMENT_COUNT
+        ? storedShopOfferIds
+        : createDailyShopEquipmentOfferIds(shopEquipmentPeriodKey);
+    const shopEquipmentPurchasedIds =
+      storedShopPeriodKey === shopEquipmentPeriodKey &&
+      Array.isArray(parsed.shopEquipmentPurchasedIds)
+        ? parsed.shopEquipmentPurchasedIds.filter(id =>
+            shopEquipmentOfferIds.includes(id)
+          )
+        : [];
     return {
       ...initialState,
       ...parsed,
@@ -2076,6 +2149,9 @@ function loadState(): AppState {
       rewards: Array.isArray(parsed.rewards) ? parsed.rewards : defaultRewards,
       rewardRedemptions: normalizeRewardRedemptions(parsed.rewardRedemptions),
       shopInventory: normalizeShopInventory(parsed.shopInventory),
+      shopEquipmentPeriodKey,
+      shopEquipmentOfferIds,
+      shopEquipmentPurchasedIds,
       weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
@@ -3836,6 +3912,22 @@ export default function Home() {
       document.removeEventListener("visibilitychange", updateClock);
     };
   }, []);
+
+  useEffect(() => {
+    const refreshDailyShop = () => {
+      const periodKey = getShopDayKey(new Date());
+      if (state.shopEquipmentPeriodKey === periodKey) return;
+      setState(previous => ({
+        ...previous,
+        shopEquipmentPeriodKey: periodKey,
+        shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(periodKey),
+        shopEquipmentPurchasedIds: [],
+      }));
+    };
+    refreshDailyShop();
+    const interval = window.setInterval(refreshDailyShop, 1000);
+    return () => window.clearInterval(interval);
+  }, [state.shopEquipmentPeriodKey]);
 
   useEffect(() => {
     const running = state.runningTimer;
@@ -9806,6 +9898,16 @@ export default function Home() {
   };
 
   const buyShopItem = (item: ShopItem) => {
+    if (item.category === "equipment") {
+      if (!state.shopEquipmentOfferIds.includes(item.id)) {
+        showToast("這件裝備不是今日商城商品，請等待午夜刷新");
+        return;
+      }
+      if (state.shopEquipmentPurchasedIds.includes(item.id)) {
+        showToast("這件裝備今日已售出，請等待午夜刷新");
+        return;
+      }
+    }
     if (state.coins < item.price) {
       showToast(`金幣不足，還需要 ${item.price - state.coins} 金幣`);
       return;
@@ -9822,6 +9924,9 @@ export default function Home() {
         ...previous,
         coins: previous.coins - item.price,
         inventory: [...previous.inventory, purchasedEquipment],
+        shopEquipmentPurchasedIds: previous.shopEquipmentPurchasedIds.includes(item.id)
+          ? previous.shopEquipmentPurchasedIds
+          : [...previous.shopEquipmentPurchasedIds, item.id],
       }));
       showToast(`${item.name}已購買，已加入戰利品庫`);
       return;
@@ -10425,29 +10530,34 @@ export default function Home() {
                 </div>
                 <div className="shop-balance"><span>目前金幣</span><strong><Coins size={16} /> {state.coins.toLocaleString()}</strong></div>
               </div>
-              <div className="shop-notice panel-card"><Sparkles size={18} /><span>成長商品會立即加入角色資源；治療藥水可在戰鬥外使用，戰鬥藥劑可在戰鬥中不限次數使用，但同種效果不會疊加。</span></div>
+              <div className="shop-notice panel-card"><Sparkles size={18} /><span>每日提供 6 件隨機裝備，午夜 00:00 會刷新；裝備每日限購一次。治療藥水可在戰鬥外使用，戰鬥藥劑可在戰鬥中不限次數使用，但同種效果不會疊加。</span></div>
               {([
                 ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
                 ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
                 ["elixir", "ELIXIRS", "戰鬥藥劑", "下一場戰鬥準備使用"],
-                ["equipment", "EQUIPMENT", "裝備商店", "不提供寶物、傳說或神話裝備"],
+                ["equipment", "EQUIPMENT", "裝備商店", "每日 6 件 · 午夜 00:00 刷新 · 不提供寶物、傳說或神話裝備"],
               ] as const).map(([category, kicker, title, note]) => (
                 <div className="shop-section" key={category}>
                   <div className="shop-section-heading"><div><span className="mini-kicker">{kicker}</span><h3>{title}</h3></div><small>{note}</small></div>
                   <div className="shop-grid">
                     {(category === "equipment"
-                      ? SHOP_EQUIPMENT_ITEMS
+                      ? state.shopEquipmentOfferIds
+                          .map(id => SHOP_EQUIPMENT_ITEMS.find(item => item.id === id))
+                          .filter((item): item is ShopItem => Boolean(item))
                       : SHOP_ITEMS.filter(item => item.category === category)
                     ).map(item => {
                       const Icon = item.icon;
                       const owned = state.shopInventory[item.id] ?? 0;
+                      const equipmentPurchased =
+                        category === "equipment" &&
+                        state.shopEquipmentPurchasedIds.includes(item.id);
                       return (
                         <article className="shop-item-card panel-card" key={item.id}>
                           <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
                           <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
                           <div className="shop-item-actions">
                             {(category === "potion" || category === "elixir") && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
-                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price}><Coins size={14} /> 購買</button>
+                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price || equipmentPurchased}><Coins size={14} /> {equipmentPurchased ? "今日已售出" : "購買"}</button>
                           </div>
                         </article>
                       );
