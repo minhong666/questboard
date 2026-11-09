@@ -519,6 +519,9 @@ type ShopItem = {
   equipment?: EquipmentItem;
 };
 
+const EXPERIENCE_BOTTLE_ID = "experience-bottle";
+const EXPERIENCE_BOTTLE_DAILY_LIMIT = 3;
+
 const SHOP_EQUIPMENT_BASE_PRICES: Record<string, number> = {
   頭盔: 40,
   護腿: 60,
@@ -544,7 +547,7 @@ const SHOP_ITEMS: ShopItem[] = [
     id: "ability-point",
     name: "能力點數 ×1",
     description: "立即獲得 1 點能力點，可自由分配至角色屬性。",
-    price: 200,
+    price: 150,
     category: "growth",
     icon: Brain,
   },
@@ -552,9 +555,17 @@ const SHOP_ITEMS: ShopItem[] = [
     id: "skill-point",
     name: "技能點數 ×1",
     description: "立即獲得 1 點技能升級點，可強化已解鎖技能。",
-    price: 200,
+    price: 250,
     category: "growth",
     icon: Sparkles,
+  },
+  {
+    id: EXPERIENCE_BOTTLE_ID,
+    name: "經驗瓶",
+    description: "使用後立即升級 1 等。每日限購 3 瓶。",
+    price: 500,
+    category: "growth",
+    icon: FlaskConical,
   },
   {
     id: "small-potion",
@@ -688,6 +699,8 @@ type AppState = {
   shopEquipmentPeriodKey: string;
   shopEquipmentOfferIds: string[];
   shopEquipmentPurchasedIds: string[];
+  shopExperienceBottlePeriodKey: string;
+  shopExperienceBottlePurchasedCount: number;
   weeklyStats: WeeklyStats;
   timerActivities: TimerActivity[];
   runningTimer: RunningTimer | null;
@@ -1851,6 +1864,8 @@ const initialState: AppState = {
   shopEquipmentPeriodKey: getShopDayKey(new Date()),
   shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(getShopDayKey(new Date())),
   shopEquipmentPurchasedIds: [],
+  shopExperienceBottlePeriodKey: getShopDayKey(new Date()),
+  shopExperienceBottlePurchasedCount: 0,
   weeklyStats: createWeeklyStats(new Date()),
   timerActivities: [],
   runningTimer: null,
@@ -2070,6 +2085,20 @@ function loadState(): AppState {
             shopEquipmentOfferIds.includes(id)
           )
         : [];
+    const storedExperienceBottlePeriodKey =
+      typeof parsed.shopExperienceBottlePeriodKey === "string"
+        ? parsed.shopExperienceBottlePeriodKey
+        : "";
+    const shopExperienceBottlePurchasedCount =
+      storedExperienceBottlePeriodKey === shopEquipmentPeriodKey
+        ? Math.min(
+            EXPERIENCE_BOTTLE_DAILY_LIMIT,
+            Math.max(
+              0,
+              Math.floor(Number(parsed.shopExperienceBottlePurchasedCount) || 0)
+            )
+          )
+        : 0;
     return {
       ...initialState,
       ...parsed,
@@ -2152,6 +2181,8 @@ function loadState(): AppState {
       shopEquipmentPeriodKey,
       shopEquipmentOfferIds,
       shopEquipmentPurchasedIds,
+      shopExperienceBottlePeriodKey: shopEquipmentPeriodKey,
+      shopExperienceBottlePurchasedCount,
       weeklyStats: normalizeWeeklyStats(parsed.weeklyStats, new Date()),
     };
   } catch {
@@ -3916,18 +3947,24 @@ export default function Home() {
   useEffect(() => {
     const refreshDailyShop = () => {
       const periodKey = getShopDayKey(new Date());
-      if (state.shopEquipmentPeriodKey === periodKey) return;
+      if (
+        state.shopEquipmentPeriodKey === periodKey &&
+        state.shopExperienceBottlePeriodKey === periodKey
+      )
+        return;
       setState(previous => ({
         ...previous,
         shopEquipmentPeriodKey: periodKey,
         shopEquipmentOfferIds: createDailyShopEquipmentOfferIds(periodKey),
         shopEquipmentPurchasedIds: [],
+        shopExperienceBottlePeriodKey: periodKey,
+        shopExperienceBottlePurchasedCount: 0,
       }));
     };
     refreshDailyShop();
     const interval = window.setInterval(refreshDailyShop, 1000);
     return () => window.clearInterval(interval);
-  }, [state.shopEquipmentPeriodKey]);
+  }, [state.shopEquipmentPeriodKey, state.shopExperienceBottlePeriodKey]);
 
   useEffect(() => {
     const running = state.runningTimer;
@@ -9898,6 +9935,13 @@ export default function Home() {
   };
 
   const buyShopItem = (item: ShopItem) => {
+    if (
+      item.id === EXPERIENCE_BOTTLE_ID &&
+      state.shopExperienceBottlePurchasedCount >= EXPERIENCE_BOTTLE_DAILY_LIMIT
+    ) {
+      showToast("經驗瓶今日已達 3 瓶購買上限，請明日再來");
+      return;
+    }
     if (item.category === "equipment") {
       if (!state.shopEquipmentOfferIds.includes(item.id)) {
         showToast("這件裝備不是今日商城商品，請等待午夜刷新");
@@ -9931,6 +9975,20 @@ export default function Home() {
       showToast(`${item.name}已購買，已加入戰利品庫`);
       return;
     }
+    if (item.id === EXPERIENCE_BOTTLE_ID) {
+      setState(previous => ({
+        ...previous,
+        coins: previous.coins - item.price,
+        shopInventory: {
+          ...previous.shopInventory,
+          [item.id]: (previous.shopInventory[item.id] ?? 0) + 1,
+        },
+        shopExperienceBottlePurchasedCount:
+          previous.shopExperienceBottlePurchasedCount + 1,
+      }));
+      showToast("經驗瓶已購買，可在商城立即使用");
+      return;
+    }
     setState(previous => ({
       ...previous,
       coins: previous.coins - item.price,
@@ -9955,6 +10013,28 @@ export default function Home() {
     const owned = state.shopInventory[item.id] ?? 0;
     if (owned <= 0) {
       showToast(`目前沒有${item.name}`);
+      return;
+    }
+    if (item.id === EXPERIENCE_BOTTLE_ID) {
+      const currentLevel = getPlayerStats(state.totalXp).level;
+      setState(previous => {
+        const previousOwned = previous.shopInventory[item.id] ?? 0;
+        if (previousOwned <= 0) return previous;
+        const previousLevel = getPlayerStats(previous.totalXp).level;
+        const targetXp = getXpForLevel(previousLevel + 1);
+        const leveledState = applyExperienceToState(
+          previous,
+          Math.max(0, targetXp - previous.totalXp)
+        );
+        return {
+          ...leveledState,
+          shopInventory: {
+            ...leveledState.shopInventory,
+            [item.id]: previousOwned - 1,
+          },
+        };
+      });
+      showToast(`經驗瓶生效：立即升級至 Lv.${currentLevel + 1}`);
       return;
     }
     if (item.id === "holy-elixir") {
@@ -10548,16 +10628,21 @@ export default function Home() {
                     ).map(item => {
                       const Icon = item.icon;
                       const owned = state.shopInventory[item.id] ?? 0;
+                      const isExperienceBottle = item.id === EXPERIENCE_BOTTLE_ID;
+                      const bottleLimitReached =
+                        isExperienceBottle &&
+                        state.shopExperienceBottlePurchasedCount >=
+                          EXPERIENCE_BOTTLE_DAILY_LIMIT;
                       const equipmentPurchased =
                         category === "equipment" &&
                         state.shopEquipmentPurchasedIds.includes(item.id);
                       return (
                         <article className="shop-item-card panel-card" key={item.id}>
                           <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
-                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
+                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}{category === "equipment" && item.equipment && <span className="shop-rarity-label">{item.equipment.rarity}</span>}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : isExperienceBottle ? <span className="shop-owned">持有 {owned} · 今日已購 {state.shopExperienceBottlePurchasedCount}/{EXPERIENCE_BOTTLE_DAILY_LIMIT}</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
                           <div className="shop-item-actions">
-                            {(category === "potion" || category === "elixir") && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
-                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price || equipmentPurchased}><Coins size={14} /> {equipmentPurchased ? "今日已售出" : "購買"}</button>
+                            {(category === "potion" || category === "elixir" || isExperienceBottle) && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
+                            <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price || equipmentPurchased || bottleLimitReached}><Coins size={14} /> {equipmentPurchased ? "今日已售出" : bottleLimitReached ? "今日已達上限" : "購買"}</button>
                           </div>
                         </article>
                       );
