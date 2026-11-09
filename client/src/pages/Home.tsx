@@ -146,6 +146,7 @@ import {
 } from "../lib/skill-upgrades";
 import {
   ACHIEVEMENTS,
+  getAchievementTitle,
   getAchievementProgress,
   type AchievementContext,
 } from "../lib/achievements";
@@ -744,6 +745,7 @@ type AppState = {
   skillUpgradeLevels: SkillUpgradeLevels;
   specialization: SpecializationId;
   achievementClaimedIds: string[];
+  equippedTitleId: string | null;
   dailyResetMinutes: number;
   pomodoroSettings: PomodoroSettings;
   boardRefreshPeriodKey?: string;
@@ -1910,6 +1912,7 @@ const initialState: AppState = {
   skillUpgradeLevels: {},
   specialization: "warrior-guardian",
   achievementClaimedIds: [],
+  equippedTitleId: null,
   dailyResetMinutes: 240,
   pomodoroSettings: defaultPomodoroSettings,
   boardRefreshPeriodKey: getRepeatPeriodKey("daily", new Date(), 240),
@@ -2179,6 +2182,13 @@ function loadState(): AppState {
             (id): id is string => typeof id === "string"
           )
         : [],
+      equippedTitleId:
+        typeof parsed.equippedTitleId === "string" &&
+        ACHIEVEMENTS.some(achievement => achievement.id === parsed.equippedTitleId) &&
+        Array.isArray(parsed.achievementClaimedIds) &&
+        parsed.achievementClaimedIds.includes(parsed.equippedTitleId)
+          ? parsed.equippedTitleId
+          : null,
       dailyResetMinutes,
       pomodoroSettings: normalizePomodoroSettings(parsed.pomodoroSettings),
       boardRefreshPeriodKey:
@@ -3542,6 +3552,9 @@ export default function Home() {
     progress: getAchievementProgress(achievement, achievementContext),
     claimed: claimedAchievementIds.includes(achievement.id),
   }));
+  const equippedTitle = ACHIEVEMENTS.find(
+    achievement => achievement.id === state.equippedTitleId
+  );
   const nextSkillUnlockThreshold = getNextSkillUnlockThreshold(
     state.jobClass,
     state.abilities.strength,
@@ -10163,14 +10176,6 @@ export default function Home() {
     );
     setState(previous => ({
       ...previous,
-      coins: previous.coins + achievement.rewardCoins,
-      weeklyStats: addWeeklyStats(
-        previous.weeklyStats,
-        { coinsEarned: achievement.rewardCoins },
-        new Date()
-      ),
-      skillUpgradePoints:
-        previous.skillUpgradePoints + (achievement.rewardSkillPoints ?? 0),
       achievementClaimedIds: normalizeAchievementIds([
         ...(Array.isArray(previous.achievementClaimedIds)
           ? previous.achievementClaimedIds
@@ -10179,12 +10184,14 @@ export default function Home() {
       ]),
     }));
     showToast(
-      `成就「${achievement.title}」已領取：+${achievement.rewardCoins} 金幣${
-        achievement.rewardSkillPoints
-          ? `、+${achievement.rewardSkillPoints} 技能點`
-          : ""
-      }`
+      `成就「${achievement.title}」已領取：稱號「${getAchievementTitle(achievement)}」已解鎖`
     );
+  };
+
+  const equipAchievementTitle = (achievementId: string | null) => {
+    if (achievementId && !claimedAchievementIds.includes(achievementId)) return;
+    setState(previous => ({ ...previous, equippedTitleId: achievementId }));
+    showToast(achievementId ? "稱號已佩戴" : "已卸下稱號");
   };
 
   const selectSpecialization = (specializationId: SpecializationId) => {
@@ -10419,7 +10426,9 @@ export default function Home() {
           <div className="avatar avatar-small">{userInitials}</div>
           <div className="sidebar-user-copy">
             <strong>{state.userName}</strong>
-            <span>任務騎士 · Lv.{player.level}</span>
+            <span>
+              {equippedTitle ? `「${equippedTitle.title}」 · ` : ""}任務騎士 · Lv.{player.level}
+            </span>
           </div>
           <button
             className="icon-button muted-button"
@@ -10586,6 +10595,7 @@ export default function Home() {
                         <Check size={11} />
                       </span>
                     </div>
+                    {equippedTitle && <div className="profile-title">稱號・{equippedTitle.title}</div>}
                     <div className="level-line">
                       <span>LV. {String(player.level).padStart(2, "0")}</span>
                       <span className="level-next">
@@ -12199,7 +12209,7 @@ export default function Home() {
                   </div>
                   <h2>成就里程碑</h2>
                   <p>
-                    完成任務、專注計時與戰鬥挑戰，解鎖成就並領取額外獎勵；里程碑由所有存檔共用。
+                    完成任務、專注計時與戰鬥挑戰，解鎖專屬稱號並選擇佩戴；里程碑由所有存檔共用。
                   </p>
                 </div>
                 <div className="achievement-trophy-count">
@@ -12231,14 +12241,10 @@ export default function Home() {
                   </strong>
                 </div>
                 <div className="achievement-summary-card panel-card">
-                  <span>可領取金幣</span>
+                  <span>已解鎖稱號</span>
                   <strong>
                     {achievementStatuses
-                      .filter(item => item.progress.completed && !item.claimed)
-                      .reduce(
-                        (total, item) => total + item.achievement.rewardCoins,
-                        0
-                      )}
+                      .filter(item => item.claimed).length}
                   </strong>
                 </div>
               </div>
@@ -12278,14 +12284,20 @@ export default function Home() {
                           <span style={{ width: `${progressPercent}%` }} />
                         </div>
                         <div className="achievement-reward-row">
-                          <span>
-                            獎勵：+{achievement.rewardCoins} 金幣
-                            {achievement.rewardSkillPoints
-                              ? ` · +${achievement.rewardSkillPoints} 技能點`
-                              : ""}
-                          </span>
+                          <span>稱號：{getAchievementTitle(achievement)}</span>
                           {claimed ? (
-                            <strong>已領取</strong>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                equipAchievementTitle(
+                                  state.equippedTitleId === achievement.id
+                                    ? null
+                                    : achievement.id
+                                )
+                              }
+                            >
+                              {state.equippedTitleId === achievement.id ? "卸下稱號" : "佩戴稱號"}
+                            </button>
                           ) : progress.completed ? (
                             <button
                               type="button"
@@ -14949,6 +14961,7 @@ export default function Home() {
                         ? ` · ${currentSpecialization.name}`
                         : " · 專精未解鎖"}
                     </span>
+                    {equippedTitle && <small className="adventurer-equipped-title">佩戴稱號：{equippedTitle.title}</small>}
                   </div>
                   <div className="adventurer-title-badge">
                     {player.level >= 50

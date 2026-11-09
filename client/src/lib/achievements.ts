@@ -15,6 +15,8 @@ export type AchievementContext = {
 export type AchievementDefinition = {
   id: string;
   title: string;
+  /** 完成成就後解鎖的可佩戴稱號；舊成就資料會回退使用 title。 */
+  rewardTitle?: string;
   description: string;
   category: "任務" | "成長" | "專注" | "戰鬥" | "收藏";
   goal: number;
@@ -54,6 +56,7 @@ function createMilestoneSeries(series: MilestoneSeries): AchievementDefinition[]
   return series.goals.map((goal, index) => ({
     id: `${series.prefix}-${goal}`,
     title: series.names[index],
+    rewardTitle: series.names[index],
     description: `累積${goal}${series.unit}。`,
     category: series.category,
     goal,
@@ -64,6 +67,9 @@ function createMilestoneSeries(series: MilestoneSeries): AchievementDefinition[]
     formatProgress: series.formatProgress,
   }));
 }
+
+export const getAchievementTitle = (achievement: AchievementDefinition) =>
+  achievement.rewardTitle ?? achievement.title;
 
 const EXTRA_ACHIEVEMENTS: AchievementDefinition[] = [
   ...createMilestoneSeries({
