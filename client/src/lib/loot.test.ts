@@ -282,7 +282,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("力量 +3");
+    expect(item.bonus).toBe("力量 +3 · 暴擊率 +4% · 暴擊傷害 +6%");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");
