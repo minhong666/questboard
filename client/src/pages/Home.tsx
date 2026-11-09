@@ -28,6 +28,7 @@ import {
   Menu,
   Moon,
   Pencil,
+  Palette,
   Plus,
   RotateCcw,
   Search,
@@ -475,6 +476,22 @@ function tickBattleStatuses(statuses: BattleStatus[]) {
     })
     .filter(status => status.turnsRemaining > 0);
   return { damage, frozen, controlLabel, labels, statuses: nextStatuses };
+}
+
+const BACKGROUND_THEME_STORAGE_KEY = "questboard-background-theme";
+const BACKGROUND_THEMES = [
+  { id: "midnight", label: "夜幕藍", color: "#0b1020" },
+  { id: "forest", label: "森林綠", color: "#0b1e1a" },
+  { id: "ember", label: "熔岩紅", color: "#24151a" },
+  { id: "ocean", label: "深海青", color: "#0a1c2a" },
+  { id: "twilight", label: "暮光紫", color: "#1d1630" },
+] as const;
+type BackgroundThemeId = (typeof BACKGROUND_THEMES)[number]["id"];
+
+function normalizeBackgroundTheme(value: unknown): BackgroundThemeId {
+  return BACKGROUND_THEMES.some(theme => theme.id === value)
+    ? (value as BackgroundThemeId)
+    : "midnight";
 }
 
 type Task = {
@@ -2707,6 +2724,14 @@ export default function Home() {
   const [battleFx, setBattleFx] = useState<BattleFx | null>(null);
   const battleFxIdRef = useRef(0);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
+  const [backgroundThemeId, setBackgroundThemeId] = useState<BackgroundThemeId>(
+    () => {
+      if (typeof window === "undefined") return "midnight";
+      return normalizeBackgroundTheme(
+        window.localStorage.getItem(BACKGROUND_THEME_STORAGE_KEY)
+      );
+    }
+  );
   const [selectedLootCategory, setSelectedLootCategory] =
     useState<LootCategory>("頭盔");
   const [selectedEquipmentForComparison, setSelectedEquipmentForComparison] =
@@ -2725,6 +2750,31 @@ export default function Home() {
   const [setupJobClass, setSetupJobClass] = useState<JobClass>("warrior");
   const [setupOpen, setSetupOpen] = useState(() => loadProfiles().length === 0);
   const [newProfileSetupOpen, setNewProfileSetupOpen] = useState(false);
+
+  const backgroundTheme =
+    BACKGROUND_THEMES.find(theme => theme.id === backgroundThemeId) ??
+    BACKGROUND_THEMES[0];
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--quest-app-bg",
+      backgroundTheme.color
+    );
+    window.localStorage.setItem(
+      BACKGROUND_THEME_STORAGE_KEY,
+      backgroundTheme.id
+    );
+  }, [backgroundTheme]);
+
+  const cycleBackgroundTheme = () => {
+    const currentIndex = BACKGROUND_THEMES.findIndex(
+      theme => theme.id === backgroundThemeId
+    );
+    const nextTheme =
+      BACKGROUND_THEMES[(currentIndex + 1) % BACKGROUND_THEMES.length];
+    setBackgroundThemeId(nextTheme.id);
+    showToast(`背景已切換為「${nextTheme.label}」`);
+  };
 
   const makeFreshState = (name: string, jobClass: JobClass): AppState => ({
     ...initialState,
@@ -10412,6 +10462,15 @@ export default function Home() {
             </strong>
           </div>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="background-theme-button"
+              onClick={cycleBackgroundTheme}
+              aria-label={`切換背景顏色，目前為${backgroundTheme.label}`}
+              title={`背景：${backgroundTheme.label}（點擊切換）`}
+            >
+              <Palette size={14} /> <span>背景</span>
+            </button>
             <button
               type="button"
               className="save-access-button"

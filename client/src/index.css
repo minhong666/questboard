@@ -11,6 +11,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --bg: #0b1020;
+  --quest-app-bg: #0b1020;
   --panel: #121a2d;
   --panel-2: #151f36;
   --panel-3: #192640;
@@ -64,7 +65,7 @@ button:disabled {
       rgba(76, 82, 156, 0.2),
       transparent 31rem
     ),
-    #0b1020;
+    var(--quest-app-bg);
   display: flex;
 }
 .quest-sidebar {
@@ -332,6 +333,25 @@ button:disabled {
   align-items: center;
   gap: 15px;
 }
+.background-theme-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  color: #c6b9ff;
+  border: 1px solid rgba(139, 124, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(139, 124, 255, 0.08);
+  font-size: 9px;
+  font-weight: 750;
+  transition: 0.18s ease;
+}
+.background-theme-button:hover {
+  color: #f0edff;
+  border-color: rgba(176, 168, 255, 0.58);
+  background: rgba(139, 124, 255, 0.18);
+}
+.background-theme-button svg { color: #b0a8ff; }
 .date-chip {
   display: flex;
   align-items: center;
@@ -4904,6 +4924,12 @@ h2 {
   }
   .refresh-time-button {
     padding: 7px;
+  }
+  .background-theme-button {
+    padding: 7px;
+  }
+  .background-theme-button span {
+    display: none;
   }
   .refresh-time-button span {
     display: none;
