@@ -4595,9 +4595,6 @@ export default function Home() {
     if (!inventory.some(candidate => candidate.id === item.id && candidate.kind === "treasure")) {
       return;
     }
-    if (!window.confirm(`確定出售「${item.name}」？\n可獲得 ${item.sellValue} 金幣`)) {
-      return;
-    }
     setState(previous => {
       const sale = removeTreasureFromInventory(previous.inventory, item.id);
       if (!sale.treasure) return previous;
@@ -9954,9 +9951,6 @@ export default function Home() {
     }
     if (state.coins < item.price) {
       showToast(`金幣不足，還需要 ${item.price - state.coins} 金幣`);
-      return;
-    }
-    if (!window.confirm(`確定購買「${item.name}」？\n價格：${item.price} 金幣`)) {
       return;
     }
     if (item.category === "equipment" && item.equipment) {
