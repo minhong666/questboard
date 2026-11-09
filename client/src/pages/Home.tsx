@@ -800,6 +800,7 @@ type NavigatorWithWakeLock = Navigator & {
 type ModalState =
   | { kind: "task"; taskId?: string; slot?: number }
   | { kind: "reward"; rewardId?: string }
+  | { kind: "adventurer" }
   | { kind: "profile" }
   | { kind: "refresh" }
   | { kind: "notifications" }
@@ -10423,7 +10424,7 @@ export default function Home() {
           <button
             className="icon-button muted-button"
             aria-label="更多選項"
-            onClick={() => showToast("冒險者選單即將開放")}
+            onClick={() => setModal({ kind: "adventurer" })}
           >
             <ChevronRight size={17} />
           </button>
@@ -14893,6 +14894,8 @@ export default function Home() {
                 <span className="mini-kicker">
                   {modal.kind === "task"
                     ? "NEW QUEST"
+                    : modal.kind === "adventurer"
+                      ? "ADVENTURER MENU"
                     : modal.kind === "profile"
                       ? "PROFILE SETTINGS"
                       : modal.kind === "refresh"
@@ -14910,6 +14913,8 @@ export default function Home() {
                     ? modal.taskId
                       ? "編輯任務"
                       : "加入新任務"
+                    : modal.kind === "adventurer"
+                      ? "冒險者選單"
                     : modal.kind === "profile"
                       ? "使用者設定"
                       : modal.kind === "refresh"
@@ -14932,7 +14937,67 @@ export default function Home() {
                 <X size={18} />
               </button>
             </div>
-            {modal.kind === "notifications" ? (
+            {modal.kind === "adventurer" ? (
+              <div className="modal-form adventurer-menu-form">
+                <div className="adventurer-menu-hero">
+                  <div className="avatar avatar-large">{userInitials}</div>
+                  <div>
+                    <strong>{state.userName}</strong>
+                    <span>
+                      {jobClasses[state.jobClass].name} · Lv.{player.level}
+                      {player.level >= 50
+                        ? ` · ${currentSpecialization.name}`
+                        : " · 專精未解鎖"}
+                    </span>
+                  </div>
+                  <div className="adventurer-title-badge">
+                    {player.level >= 50
+                      ? `${currentSpecialization.name}・精英`
+                      : player.level >= 25
+                        ? "進階冒險者"
+                        : "新手冒險者"}
+                  </div>
+                </div>
+                <div className="adventurer-stat-grid">
+                  <div><span>目前 XP</span><strong>{state.totalXp.toLocaleString()}</strong></div>
+                  <div><span>金幣</span><strong>{state.coins.toLocaleString()}</strong></div>
+                  <div><span>完成任務</span><strong>{achievementContext.completedTasks}</strong></div>
+                  <div><span>擊敗魔物</span><strong>{state.defeatedMonsterIds.length}</strong></div>
+                  <div><span>計時分鐘</span><strong>{Math.floor(totalTimerSeconds / 60).toLocaleString()}</strong></div>
+                  <div><span>計時 XP</span><strong>{totalTimerXp.toLocaleString()}</strong></div>
+                </div>
+                <div className="adventurer-menu-links">
+                  <button type="button" onClick={() => { setModal(null); navigateTo("abilities"); }}><ShieldCheck size={16} /><span><strong>角色資料</strong><small>屬性、技能與職業專精</small></span><ChevronRight size={15} /></button>
+                  <button type="button" onClick={() => { setModal(null); navigateTo("loot"); }}><Gift size={16} /><span><strong>裝備與背包</strong><small>查看裝備、寶物與合成</small></span><ChevronRight size={15} /></button>
+                  <button type="button" onClick={() => { setModal(null); navigateTo("achievements"); }}><Trophy size={16} /><span><strong>稱號與成就</strong><small>{achievementStatuses.filter(item => item.progress.completed).length}/{ACHIEVEMENTS.length} 項成就已完成</small></span><ChevronRight size={15} /></button>
+                  <button type="button" onClick={() => { setModal(null); openProfileSettings(); }}><Settings2 size={16} /><span><strong>遊戲偏好</strong><small>目前背景：{backgroundTheme.label}</small></span><ChevronRight size={15} /></button>
+                </div>
+                <div className="adventurer-quick-items">
+                  <div className="adventurer-subheading"><span>快速使用道具</span><small>持有中的消耗品</small></div>
+                  <div className="adventurer-item-list">
+                    {SHOP_ITEMS.filter(item =>
+                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID) &&
+                      (state.shopInventory[item.id] ?? 0) > 0
+                    ).map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <button type="button" className="adventurer-item-button" key={item.id} onClick={() => useShopItem(item)}>
+                          <Icon size={15} /><span>{item.name}</span><strong>×{state.shopInventory[item.id]}</strong>
+                        </button>
+                      );
+                    })}
+                    {!SHOP_ITEMS.some(item =>
+                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID) &&
+                      (state.shopInventory[item.id] ?? 0) > 0
+                    ) && <small className="adventurer-empty-note">目前沒有可快速使用的道具，可前往冒險商城補給。</small>}
+                  </div>
+                </div>
+                <div className="adventurer-menu-footer">
+                  <button type="button" className="secondary-button" onClick={cycleBackgroundTheme}><Palette size={14} /> 切換背景色</button>
+                  <button type="button" className="primary-button" onClick={() => setModal(null)}>返回冒險</button>
+                </div>
+              </div>
+            ) : modal.kind === "notifications" ? (
               <div className="modal-form notification-settings-form">
                 <div className="profile-setting-note">
                   <Bell size={20} />

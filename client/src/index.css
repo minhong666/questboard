@@ -4655,6 +4655,69 @@ h2 {
   gap: 16px;
   margin-top: 23px;
 }
+.adventurer-menu-form { gap: 14px; }
+.adventurer-menu-hero {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(157, 146, 255, 0.2);
+  border-radius: 11px;
+  background: linear-gradient(120deg, rgba(125, 111, 255, 0.14), rgba(85, 205, 191, 0.06));
+}
+.adventurer-menu-hero > div:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+.adventurer-menu-hero strong { color: #f0eeff; font-size: 14px; }
+.adventurer-menu-hero span { color: #9da9c4; font-size: 10px; }
+.avatar-large { width: 42px; height: 42px; flex: 0 0 auto; font-size: 14px; }
+.adventurer-title-badge {
+  margin-left: auto;
+  padding: 5px 7px;
+  color: #f2c982;
+  border: 1px solid rgba(242, 183, 109, 0.25);
+  border-radius: 6px;
+  background: rgba(242, 183, 109, 0.08);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.adventurer-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.adventurer-stat-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 1px solid rgba(133, 150, 190, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 17, 32, 0.35);
+}
+.adventurer-stat-grid span { color: #7f8ba8; font-size: 9px; }
+.adventurer-stat-grid strong { color: #e9edff; font-size: 14px; }
+.adventurer-menu-links { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.adventurer-menu-links button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  color: #b6c0da;
+  border: 1px solid rgba(133, 150, 190, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 17, 32, 0.3);
+  text-align: left;
+  transition: 0.18s ease;
+}
+.adventurer-menu-links button:hover { color: #f1efff; border-color: rgba(157, 146, 255, 0.36); background: rgba(125, 111, 255, 0.1); }
+.adventurer-menu-links button > svg:first-child { color: #a99cff; flex: 0 0 auto; }
+.adventurer-menu-links button > svg:last-child { margin-left: auto; color: #697693; flex: 0 0 auto; }
+.adventurer-menu-links button span { display: grid; gap: 3px; min-width: 0; }
+.adventurer-menu-links strong { color: #e8ebff; font-size: 10px; }
+.adventurer-menu-links small { color: #7d89a6; font-size: 9px; white-space: nowrap; }
+.adventurer-subheading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+.adventurer-subheading span { color: #dfe5fb; font-size: 11px; font-weight: 700; }
+.adventurer-subheading small { color: #74819e; font-size: 9px; }
+.adventurer-item-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.adventurer-item-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; color: #aee4d0; border: 1px solid rgba(107, 228, 171, 0.2); border-radius: 7px; background: rgba(107, 228, 171, 0.07); font-size: 10px; }
+.adventurer-item-button strong { color: #f0d28b; font-size: 10px; }
+.adventurer-empty-note { color: #73809c; font-size: 10px; }
+.adventurer-menu-footer { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-form label {
   display: grid;
   gap: 7px;
@@ -4931,6 +4994,9 @@ h2 {
   .background-theme-button span {
     display: none;
   }
+  .adventurer-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .adventurer-menu-links { grid-template-columns: 1fr; }
+  .adventurer-title-badge { display: none; }
   .refresh-time-button span {
     display: none;
   }
