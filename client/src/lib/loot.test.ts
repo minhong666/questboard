@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RPG_EQUIPMENT_TEMPLATES } from "./equipment-database";
 import {
   canEquipEquipment,
   EQUIPMENT_SLOTS,
@@ -745,7 +746,7 @@ describe("Equipment fusion", () => {
       inventory,
       ["fine-legs"],
       "精良",
-      1,
+      21,
       () => 0,
       () => 123
     );
@@ -759,6 +760,34 @@ describe("Equipment fusion", () => {
     expect(fusion?.result.kind).toBe("equipment");
     expect(["頭盔", "武器", "胸甲"]).toContain(fusion?.result.slot);
     expect(fusion?.result.affixes).toHaveLength(1);
+  });
+
+  it("selects the result from the next-rarity templates", () => {
+    const fineEquipment = (id: string, slot: EquipmentSlot): EquipmentItem => ({
+      ...equipment(id, slot),
+      rarity: "精良",
+    });
+    const inventory = [
+      fineEquipment("fine-helmet", "頭盔"),
+      fineEquipment("fine-weapon", "武器"),
+      fineEquipment("fine-chest", "胸甲"),
+    ];
+    const expectedRareHelmet = RPG_EQUIPMENT_TEMPLATES.find(
+      template => template.slot === "頭盔" && template.rarity === "稀有"
+    );
+
+    const fusion = prepareEquipmentFusion(
+      inventory,
+      [],
+      "精良",
+      21,
+      randomSequence(0, 0),
+      () => 321
+    );
+
+    expect(expectedRareHelmet).toBeDefined();
+    expect(fusion?.result.rarity).toBe("稀有");
+    expect(fusion?.result.name).toBe(expectedRareHelmet?.name);
   });
 
   it("fuses exactly the three selected materials instead of the first inventory items", () => {
@@ -782,7 +811,7 @@ describe("Equipment fusion", () => {
       inventory,
       [],
       "精良",
-      1,
+      21,
       () => 0,
       () => 456,
       selectedIds

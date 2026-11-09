@@ -1361,7 +1361,7 @@ export function prepareEquipmentFusion(
     template =>
       template.slot === slot &&
       template.minLevel <= level &&
-      rarityRank[template.rarity] <= rarityRank[nextRarity]
+      template.rarity === nextRarity
   );
   if (templates.length === 0) return null;
 
