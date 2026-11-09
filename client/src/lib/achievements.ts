@@ -27,6 +27,21 @@ export type AchievementDefinition = {
   formatProgress: (value: number, goal: number) => string;
 };
 
+/** 只有各系列最高階與最終結局成就會解鎖可佩戴稱號。 */
+export const TITLE_ACHIEVEMENT_IDS = new Set([
+  "ending",
+  "milestone-tasks-1000",
+  "milestone-xp-50000",
+  "milestone-focus-300",
+  "milestone-streak-180",
+  "milestone-monsters-200",
+  "milestone-loot-50",
+  "milestone-skills-24",
+  "milestone-upgrades-50",
+  "milestone-level-75",
+  "milestone-coins-25000",
+]);
+
 const integerProgress = (value: number, goal: number) => `${Math.min(value, goal)} / ${goal}`;
 const minutesProgress = (value: number, goal: number) =>
   `${Math.min(Math.floor(value / 60), goal)} / ${goal} 分鐘`;
@@ -70,6 +85,23 @@ function createMilestoneSeries(series: MilestoneSeries): AchievementDefinition[]
 
 export const getAchievementTitle = (achievement: AchievementDefinition) =>
   achievement.rewardTitle ?? achievement.title;
+
+export const isTitleAchievement = (achievement: AchievementDefinition) =>
+  TITLE_ACHIEVEMENT_IDS.has(achievement.id);
+
+export function getAchievementStatBonus(claimedIds: string[]) {
+  const claimed = new Set(claimedIds);
+  const permanentBonus = ACHIEVEMENTS.filter(
+    achievement =>
+      claimed.has(achievement.id) && !TITLE_ACHIEVEMENT_IDS.has(achievement.id)
+  ).length;
+  return {
+    health: permanentBonus,
+    strength: permanentBonus,
+    defense: permanentBonus,
+    intelligence: permanentBonus,
+  };
+}
 
 const EXTRA_ACHIEVEMENTS: AchievementDefinition[] = [
   ...createMilestoneSeries({

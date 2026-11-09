@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ACHIEVEMENTS, getAchievementProgress } from "./achievements";
+import {
+  ACHIEVEMENTS,
+  getAchievementProgress,
+  getAchievementStatBonus,
+  isTitleAchievement,
+} from "./achievements";
 
 describe("achievements", () => {
   const context = {
@@ -67,6 +72,31 @@ describe("achievements", () => {
     expect(getAchievementProgress(ending, { ...context, defeatedFinalBoss: true })).toMatchObject({
       completed: true,
       label: "1 / 1",
+    });
+  });
+
+  it("keeps only the eleven final milestones as title rewards", () => {
+    const titleNames = [
+      "結局",
+      "任務不朽者",
+      "世界級冒險家",
+      "專注賢者",
+      "永燃之火",
+      "深淵終結者",
+      "神話寶庫主",
+      "技能宗師",
+      "百鍊成鋼",
+      "巔峰之境",
+      "黃金帝國",
+    ];
+    expect(
+      ACHIEVEMENTS.filter(isTitleAchievement).map(achievement => achievement.title)
+    ).toEqual(titleNames);
+    expect(getAchievementStatBonus(["first-quest", "ending"])).toEqual({
+      health: 1,
+      strength: 1,
+      defense: 1,
+      intelligence: 1,
     });
   });
 });

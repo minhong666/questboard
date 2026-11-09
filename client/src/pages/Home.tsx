@@ -146,8 +146,10 @@ import {
 } from "../lib/skill-upgrades";
 import {
   ACHIEVEMENTS,
+  getAchievementStatBonus,
   getAchievementTitle,
   getAchievementProgress,
+  isTitleAchievement,
   type AchievementContext,
 } from "../lib/achievements";
 import {
@@ -3392,23 +3394,30 @@ export default function Home() {
               100)
         )
       : 0;
+  const achievementStatBonus = getAchievementStatBonus(
+    sharedAchievementClaimedIds
+  );
   const effectiveAbilities: CharacterAbilities = {
     health:
       state.abilities.health +
+      achievementStatBonus.health +
       classDefinition.bonuses.health +
       equipmentBonuses.abilities.health,
     strength:
       state.abilities.strength +
+      achievementStatBonus.strength +
       classDefinition.bonuses.strength +
       equipmentBonuses.abilities.strength +
       titanBastionConvertedDefense +
       azureDragonConvertedStrength,
     defense:
       state.abilities.defense +
+      achievementStatBonus.defense +
       classDefinition.bonuses.defense +
       equipmentBonuses.abilities.defense,
     intelligence:
       intelligenceBeforeLegendarySet +
+      achievementStatBonus.intelligence +
       titanBastionConvertedDefense +
       azureDragonConvertedIntelligence,
   };
@@ -10184,12 +10193,22 @@ export default function Home() {
       ]),
     }));
     showToast(
-      `成就「${achievement.title}」已領取：稱號「${getAchievementTitle(achievement)}」已解鎖`
+      isTitleAchievement(achievement)
+        ? `成就「${achievement.title}」已領取：稱號「${getAchievementTitle(achievement)}」已解鎖`
+        : `成就「${achievement.title}」已領取：生命、力量、防禦、智力永久 +1`
     );
   };
 
   const equipAchievementTitle = (achievementId: string | null) => {
-    if (achievementId && !claimedAchievementIds.includes(achievementId)) return;
+    if (
+      achievementId &&
+      (!claimedAchievementIds.includes(achievementId) ||
+        !isTitleAchievement(
+          ACHIEVEMENTS.find(achievement => achievement.id === achievementId) ??
+            ACHIEVEMENTS[0]
+        ))
+    )
+      return;
     setState(previous => ({ ...previous, equippedTitleId: achievementId }));
     showToast(achievementId ? "稱號已佩戴" : "已卸下稱號");
   };
@@ -12241,10 +12260,9 @@ export default function Home() {
                   </strong>
                 </div>
                 <div className="achievement-summary-card panel-card">
-                  <span>已解鎖稱號</span>
+                  <span>永久能力加成</span>
                   <strong>
-                    {achievementStatuses
-                      .filter(item => item.claimed).length}
+                    +{achievementStatBonus.health} 四項屬性
                   </strong>
                 </div>
               </div>
@@ -12284,8 +12302,12 @@ export default function Home() {
                           <span style={{ width: `${progressPercent}%` }} />
                         </div>
                         <div className="achievement-reward-row">
-                          <span>稱號：{getAchievementTitle(achievement)}</span>
-                          {claimed ? (
+                          <span>
+                            {isTitleAchievement(achievement)
+                              ? `稱號：${getAchievementTitle(achievement)}`
+                              : "獎勵：生命、力量、防禦、智力永久 +1"}
+                          </span>
+                          {claimed && isTitleAchievement(achievement) ? (
                             <button
                               type="button"
                               onClick={() =>
@@ -12298,6 +12320,8 @@ export default function Home() {
                             >
                               {state.equippedTitleId === achievement.id ? "卸下稱號" : "佩戴稱號"}
                             </button>
+                          ) : claimed ? (
+                            <strong>已套用</strong>
                           ) : progress.completed ? (
                             <button
                               type="button"
