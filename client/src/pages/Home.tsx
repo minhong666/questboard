@@ -123,6 +123,14 @@ import {
 } from "../lib/activity-timers";
 import { getTimerDayStart, getTimerTodaySeconds } from "../lib/timer-daily";
 import {
+  getDailyMonsterRefreshKey,
+  getNextDailyMonsterRefreshAt,
+} from "../lib/monster-refresh";
+import {
+  getCoinsAfterCombatDeath,
+  isGoldOnlyCombatDeath,
+} from "../lib/combat-death-penalty";
+import {
   acquireActivityTimerLock,
   type ActivityTimerLockLease,
 } from "../lib/activity-timer-lock";
@@ -139,6 +147,7 @@ import {
 } from "../lib/class-skills";
 import {
   applySkillUpgrade,
+  getNextSkillUpgradePreview,
   getSkillUpgradePointsForLevelUps,
   MAX_SKILL_UPGRADE_LEVEL,
   normalizeSkillUpgradeLevels,
@@ -184,6 +193,7 @@ import {
   applyMonsterGroupAreaDamage,
   applyMonsterGroupMappedAreaDamage,
   applyMonsterGroupDamage,
+  applyMonsterGroupSkillDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
   type MonsterGroupMember,
@@ -2390,25 +2400,12 @@ function formatCooldown(milliseconds: number) {
   return `${minutes}:${seconds}`;
 }
 
-function getSmallMonsterRefreshKey(date: Date) {
-  const refreshDay = new Date(date);
-  if (refreshDay.getHours() < 12) refreshDay.setDate(refreshDay.getDate() - 1);
-  return `small-${refreshDay.getFullYear()}-${refreshDay.getMonth() + 1}-${refreshDay.getDate()}`;
-}
-
 function getWeeklyBossRefreshKey(date: Date) {
   const refreshStart = new Date(date);
   const day = refreshStart.getDay();
   refreshStart.setDate(refreshStart.getDate() - (day === 0 ? 6 : day - 1));
   refreshStart.setHours(0, 0, 0, 0);
   return `boss-${refreshStart.getFullYear()}-${refreshStart.getMonth() + 1}-${refreshStart.getDate()}`;
-}
-
-function getNextSmallMonsterRefreshAt(timestamp: number) {
-  const next = new Date(timestamp);
-  next.setHours(12, 0, 0, 0);
-  if (next.getTime() <= timestamp) next.setDate(next.getDate() + 1);
-  return next.getTime();
 }
 
 function getNextWeeklyBossRefreshAt(timestamp: number) {
@@ -2880,7 +2877,7 @@ export default function Home() {
     );
   const anyProfileTimerRunning = Boolean(activeTimerProfile);
   const smallMonsterRefreshKey = useMemo(
-    () => getSmallMonsterRefreshKey(new Date(currentTime)),
+    () => getDailyMonsterRefreshKey(new Date(currentTime)),
     [currentTime]
   );
   const weeklyBossRefreshKey = useMemo(
@@ -2919,7 +2916,7 @@ export default function Home() {
     [dailyMonsters, activeBosses, soulTrialMonsters, activeSoulTrialBosses]
   );
   const nextSmallMonsterRefreshAt = useMemo(
-    () => getNextSmallMonsterRefreshAt(currentTime),
+    () => getNextDailyMonsterRefreshAt(currentTime),
     [currentTime]
   );
   const nextWeeklyBossRefreshAt = useMemo(
@@ -3511,21 +3508,19 @@ export default function Home() {
         skill => applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
       )
     : [];
-  const allSpecialSkills = [
+  const allSpecialSkillsBase = [
     ...getAllSpecialSkills(state.jobClass).map(skill =>
-      applySkillUpgrade(
-        specializationUnlocked
-          ? applySpecializationToSkill(skill, currentSpecialization)
-          : skill,
-        skillUpgradeLevels[skill.id] ?? 0
-      )
+      specializationUnlocked
+        ? applySpecializationToSkill(skill, currentSpecialization)
+        : skill
     ),
     ...(specializationUnlocked
-      ? getAllSpecializationSkills(currentSpecialization).map(skill =>
-          applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
-        )
+      ? getAllSpecializationSkills(currentSpecialization)
       : []),
   ];
+  const allSpecialSkills = allSpecialSkillsBase.map(skill =>
+    applySkillUpgrade(skill, skillUpgradeLevels[skill.id] ?? 0)
+  );
   const battleSpecialSkills = [
     ...unlockedSpecialSkills,
     ...specializationSkills,
@@ -6689,9 +6684,10 @@ export default function Home() {
       Math.max(0, battle.monsterHealth - damageDealt)
     );
     const groupDamageResult = battle.groupMembers
-      ? applyMonsterGroupDamage(
+      ? applyMonsterGroupSkillDamage(
           battle.groupMembers,
           damageDealt + statusDamage,
+          selectedSkill?.targetMode === "all" ? "all" : "single",
           battle.targetMonsterMemberId
         )
       : undefined;
@@ -7022,7 +7018,9 @@ export default function Home() {
           ) + 1
         : 0;
     const groupDamageLog = nextGroupMembers
-      ? `；集中攻擊群聚成員 ${targetMemberNumber || "目標"}，${remainingGroupCount} 隻仍在戰鬥`
+      ? selectedSkill?.targetMode === "all"
+        ? `；全體技能命中 ${Object.keys(groupDamageResult?.damageByMember ?? {}).length} 隻群聚魔物，${remainingGroupCount} 隻仍在戰鬥`
+        : `；集中攻擊群聚成員 ${targetMemberNumber || "目標"}，${remainingGroupCount} 隻仍在戰鬥`
       : "";
     const statusLabels = [
       ...statusTick.labels,
@@ -8717,7 +8715,7 @@ export default function Home() {
         playerDefeated: true,
       });
       const isSoulTrialBattle = monster.id.startsWith("soul-trial-");
-      if (isSoulTrialBattle) {
+      if (isGoldOnlyCombatDeath(monster.id)) {
         setBattle({
           ...battle,
           playerHealth: 0,
@@ -8785,7 +8783,9 @@ export default function Home() {
           turn: battle.turn + 1,
           logs: [
             ...nextLogs,
-            `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`,
+            isSoulTrialBattle
+              ? `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`
+              : `你被${monster.name}擊倒了！區域魔王戰敗，只損失一半金幣；經驗、等級、能力值與能力點數不受影響。`,
           ],
           damageDealt:
             battle.damageDealt +
@@ -8802,11 +8802,15 @@ export default function Home() {
           archerDodgeFailStacks: nextArcherDodgeFailStacks,
           currentHealth: effectiveAbilities.health,
           nextHealthRecoveryAt: 0,
-          coins: Math.floor(previous.coins / 2),
-          soulTrialCooldownUntil: Date.now() + 30 * 60 * 1000,
+          coins: getCoinsAfterCombatDeath(previous.coins),
+          ...(isSoulTrialBattle
+            ? { soulTrialCooldownUntil: Date.now() + 30 * 60 * 1000 }
+            : { combatCooldownUntil: Date.now() + 30 * 60 * 1000 }),
         }));
         showToast(
-          `靈魂試煉失敗：僅損失一半金幣，經驗、等級與能力點不受影響；靈魂試煉冷卻 30 分鐘`
+          isSoulTrialBattle
+            ? "靈魂試煉失敗：僅損失一半金幣，經驗、等級與能力點不受影響；靈魂試煉冷卻 30 分鐘"
+            : `區域魔王戰敗：只損失一半金幣，經驗、等級、能力與能力點不受影響；30 分鐘內無法再次挑戰魔物`
         );
         return;
       }
@@ -11366,17 +11370,20 @@ export default function Home() {
                   );
                   const isBuff = skill.effectType === "buff";
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
+                  const baseSkill =
+                    allSpecialSkillsBase.find(item => item.id === skill.id) ??
+                    skill;
                   const upgradeBonusLabel =
                     upgradeLevel > 0
                       ? skill.effectType === "damage"
-                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}% · 防禦穿透 +${Math.min(60, skill.defensePiercePercent + upgradeLevel * 2) - skill.defensePiercePercent}%`
+                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}%${skill.defensePiercePercent > baseSkill.defensePiercePercent ? ` · 防禦穿透 +${skill.defensePiercePercent - baseSkill.defensePiercePercent}%` : ""}`
                         : skill.effectType === "buff"
                           ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
                           : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
                       : "";
                   const nextUpgradeSkill =
                     unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
-                      ? applySkillUpgrade(skill, upgradeLevel + 1)
+                      ? getNextSkillUpgradePreview(baseSkill, upgradeLevel)
                       : null;
                   const damagePreview = unlocked
                     ? getSkillDamagePreview(skill)
@@ -11554,7 +11561,7 @@ export default function Home() {
                     </div>
                     <h2>靈魂小怪</h2>
                     <p>
-                      共 9 隻 · 與怪物區域相同，每日 12:00 刷新 · 倒數{" "}
+                      共 9 隻 · 與怪物區域相同，每日 00:00 刷新 · 倒數{" "}
                       {formatRefreshCountdown(
                         nextSmallMonsterRefreshAt - currentTime
                       )}{" "}
@@ -11604,7 +11611,7 @@ export default function Home() {
                   <p>
                     {combatLocked
                       ? `戰鬥封鎖中 · 剩餘 ${formatCooldown(combatCooldownRemaining)}`
-                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 12:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
+                      : `目前 ${dailyMonsters.length} 隻小怪 · 從小怪資料庫隨機選取 · 每日 00:00 刷新 · 倒數 ${formatRefreshCountdown(nextSmallMonsterRefreshAt - currentTime)} · 下次 ${formatRefreshDate(nextSmallMonsterRefreshAt)}`}
                   </p>
                 </div>
                 <div className="monster-zone-stats">
@@ -11735,7 +11742,7 @@ export default function Home() {
                 </div>
                 <div className="boss-warning">
                   <span>死亡懲罰</span>
-                  <strong>能力／等級／金幣 −50%</strong>
+                  <strong>只扣金幣 −50%；不扣經驗、等級或能力</strong>
                 </div>
               </div>
               <div className="monster-grid boss-grid">

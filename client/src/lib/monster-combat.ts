@@ -119,6 +119,18 @@ export function applyMonsterGroupAreaDamage(
   };
 }
 
+export function applyMonsterGroupSkillDamage(
+  members: MonsterGroupMember[],
+  damage: number,
+  targetMode: "single" | "all",
+  targetMemberId?: string
+): MonsterGroupDamageResult {
+  if (targetMode === "all") {
+    return applyMonsterGroupAreaDamage(members, damage);
+  }
+  return applyMonsterGroupDamage(members, damage, targetMemberId);
+}
+
 export function applyMonsterGroupMappedAreaDamage(
   members: MonsterGroupMember[],
   damageForMember: (member: MonsterGroupMember) => number,

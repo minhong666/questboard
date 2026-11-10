@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyMonsterGroupAreaDamage,
   applyMonsterGroupDamage,
+  applyMonsterGroupSkillDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
 } from "./monster-combat";
@@ -106,5 +107,31 @@ describe("monster group combat", () => {
         member => member.health
       )
     ).toEqual([0, 10]);
+  });
+
+  it("routes all-target skills to every living group member", () => {
+    const members = createMonsterGroupMembers("swarm", 90);
+    const allTargets = applyMonsterGroupSkillDamage(
+      members,
+      10,
+      "all",
+      "swarm-member-2"
+    );
+    expect(allTargets.members.map(member => member.health)).toEqual([20, 20, 20]);
+    expect(allTargets.damageByMember).toEqual({
+      "swarm-member-1": 10,
+      "swarm-member-2": 10,
+      "swarm-member-3": 10,
+    });
+    expect(allTargets.totalDamageApplied).toBe(30);
+
+    const singleTarget = applyMonsterGroupSkillDamage(
+      members,
+      10,
+      "single",
+      "swarm-member-2"
+    );
+    expect(singleTarget.members.map(member => member.health)).toEqual([30, 20, 30]);
+    expect(singleTarget.totalDamageApplied).toBe(10);
   });
 });

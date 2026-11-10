@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getUnlockedSpecialSkills } from "./class-skills";
+import { getAllSpecialSkills, getUnlockedSpecialSkills } from "./class-skills";
 import {
   applySkillUpgrade,
   getSkillUpgradePointsForLevelUps,
+  getNextSkillUpgradePreview,
   MAX_SKILL_UPGRADE_LEVEL,
   normalizeSkillUpgradeLevels,
 } from "./skill-upgrades";
@@ -52,5 +53,32 @@ describe("skill upgrades", () => {
     const upgraded = applySkillUpgrade(skill, MAX_SKILL_UPGRADE_LEVEL);
     expect(skill.defensePiercePercent).toBe(60);
     expect(upgraded.defensePiercePercent).toBe(60);
+  });
+
+  it("previews the next damage level from the base skill, not the upgraded value", () => {
+    const baseSkill = getUnlockedSpecialSkills("archer", 0, 0, 10)[1];
+    const currentSkill = applySkillUpgrade(baseSkill, 4);
+    const nextSkill = getNextSkillUpgradePreview(baseSkill, 4);
+
+    expect(currentSkill.damageMultiplier).toBeCloseTo(1.92);
+    expect(nextSkill?.damageMultiplier).toBeCloseTo(2);
+    expect(nextSkill?.damageMultiplier).not.toBeCloseTo(2.4);
+    expect(nextSkill?.defensePiercePercent).toBe(40);
+  });
+
+  it("previews buff and passive values using their actual next-level formulas", () => {
+    const warriorBuff = getUnlockedSpecialSkills("warrior", 25, 0)[0];
+    const nextBuff = getNextSkillUpgradePreview(warriorBuff, 4);
+    expect(applySkillUpgrade(warriorBuff, 4).damageBonusPercent).toBe(24);
+    expect(nextBuff?.damageBonusPercent).toBe(25);
+    expect(nextBuff?.damageReductionPercent).toBe(25);
+
+    const archerPassive = getUnlockedSpecialSkills("archer", 0, 0, 5)[0];
+    const nextPassive = getNextSkillUpgradePreview(archerPassive, 4);
+    expect(applySkillUpgrade(archerPassive, 4).critDamageBonusPercent).toBe(50);
+    expect(nextPassive?.critDamageBonusPercent).toBe(55);
+    expect(
+      getNextSkillUpgradePreview(getAllSpecialSkills("warrior")[0], MAX_SKILL_UPGRADE_LEVEL)
+    ).toBeNull();
   });
 });

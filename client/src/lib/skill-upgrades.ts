@@ -57,3 +57,17 @@ export function applySkillUpgrade(
     description: `${skill.description}（技能升級 Lv.${level}）`,
   };
 }
+
+export function getNextSkillUpgradePreview(
+  baseSkill: SpecialCombatSkill,
+  currentUpgradeLevel: number
+): SpecialCombatSkill | null {
+  const currentLevel = Math.max(
+    0,
+    Math.floor(
+      Number.isFinite(currentUpgradeLevel) ? currentUpgradeLevel : 0
+    )
+  );
+  if (currentLevel >= MAX_SKILL_UPGRADE_LEVEL) return null;
+  return applySkillUpgrade(baseSkill, currentLevel + 1);
+}

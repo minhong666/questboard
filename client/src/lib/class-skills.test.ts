@@ -166,8 +166,11 @@ describe("class-specific special skills", () => {
     expect(knightHeart.durationTurns).toBe(3);
     expect(knightHeart.description).toContain("持續 3 回合");
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
-    expect(skill.description).toBe("造成自身1.5倍的傷害；冷卻 4 回合。");
+    expect(skill.description).toBe(
+      "物理技能，對所有敵人各造成自身 1.50 倍傷害；冷卻 4 回合。"
+    );
     expect(skill.damageMultiplier).toBe(1.5);
+    expect(skill.targetMode).toBe("all");
     expect(skill.flatDamageBonus).toBe(0);
     expect(skill.cooldownTurns).toBe(4);
     expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(136);
