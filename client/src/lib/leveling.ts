@@ -5,16 +5,16 @@ export type PlayerLevelStats = {
   progress: number;
 };
 
-const FIRST_LEVEL_XP = 150;
-const LEVEL_XP_STEP = 25;
+/** Game-balance invariant: every level requires exactly 250 XP. */
+export const XP_PER_LEVEL = 250;
 
 export function getXpForLevel(level: number) {
   const safeLevel = Math.max(0, Math.floor(level));
-  return safeLevel * FIRST_LEVEL_XP + (LEVEL_XP_STEP * safeLevel * (safeLevel - 1)) / 2;
+  return safeLevel * XP_PER_LEVEL;
 }
 
-export function getXpForNextLevel(level: number) {
-  return FIRST_LEVEL_XP + Math.max(0, Math.floor(level)) * LEVEL_XP_STEP;
+export function getXpForNextLevel(_level: number) {
+  return XP_PER_LEVEL;
 }
 
 export function getPlayerLevelStats(totalXp: number): PlayerLevelStats {

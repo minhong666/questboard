@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getUnlockedSpecialSkills } from "./class-skills";
 import {
   applySpecializationToSkill,
+  applySpecializationToSkillAtLevel,
   getDefaultSpecialization,
   getAllSpecializationSkills,
   getNextSpecializationSkillLevel,
@@ -9,6 +10,8 @@ import {
   getSpecializations,
   isSpecializationSelected,
   normalizeSpecialization,
+  SPECIALIZATION_UNLOCK_LEVEL,
+  SPECIALIZATION_SKILL_UNLOCK_LEVELS,
 } from "./class-specializations";
 
 describe("class specializations", () => {
@@ -26,15 +29,16 @@ describe("class specializations", () => {
     );
   });
 
-  it("does not treat a default branch as selected before level 50", () => {
+  it("unlocks specialization selection at level 30 only for the selected branch", () => {
+    expect(SPECIALIZATION_UNLOCK_LEVEL).toBe(30);
     expect(
-      isSpecializationSelected(49, "warrior-guardian", "warrior-guardian")
+      isSpecializationSelected(29, "warrior-guardian", "warrior-guardian")
     ).toBe(false);
     expect(
-      isSpecializationSelected(50, "warrior-guardian", "warrior-guardian")
+      isSpecializationSelected(30, "warrior-guardian", "warrior-guardian")
     ).toBe(true);
     expect(
-      isSpecializationSelected(49, "warrior-berserker", "warrior-guardian")
+      isSpecializationSelected(30, "warrior-berserker", "warrior-guardian")
     ).toBe(false);
   });
 
@@ -187,18 +191,33 @@ describe("class specializations", () => {
     });
   });
 
-  it("unlocks specialization skills at levels 30, 40, and 50", () => {
-    const specialization = getSpecializations("mage")[0];
-    expect(getUnlockedSpecializationSkills(specialization, 29)).toHaveLength(0);
-    expect(getUnlockedSpecializationSkills(specialization, 30)).toHaveLength(1);
-    expect(getUnlockedSpecializationSkills(specialization, 40)).toHaveLength(2);
-    expect(getUnlockedSpecializationSkills(specialization, 50)).toHaveLength(3);
-    expect(getAllSpecializationSkills(specialization).map(skill => skill.unlockLevel)).toEqual([
-      30,
-      40,
-      50,
-    ]);
-    expect(getNextSpecializationSkillLevel(specialization, 30)).toBe(40);
-    expect(getNextSpecializationSkillLevel(specialization, 50)).toBeNull();
+  it("applies specialization effects in soul trial starting at level 30", () => {
+    const baseSkill = getUnlockedSpecialSkills("warrior", 25, 0)[0];
+    const guardian = getSpecializations("warrior")[0];
+    expect(applySpecializationToSkillAtLevel(baseSkill, guardian, 29)).toBe(
+      baseSkill
+    );
+    expect(applySpecializationToSkillAtLevel(baseSkill, guardian, 30)).toMatchObject({
+      name: "聖盾之心",
+      damageBonusPercent: 25,
+    });
+  });
+
+  it("unlocks every specialization's skills at levels 30, 40, and 50", () => {
+    expect(SPECIALIZATION_SKILL_UNLOCK_LEVELS).toEqual([30, 40, 50]);
+    const specializations = (["warrior", "archer", "mage", "rogue"] as const)
+      .flatMap(jobClass => getSpecializations(jobClass));
+    for (const specialization of specializations) {
+      expect(getAllSpecializationSkills(specialization).map(skill => skill.unlockLevel)).toEqual([
+        ...SPECIALIZATION_SKILL_UNLOCK_LEVELS,
+      ]);
+      expect(getUnlockedSpecializationSkills(specialization, 29)).toHaveLength(0);
+      expect(getUnlockedSpecializationSkills(specialization, 30)).toHaveLength(1);
+      expect(getUnlockedSpecializationSkills(specialization, 40)).toHaveLength(2);
+      expect(getUnlockedSpecializationSkills(specialization, 50)).toHaveLength(3);
+    }
+    const mageSpecialization = getSpecializations("mage")[0];
+    expect(getNextSpecializationSkillLevel(mageSpecialization, 30)).toBe(40);
+    expect(getNextSpecializationSkillLevel(mageSpecialization, 50)).toBeNull();
   });
 });

@@ -1,0 +1,27 @@
+name: QuestBoard progression guard
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-progression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable the repository-pinned pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+      - name: Check fixed XP and specialization thresholds
+        run: >-
+          corepack pnpm exec vitest run
+          client/src/lib/leveling.test.ts
+          client/src/lib/class-specializations.test.ts

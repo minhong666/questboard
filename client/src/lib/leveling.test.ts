@@ -1,44 +1,55 @@
 import { describe, expect, it } from "vitest";
-import { getPlayerLevelStats, getXpForLevel } from "./leveling";
+import {
+  getPlayerLevelStats,
+  getXpForLevel,
+  getXpForNextLevel,
+  XP_PER_LEVEL,
+} from "./leveling";
 
-describe("progressive player leveling", () => {
-  it("uses 150, 175, 200, 225, 250 XP for successive level-ups", () => {
-    expect(getXpForLevel(1)).toBe(150);
-    expect(getXpForLevel(2)).toBe(325);
-    expect(getXpForLevel(3)).toBe(525);
-    expect(getXpForLevel(4)).toBe(750);
-    expect(getXpForLevel(5)).toBe(1000);
+describe("fixed player leveling", () => {
+  it("requires exactly 250 XP for every level regardless of current level", () => {
+    expect(XP_PER_LEVEL).toBe(250);
+    for (const level of [0, 1, 2, 10, 99]) {
+      expect(getXpForNextLevel(level)).toBe(250);
+    }
+    expect([0, 1, 2, 3, 10].map(getXpForLevel)).toEqual([
+      0,
+      250,
+      500,
+      750,
+      2500,
+    ]);
   });
 
-  it("shows the current level progress against the next progressive threshold", () => {
+  it("uses fixed 250 XP boundaries for level and progress calculations", () => {
     expect(getPlayerLevelStats(0)).toMatchObject({
       level: 0,
       currentXp: 0,
-      neededXp: 150,
+      neededXp: 250,
       progress: 0,
     });
-    expect(getPlayerLevelStats(149)).toMatchObject({
+    expect(getPlayerLevelStats(248)).toMatchObject({
       level: 0,
-      currentXp: 149,
-      neededXp: 150,
+      currentXp: 248,
+      neededXp: 250,
       progress: 99,
     });
-    expect(getPlayerLevelStats(150)).toMatchObject({
+    expect(getPlayerLevelStats(250)).toMatchObject({
       level: 1,
       currentXp: 0,
-      neededXp: 175,
+      neededXp: 250,
       progress: 0,
     });
-    expect(getPlayerLevelStats(324)).toMatchObject({
+    expect(getPlayerLevelStats(498)).toMatchObject({
       level: 1,
-      currentXp: 174,
-      neededXp: 175,
+      currentXp: 248,
+      neededXp: 250,
       progress: 99,
     });
-    expect(getPlayerLevelStats(325)).toMatchObject({
+    expect(getPlayerLevelStats(500)).toMatchObject({
       level: 2,
       currentXp: 0,
-      neededXp: 200,
+      neededXp: 250,
       progress: 0,
     });
   });

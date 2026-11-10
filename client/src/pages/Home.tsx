@@ -163,11 +163,14 @@ import {
 } from "../lib/achievements";
 import {
   applySpecializationToSkill,
+  applySpecializationToSkillAtLevel,
   getDefaultSpecialization,
   getAllSpecializationSkills,
   getNextSpecializationSkillLevel,
   getUnlockedSpecializationSkills,
   getSpecialization,
+  SPECIALIZATION_UNLOCK_LEVEL,
+  SPECIALIZATION_SKILL_UNLOCK_LEVELS,
   getSpecializations,
   isSpecializationSelected,
   normalizeSpecialization,
@@ -3431,7 +3434,7 @@ export default function Home() {
   );
   const currentSpecializationVisual =
     specializationVisuals[currentSpecialization.id];
-  const specializationUnlocked = player.level >= 50;
+  const specializationUnlocked = player.level >= SPECIALIZATION_UNLOCK_LEVEL;
   const specializationSelected = specializationUnlocked;
   const unlockedSpecializationSkillsForStats = specializationUnlocked
     ? getUnlockedSpecializationSkills(currentSpecialization, player.level)
@@ -3571,7 +3574,7 @@ export default function Home() {
   );
   const nextSpecializationSkillLevel = specializationUnlocked
     ? getNextSpecializationSkillLevel(currentSpecialization, player.level)
-    : 50;
+    : SPECIALIZATION_SKILL_UNLOCK_LEVELS[0];
   const hasClassSkills =
     state.jobClass === "warrior" ||
     state.jobClass === "archer" ||
@@ -3859,10 +3862,10 @@ export default function Home() {
   const battleEquippedAmuletAbility = isSoulTrialBattle
     ? undefined
     : equippedAmuletAbility;
-  const soulSpecializationSkills =
-    battleLevel >= 50
-      ? getUnlockedSpecializationSkills(currentSpecialization, battleLevel)
-      : [];
+  const soulSpecializationSkills = getUnlockedSpecializationSkills(
+    currentSpecialization,
+    battleLevel
+  );
   // Soul memory has no allocated critical/dodge stats or equipment of its own.
   // Use the game's fixed baseline rather than importing the selected role's stats.
   const battleCombatStats: CombatStats = isSoulTrialBattle
@@ -3915,9 +3918,11 @@ export default function Home() {
           battleCombatStats.critRate,
           battleCombatStats.critDamage
         ).map(skill =>
-          battleLevel >= 50
-            ? applySpecializationToSkill(skill, currentSpecialization)
-            : skill
+          applySpecializationToSkillAtLevel(
+            skill,
+            currentSpecialization,
+            battleLevel
+          )
         ),
         ...soulSpecializationSkills,
       ]
@@ -10348,7 +10353,7 @@ export default function Home() {
 
   const selectSpecialization = (specializationId: SpecializationId) => {
     if (!specializationUnlocked) {
-      showToast(`角色達到 Lv.50 後才能轉職（目前 Lv.${player.level}）`);
+      showToast(`角色達到 Lv.${SPECIALIZATION_UNLOCK_LEVEL} 後才能轉職（目前 Lv.${player.level}）`);
       return;
     }
     if (specializationId === state.specialization) return;
@@ -11396,15 +11401,15 @@ export default function Home() {
                     <strong>
                       {specializationUnlocked
                         ? `${currentSpecialization.name}專精`
-                        : `Lv.50 開放轉職（目前 Lv.${player.level}）`}
+                        : `Lv.${SPECIALIZATION_UNLOCK_LEVEL} 開放轉職（目前 Lv.${player.level}）`}
                     </strong>
                   </div>
                   <small>
                     {specializationUnlocked
                       ? nextSpecializationSkillLevel === null
-                        ? "已解鎖此專精的全部 50／75／100 級技能。"
+                        ? `已解鎖此專精的全部 ${SPECIALIZATION_SKILL_UNLOCK_LEVELS.join("／")} 級技能。`
                         : `下一個專精技能：Lv.${nextSpecializationSkillLevel}`
-                      : "角色達到 Lv.50 後，才能選擇轉職專精分支。"}
+                      : `角色達到 Lv.${SPECIALIZATION_UNLOCK_LEVEL} 後，才能選擇轉職專精分支。`}
                   </small>
                 </div>
                 <div
@@ -11423,7 +11428,7 @@ export default function Home() {
                     <small>
                       {specializationSelected
                         ? currentSpecializationVisual.subtitle
-                        : "Lv.50 後可選擇專精分支"}
+                        : `Lv.${SPECIALIZATION_UNLOCK_LEVEL} 後可選擇專精分支`}
                     </small>
                   </div>
                   <div className="specialization-identity-skills">
@@ -15117,14 +15122,14 @@ export default function Home() {
                     <strong>{state.userName}</strong>
                     <span>
                       {jobClasses[state.jobClass].name} · Lv.{player.level}
-                      {player.level >= 50
+                      {player.level >= SPECIALIZATION_UNLOCK_LEVEL
                         ? ` · ${currentSpecialization.name}`
                         : " · 專精未解鎖"}
                     </span>
                     {equippedTitle && <small className="adventurer-equipped-title">佩戴稱號：{equippedTitle.title}</small>}
                   </div>
                   <div className="adventurer-title-badge">
-                    {player.level >= 50
+                    {player.level >= SPECIALIZATION_UNLOCK_LEVEL
                       ? `${currentSpecialization.name}・精英`
                       : player.level >= 25
                         ? "進階冒險者"

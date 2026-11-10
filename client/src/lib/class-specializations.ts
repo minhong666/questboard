@@ -24,6 +24,12 @@ export type ClassSpecialization = {
   skillNames: string[];
 };
 
+/** Game-balance invariant: specialization opens at level 30. */
+export const SPECIALIZATION_UNLOCK_LEVEL = 30;
+
+/** Game-balance invariant: specialization skills unlock at levels 30, 40, and 50. */
+export const SPECIALIZATION_SKILL_UNLOCK_LEVELS = [30, 40, 50] as const;
+
 const SPECIALIZATIONS: ClassSpecialization[] = [
   {
     id: "warrior-guardian",
@@ -103,7 +109,7 @@ export function isSpecializationSelected(
   specializationId: SpecializationId,
   selectedSpecializationId: SpecializationId
 ) {
-  return playerLevel >= 50 && specializationId === selectedSpecializationId;
+  return playerLevel >= SPECIALIZATION_UNLOCK_LEVEL && specializationId === selectedSpecializationId;
 }
 
 export function getSpecialization(
@@ -183,35 +189,35 @@ export function getAllSpecializationSkills(
 ): SpecialCombatSkill[] {
   const skillSets: Record<SpecializationId, SpecialCombatSkill[]> = {
     "warrior-guardian": [
-      createSpecializationSkill(specialization, 30, "神聖壁壘", "buff", 0, 0, 20, 30, 0, 5, 3),
-      createSpecializationSkill(specialization, 40, "守護裁決", "damage", 2.5, 30, 0, 20, 0, 0, 2),
-      createSpecializationSkill(specialization, 50, "不滅天斬", "damage", 3.2, 40, 0, 50, 0, 0, 0, 0, 0, 8),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "神聖壁壘", "buff", 0, 0, 20, 30, 0, 5, 3),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "守護裁決", "damage", 2.5, 30, 0, 20, 0, 0, 2),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "不滅天斬", "damage", 3.2, 40, 0, 50, 0, 0, 0, 0, 0, 8),
     ],
     "warrior-berserker": [
-      createSpecializationSkill(specialization, 30, "狂怒解放", "buff", 0, 0, 40, -20, 0, 0, 2, 0, 0, 5),
-      createSpecializationSkill(specialization, 40, "血獄斬", "damage", 2.6, 30),
-      createSpecializationSkill(specialization, 50, "末日狂斬", "damage", 4, 50, 0, -30, 0, 0, 3, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "狂怒解放", "buff", 0, 0, 40, -20, 0, 0, 2, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "血獄斬", "damage", 2.6, 30),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "末日狂斬", "damage", 4, 50, 0, -30, 0, 0, 3, 0, 0, 5),
     ],
     "archer-ranger": [
-      createSpecializationSkill(specialization, 30, "獵王直覺", "passive", 0, 0, 0, 0, 30, 0, 0, 0, 20),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "獵王直覺", "passive", 0, 0, 0, 0, 30, 0, 0, 0, 20),
       {
-        ...createSpecializationSkill(specialization, 40, "連環箭雨", "damage", 2, 40),
+        ...createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "連環箭雨", "damage", 2, 40),
         description: "轉職專精技能：對所有敵人各造成 2.00 倍物理傷害，防禦穿透 40%。",
         targetMode: "all",
       },
-      createSpecializationSkill(specialization, 50, "森林審判", "damage", 4.5, 55, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "森林審判", "damage", 4.5, 55, 0, 0, 0, 0, 0, 0, 0, 5),
     ],
     "archer-sniper": [
-      createSpecializationSkill(specialization, 30, "致命校準", "passive", 0, 0, 0, 0, 30, 0, 0, 20, 0),
-      createSpecializationSkill(specialization, 40, "貫星射擊", "damage", 3, 35, 0, 0, 0, 0, 0, 0, 0, 5),
-      createSpecializationSkill(specialization, 50, "終焉狙殺", "damage", 4.2, 60, 0, 0, 0, 0, 0, 0, 0, 8),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "致命校準", "passive", 0, 0, 0, 0, 30, 0, 0, 20, 0),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "貫星射擊", "damage", 3, 35, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "終焉狙殺", "damage", 4.2, 60, 0, 0, 0, 0, 0, 0, 0, 8),
     ],
     "mage-elementalist": [
-      createSpecializationSkill(specialization, 30, "元素共鳴", "damage", 2, 25),
-      createSpecializationSkill(specialization, 40, "元素爆裂", "damage", 3.1, 45, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "元素共鳴", "damage", 2, 25),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "元素爆裂", "damage", 3.1, 45, 0, 0, 0, 0, 0, 0, 0, 5),
       createSpecializationSkill(
         specialization,
-        50,
+        SPECIALIZATION_SKILL_UNLOCK_LEVELS[2],
         "天災降臨",
         "damage",
         4.2,
@@ -237,13 +243,13 @@ export function getAllSpecializationSkills(
     ],
     "mage-frostguard": [
       {
-        ...createSpecializationSkill(specialization, 30, "寒霜護體", "buff", 0, 0, -20, 50, 0, 0, 2, 0, 0, 5),
+        ...createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "寒霜護體", "buff", 0, 0, -20, 50, 0, 0, 2, 0, 0, 5),
         description: "轉職專精技能：受到傷害 −50%，造成傷害 −20%，持續 2 回合；冷卻 5 回合。",
       },
       {
         ...createSpecializationSkill(
           specialization,
-          40,
+          SPECIALIZATION_SKILL_UNLOCK_LEVELS[1],
           "冰封審判",
           "damage",
           2.1,
@@ -271,7 +277,7 @@ export function getAllSpecializationSkills(
       {
         ...createSpecializationSkill(
           specialization,
-          50,
+          SPECIALIZATION_SKILL_UNLOCK_LEVELS[2],
           "絕對零度",
           "damage",
           3.3,
@@ -297,14 +303,14 @@ export function getAllSpecializationSkills(
       },
     ],
     "rogue-assassin": [
-      createSpecializationSkill(specialization, 30, "暗殺契約", "damage", 2.5, 30),
-      createSpecializationSkill(specialization, 40, "致命連環", "damage", 3.4, 60, 0, 0, 0, 0, 0, 0, 0, 5),
-      createSpecializationSkill(specialization, 50, "無聲處決", "damage", 4.6, 60, 0, 0, 0, 0, 0, 0, 0, 8, 10),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "暗殺契約", "damage", 2.5, 30),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "致命連環", "damage", 3.4, 60, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "無聲處決", "damage", 4.6, 60, 0, 0, 0, 0, 0, 0, 0, 8, 10),
     ],
     "rogue-shadowdancer": [
-      createSpecializationSkill(specialization, 30, "影步幻舞", "passive", 0, 0, 0, 0, 25, 0, 0, 0, 10),
-      createSpecializationSkill(specialization, 40, "月影亂舞", "damage", 2.4, 45, 0, 0, 0, 0, 0, 0, 0, 5),
-      createSpecializationSkill(specialization, 50, "萬影歸寂", "damage", 4, 30, 0, 0, 0, 0, 3, 0, 30, 8),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[0], "影步幻舞", "passive", 0, 0, 0, 0, 25, 0, 0, 0, 10),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[1], "月影亂舞", "damage", 2.4, 45, 0, 0, 0, 0, 0, 0, 0, 5),
+      createSpecializationSkill(specialization, SPECIALIZATION_SKILL_UNLOCK_LEVELS[2], "萬影歸寂", "damage", 4, 30, 0, 0, 0, 0, 3, 0, 30, 8),
     ],
   };
   return skillSets[specialization.id];
@@ -383,4 +389,14 @@ export function applySpecializationToSkill(
           : skill.critDamageBonusPercent,
     description: `${skill.description}（${specialization.name}專精）`,
   };
+}
+
+export function applySpecializationToSkillAtLevel(
+  skill: SpecialCombatSkill,
+  specialization: ClassSpecialization,
+  playerLevel: number
+): SpecialCombatSkill {
+  return playerLevel >= SPECIALIZATION_UNLOCK_LEVEL
+    ? applySpecializationToSkill(skill, specialization)
+    : skill;
 }
