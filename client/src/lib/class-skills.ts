@@ -315,7 +315,7 @@ export function getUnlockedSpecialSkills(
                   : isArcherDawnShot
                     ? "物理技能，造成 3.00 倍傷害；冷卻 5 回合。"
                     : isWarriorSlash
-                      ? `物理技能，對所有敵人各造成自身 1.50 倍傷害；冷卻 ${cooldownTurns} 回合。`
+                      ? `物理技能，對單一敵人造成自身 1.50 倍傷害；冷卻 ${cooldownTurns} 回合。`
                       : isBerserkerStrike
                         ? `對所有敵人各造成 ${(1.5 + requiredValue / 100).toFixed(2)} 倍物理傷害；冷卻 ${cooldownTurns} 回合。`
                         : `${damageType}技能，造成 ${isMageFireball ? "1.50" : isMageMeteor ? "3.00" : isRogue ? (2 + index * 0.3).toFixed(2) : (1.5 + requiredValue / 100).toFixed(2)} 倍傷害；冷卻 ${cooldownTurns} 回合${statusDescription ? `；${statusDescription}` : ""}`,
@@ -327,10 +327,7 @@ export function getUnlockedSpecialSkills(
       critDamageBonusPercent: isArcherFocus ? 30 : 0,
       targetMode: isMageMeteor
         ? "all"
-        : isBerserkerStrike ||
-            isWarriorSlash ||
-            isArcherRapidVolley ||
-            isRogueShunyingDart
+        : isBerserkerStrike || isArcherRapidVolley || isRogueShunyingDart
           ? "all"
           : isArcherPiercingShot
             ? "two"

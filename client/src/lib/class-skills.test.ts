@@ -7,6 +7,7 @@ import {
   getNextSkillUnlockThreshold,
   getUnlockedSpecialSkills,
 } from "./class-skills";
+import { applyMonsterGroupSkillDamage } from "./monster-combat";
 
 describe("class-specific special skills", () => {
   it("unlocks one warrior physical skill at each 25-point strength milestone", () => {
@@ -15,10 +16,17 @@ describe("class-specific special skills", () => {
 
     const skills = getUnlockedSpecialSkills("warrior", 100, 0);
     expect(skills.map(skill => skill.requiredValue)).toEqual([25, 50, 75, 100]);
-    expect(skills.map(skill => skill.name)).toEqual(["騎士之心", "戰騎斬", "狂戰重擊", "滅世斬"]);
+    expect(skills.map(skill => skill.name)).toEqual([
+      "騎士之心",
+      "戰騎斬",
+      "狂戰重擊",
+      "滅世斬",
+    ]);
     expect(skills.every(skill => skill.jobClass === "warrior")).toBe(true);
     expect(skills.every(skill => skill.damageType === "物理")).toBe(true);
-    expect(skills.slice(2).every(skill => skill.effectType === "damage")).toBe(true);
+    expect(skills.slice(2).every(skill => skill.effectType === "damage")).toBe(
+      true
+    );
   });
 
   it("adds warrior damage skills at 75 and 100 strength, then caps", () => {
@@ -86,9 +94,18 @@ describe("class-specific special skills", () => {
       critDamageBonusPercent: 30,
       description: "暴擊傷害增加 30%。",
     });
-    expect(skills.map(skill => skill.name)).toEqual(["鷹眼", "穿雲箭", "連珠箭", "破曉射擊"]);
-    expect(skills.slice(1).every(skill => skill.effectType === "damage")).toBe(true);
-    expect(skills.slice(1).every(skill => skill.damageMultiplier > 0)).toBe(true);
+    expect(skills.map(skill => skill.name)).toEqual([
+      "鷹眼",
+      "穿雲箭",
+      "連珠箭",
+      "破曉射擊",
+    ]);
+    expect(skills.slice(1).every(skill => skill.effectType === "damage")).toBe(
+      true
+    );
+    expect(skills.slice(1).every(skill => skill.damageMultiplier > 0)).toBe(
+      true
+    );
     expect(skills[1]).toMatchObject({
       damageMultiplier: 1.6,
       defensePiercePercent: 30,
@@ -134,11 +151,17 @@ describe("class-specific special skills", () => {
       defensePiercePercent: 0,
       targetMode: "all",
     });
-    expect(getUnlockedSpecialSkills("rogue", 0, 0, 0, 250).every(skill => skill.damageType === "物理")).toBe(true);
+    expect(
+      getUnlockedSpecialSkills("rogue", 0, 0, 0, 250).every(
+        skill => skill.damageType === "物理"
+      )
+    ).toBe(true);
     expect(getNextSkillUnlockThreshold("rogue", 0, 0, 0, 170)).toBe(200);
 
     const allSkills = getUnlockedSpecialSkills("rogue", 0, 0, 0, 250);
-    expect(allSkills.map(skill => skill.requiredValue)).toEqual([170, 200, 225, 250]);
+    expect(allSkills.map(skill => skill.requiredValue)).toEqual([
+      170, 200, 225, 250,
+    ]);
     expect(allSkills.map(skill => skill.name)).toEqual([
       "背刺",
       "順影鏢殺",
@@ -167,10 +190,10 @@ describe("class-specific special skills", () => {
     expect(knightHeart.description).toContain("持續 3 回合");
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     expect(skill.description).toBe(
-      "物理技能，對所有敵人各造成自身 1.50 倍傷害；冷卻 4 回合。"
+      "物理技能，對單一敵人造成自身 1.50 倍傷害；冷卻 4 回合。"
     );
     expect(skill.damageMultiplier).toBe(1.5);
-    expect(skill.targetMode).toBe("all");
+    expect(skill.targetMode).toBe("single");
     expect(skill.flatDamageBonus).toBe(0);
     expect(skill.cooldownTurns).toBe(4);
     expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(136);
@@ -181,13 +204,55 @@ describe("class-specific special skills", () => {
     expect(berserkerStrike.description).toContain("對所有敵人");
   });
 
+  it("uses generated target modes to damage only the selected target or every living enemy", () => {
+    const members = [
+      { id: "enemy-1", health: 40, maxHealth: 40 },
+      { id: "enemy-2", health: 50, maxHealth: 50 },
+      { id: "enemy-3", health: 0, maxHealth: 40 },
+    ];
+    const warriorSkills = getUnlockedSpecialSkills("warrior", 75, 0);
+    const slash = warriorSkills[1];
+    const berserkerStrike = warriorSkills[2];
+
+    const slashResult = applyMonsterGroupSkillDamage(
+      members,
+      20,
+      slash.targetMode!,
+      "enemy-2"
+    );
+    expect(slashResult.damageByMember).toEqual({ "enemy-2": 20 });
+    expect(slashResult.members.map(member => member.health)).toEqual([
+      40, 30, 0,
+    ]);
+
+    const berserkerResult = applyMonsterGroupSkillDamage(
+      members,
+      20,
+      berserkerStrike.targetMode!,
+      "enemy-2"
+    );
+    expect(berserkerResult.damageByMember).toEqual({
+      "enemy-1": 20,
+      "enemy-2": 20,
+    });
+    expect(berserkerResult.members.map(member => member.health)).toEqual([
+      20, 30, 0,
+    ]);
+  });
+
   it("gives every unlocked skill a reusable 3-to-5-turn cooldown", () => {
     for (const jobClass of ["warrior", "archer", "mage", "rogue"] as const) {
       const skills = getAllSpecialSkills(jobClass);
       expect(skills.length).toBeGreaterThan(0);
-      expect(skills.every(skill => skill.cooldownTurns >= 3 && skill.cooldownTurns <= 5)).toBe(true);
+      expect(
+        skills.every(
+          skill => skill.cooldownTurns >= 3 && skill.cooldownTurns <= 5
+        )
+      ).toBe(true);
     }
-    expect(getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)).toEqual([5, 4, 5, 5]);
+    expect(
+      getAllSpecialSkills("warrior").map(skill => skill.cooldownTurns)
+    ).toEqual([5, 4, 5, 5]);
   });
 
   it("keeps applicable defense penetration between 25% and 60%", () => {
