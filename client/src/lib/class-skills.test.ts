@@ -172,6 +172,10 @@ describe("class-specific special skills", () => {
     expect(skill.cooldownTurns).toBe(4);
     expect(calculateSpecialSkillDamage(100, 40, skill)).toBe(136);
     expect(calculateSpecialSkillDamage(1, 1000, skill)).toBe(1);
+    const berserkerStrike = getUnlockedSpecialSkills("warrior", 75, 0)[2];
+    expect(berserkerStrike.name).toBe("狂戰重擊");
+    expect(berserkerStrike.targetMode).toBe("all");
+    expect(berserkerStrike.description).toContain("對所有敵人");
   });
 
   it("gives every unlocked skill a reusable 3-to-5-turn cooldown", () => {

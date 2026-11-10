@@ -187,18 +187,18 @@ describe("class specializations", () => {
     });
   });
 
-  it("unlocks specialization skills at levels 50, 75, and 100", () => {
+  it("unlocks specialization skills at levels 30, 40, and 50", () => {
     const specialization = getSpecializations("mage")[0];
-    expect(getUnlockedSpecializationSkills(specialization, 49)).toHaveLength(0);
-    expect(getUnlockedSpecializationSkills(specialization, 50)).toHaveLength(1);
-    expect(getUnlockedSpecializationSkills(specialization, 75)).toHaveLength(2);
-    expect(getUnlockedSpecializationSkills(specialization, 100)).toHaveLength(3);
+    expect(getUnlockedSpecializationSkills(specialization, 29)).toHaveLength(0);
+    expect(getUnlockedSpecializationSkills(specialization, 30)).toHaveLength(1);
+    expect(getUnlockedSpecializationSkills(specialization, 40)).toHaveLength(2);
+    expect(getUnlockedSpecializationSkills(specialization, 50)).toHaveLength(3);
     expect(getAllSpecializationSkills(specialization).map(skill => skill.unlockLevel)).toEqual([
+      30,
+      40,
       50,
-      75,
-      100,
     ]);
-    expect(getNextSpecializationSkillLevel(specialization, 50)).toBe(75);
-    expect(getNextSpecializationSkillLevel(specialization, 100)).toBeNull();
+    expect(getNextSpecializationSkillLevel(specialization, 30)).toBe(40);
+    expect(getNextSpecializationSkillLevel(specialization, 50)).toBeNull();
   });
 });
