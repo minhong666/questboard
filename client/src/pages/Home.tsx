@@ -55,6 +55,7 @@ import {
 
 import {
   canEquipEquipment,
+  EQUIPMENT_CODEX_TEMPLATES,
   EQUIPMENT_SLOTS,
   getEquipmentRequiredJobClassName,
   getEquipmentAffixBonuses,
@@ -3172,17 +3173,19 @@ export default function Home() {
         };
       })()
     : null;
-  const codexItems = RPG_EQUIPMENT_TEMPLATES.filter(
+  const codexItems = EQUIPMENT_CODEX_TEMPLATES.filter(
     item =>
       (codexRarity === "all" || item.rarity === codexRarity) &&
       (codexSlot === "all" || item.slot === codexSlot)
   );
   const discoveredEquipmentNames = new Set(permanentlyDiscoveredEquipmentNames);
-  const codexDiscoveredCount = RPG_EQUIPMENT_TEMPLATES.filter(item =>
+  const codexDiscoveredCount = EQUIPMENT_CODEX_TEMPLATES.filter(item =>
     discoveredEquipmentNames.has(item.name)
   ).length;
-  const codexCompletionPercent = RPG_EQUIPMENT_TEMPLATES.length
-    ? Math.round((codexDiscoveredCount / RPG_EQUIPMENT_TEMPLATES.length) * 100)
+  const codexCompletionPercent = EQUIPMENT_CODEX_TEMPLATES.length
+    ? Math.round(
+        (codexDiscoveredCount / EQUIPMENT_CODEX_TEMPLATES.length) * 100
+      )
     : 0;
   const monsterCodexEntries = [
     ...DAILY_MONSTER_CATALOG.map((monster, index) => ({
@@ -12980,7 +12983,7 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="codex-total-badge">
-                  <strong>{RPG_EQUIPMENT_TEMPLATES.length}</strong>
+                  <strong>{EQUIPMENT_CODEX_TEMPLATES.length}</strong>
                   <span>件裝備</span>
                 </div>
               </div>
@@ -12989,11 +12992,11 @@ export default function Home() {
                 <div className="codex-progress-copy">
                   <span className="mini-kicker">COLLECTION PROGRESS</span>
                   <strong>
-                    {codexDiscoveredCount} / {RPG_EQUIPMENT_TEMPLATES.length}{" "}
+                    {codexDiscoveredCount} / {EQUIPMENT_CODEX_TEMPLATES.length}{" "}
                     已發現
                   </strong>
                   <small>
-                    尚有 {RPG_EQUIPMENT_TEMPLATES.length - codexDiscoveredCount}{" "}
+                    尚有 {EQUIPMENT_CODEX_TEMPLATES.length - codexDiscoveredCount}{" "}
                     件裝備等待探索 · 曾取得的裝備永久解鎖，所有存檔共用進度
                   </small>
                 </div>
@@ -13068,7 +13071,7 @@ export default function Home() {
               <div className="codex-result-summary">
                 <span>
                   目前顯示 {codexItems.length} /{" "}
-                  {RPG_EQUIPMENT_TEMPLATES.length} 件裝備
+                  {EQUIPMENT_CODEX_TEMPLATES.length} 件裝備
                 </span>
                 <span>
                   {
@@ -13097,7 +13100,7 @@ export default function Home() {
                       )
                     : undefined;
                   const collectionNumber =
-                    RPG_EQUIPMENT_TEMPLATES.indexOf(item) + 1;
+                    EQUIPMENT_CODEX_TEMPLATES.indexOf(item) + 1;
                   return (
                     <article
                       className={`codex-card panel-card loot-${LOOT_RARITY_CLASS[item.rarity]} ${discovered ? "is-discovered" : "is-locked"}`}

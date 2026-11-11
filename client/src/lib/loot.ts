@@ -736,7 +736,7 @@ const starterEquipmentTemplates: Array<
 const equipmentTemplates: Array<
   Omit<EquipmentItem, "id" | "kind"> & { minLevel: number }
 > = [...starterEquipmentTemplates, ...RPG_EQUIPMENT_TEMPLATES];
-
+export const EQUIPMENT_CODEX_TEMPLATES = equipmentTemplates;
 const treasureTemplates: Array<
   Omit<TreasureItem, "id" | "kind" | "slot" | "rarity" | "sellValue">
 > = [

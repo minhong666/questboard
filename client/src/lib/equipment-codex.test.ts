@@ -3,6 +3,7 @@ import {
   mergeDiscoveredEquipmentNames,
   parseDiscoveredEquipmentNames,
 } from "./equipment-codex";
+import { EQUIPMENT_CODEX_TEMPLATES } from "./loot";
 
 describe("permanent equipment codex discoveries", () => {
   it("migrates equipment currently held in any save into the permanent set", () => {
@@ -48,5 +49,27 @@ describe("permanent equipment codex discoveries", () => {
       parseDiscoveredEquipmentNames(["裝備甲", "裝備甲", "", null, 7])
     ).toEqual(["裝備甲"]);
     expect(parseDiscoveredEquipmentNames("invalid")).toEqual([]);
+  });
+
+  it("includes the ten starter and special equipment in the codex", () => {
+    const specialEquipmentNames = [
+      "磨亮的冒險者短劍",
+      "森林守護胸甲",
+      "旅者皮帽",
+      "見習者護腿",
+      "森林守護護身符",
+      "專注學者之戒",
+      "迅捷旅者護腿",
+      "不屈心核",
+      "裂空魔刃",
+      "區域王冠",
+    ];
+
+    expect(
+      specialEquipmentNames.every(name =>
+        EQUIPMENT_CODEX_TEMPLATES.some(item => item.name === name)
+      )
+    ).toBe(true);
+    expect(EQUIPMENT_CODEX_TEMPLATES).toHaveLength(550);
   });
 });
