@@ -221,6 +221,7 @@ describe("QuestBoard loot", () => {
       傳說: 0.028,
       神話: 0.002,
     });
+    expectProbabilityMap(midLevel.equipmentRarities, midLevel.treasureRarities);
     const highLevel = getLootProbabilitySummary({ level: 30 });
     expectProbabilityMap(highLevel.treasureRarities, {
       普通: 0.4,
@@ -230,16 +231,9 @@ describe("QuestBoard loot", () => {
       傳說: 0.068,
       神話: 0.002,
     });
-    expect(highLevel.equipmentRarities.普通).toBeLessThan(
-      highLevel.treasureRarities.普通
-    );
-    expect(highLevel.equipmentRarities.史詩).toBeGreaterThan(
-      highLevel.treasureRarities.史詩
-    );
+    expectProbabilityMap(highLevel.equipmentRarities, highLevel.treasureRarities);
     const crownLevel = getLootProbabilitySummary({ level: 50 });
-    expect(crownLevel.equipmentRarities.傳說).toBeGreaterThan(
-      crownLevel.treasureRarities.傳說
-    );
+    expectProbabilityMap(crownLevel.equipmentRarities, crownLevel.treasureRarities);
   });
 
   it("reports guaranteed boss drops and equipment-template rarity floors", () => {
@@ -272,7 +266,7 @@ describe("QuestBoard loot", () => {
     });
   });
 
-  it("scales equipment base bonuses and rolls a matching quality affix", () => {
+  it("selects a template that already has the rolled quality", () => {
     const item = rollLoot(
       { level: 1 },
       randomSequence(0, 0, 0.75, 0, 0, 0),
@@ -282,10 +276,22 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("力量 +3 · 暴擊率 +4% · 暴擊傷害 +6%");
+    expect(item.bonus).toBe("生命 +65 · 防禦 +7 · 力量 +6");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");
+  });
+
+  it("selects a legendary template when the rolled equipment quality is legendary", () => {
+    const item = rollLoot(
+      { level: 1 },
+      randomSequence(0, 0, 0.995, 0, 0, 0),
+      () => 235
+    );
+    expect(item?.kind).toBe("equipment");
+    if (item?.kind !== "equipment") throw new Error("Expected equipment");
+    expect(item.rarity).toBe("傳說");
+    expect(item.name).toBe("區域王冠");
   });
 
   it("gives higher equipment rarities more distinct affixes", () => {
@@ -760,6 +766,28 @@ describe("Equipment fusion", () => {
     expect(fusion?.result.kind).toBe("equipment");
     expect(["頭盔", "武器", "胸甲"]).toContain(fusion?.result.slot);
     expect(fusion?.result.affixes).toHaveLength(1);
+  });
+
+  it("allows fusion at level 1 without applying template level requirements", () => {
+    const commonEquipment = (id: string, slot: EquipmentSlot): EquipmentItem => ({
+      ...equipment(id, slot),
+      rarity: "普通",
+    });
+    const fusion = prepareEquipmentFusion(
+      [
+        commonEquipment("common-helmet", "頭盔"),
+        commonEquipment("common-weapon", "武器"),
+        commonEquipment("common-chest", "胸甲"),
+      ],
+      [],
+      "普通",
+      1,
+      randomSequence(0, 0, 0),
+      () => 124
+    );
+
+    expect(fusion?.result.rarity).toBe("精良");
+    expect(fusion?.result.name).toBe("精鍛鐵盔");
   });
 
   it("selects the result from the next-rarity templates", () => {

@@ -286,6 +286,14 @@ type TitanBastionBattleState = {
   setInvincibilityTurnsRemaining: number;
   setLethalProtectionUsed: boolean;
 };
+type TimedBattleBuff = {
+  skillId: string;
+  turnsRemaining: number;
+  damageBonusPercent: number;
+  damageReductionPercent: number;
+  healPercentMaxHealth: number;
+  dodgeRateBonusPercent: number;
+};
 type BattleState = {
   monsterId: string;
   monsterSnapshot: Monster;
@@ -348,18 +356,54 @@ type BattleState = {
   monsterStatuses: BattleStatus[];
   playerStatuses: BattleStatus[];
   monsterSkillCooldown?: number;
-  activeBuff: {
-    skillId: string;
-    turnsRemaining: number;
-    damageBonusPercent: number;
-    damageReductionPercent: number;
-    healPercentMaxHealth: number;
-    dodgeRateBonusPercent: number;
-  } | null;
+  activeBuff: TimedBattleBuff | null;
+  activeBuffs?: TimedBattleBuff[];
   xpReward: number;
   lootDrop: LootItem | null;
   outcome: "fighting" | "victory" | "defeat";
 };
+
+function getBattleBuffLayers(
+  battle: Pick<BattleState, "activeBuff" | "activeBuffs">
+) {
+  return battle.activeBuffs?.length
+    ? battle.activeBuffs
+    : battle.activeBuff
+      ? [battle.activeBuff]
+      : [];
+}
+
+function combineBattleBuffs(
+  buffLayers: TimedBattleBuff[]
+): TimedBattleBuff | null {
+  if (buffLayers.length === 0) return null;
+  return {
+    skillId: buffLayers.map(buff => buff.skillId).join(","),
+    turnsRemaining: Math.max(...buffLayers.map(buff => buff.turnsRemaining)),
+    damageBonusPercent: buffLayers.reduce(
+      (total, buff) => total + buff.damageBonusPercent,
+      0
+    ),
+    damageReductionPercent: buffLayers.reduce(
+      (total, buff) => total + buff.damageReductionPercent,
+      0
+    ),
+    healPercentMaxHealth: buffLayers.reduce(
+      (total, buff) => total + buff.healPercentMaxHealth,
+      0
+    ),
+    dodgeRateBonusPercent: buffLayers.reduce(
+      (total, buff) => total + buff.dodgeRateBonusPercent,
+      0
+    ),
+  };
+}
+
+function tickBattleBuffLayers(buffLayers: TimedBattleBuff[]) {
+  return buffLayers
+    .map(buff => ({ ...buff, turnsRemaining: buff.turnsRemaining - 1 }))
+    .filter(buff => buff.turnsRemaining > 0);
+}
 
 type BattleStatus = {
   kind: SkillStatusKind;
@@ -5029,6 +5073,7 @@ export default function Home() {
       playerStatuses: [],
       monsterSkillCooldown: 0,
       activeBuff: null,
+      activeBuffs: [],
       xpReward: 0,
       lootDrop: null,
       outcome: "fighting",
@@ -5288,7 +5333,8 @@ export default function Home() {
             selectedSkill.cooldownTurns - cooldownReduction
           );
     }
-    const activeBuff =
+    const activeBuffLayers = getBattleBuffLayers(battle);
+    const newActiveBuff =
       selectedSkill &&
       (selectedSkill.effectType === "buff" ||
         selectedSkill.damageBonusPercent > 0 ||
@@ -5303,11 +5349,14 @@ export default function Home() {
             healPercentMaxHealth: selectedSkill.healPercentMaxHealth ?? 0,
             dodgeRateBonusPercent: selectedSkill.dodgeRateBonusPercent ?? 0,
           }
-        : battle.activeBuff;
-    const nextActiveBuff =
-      activeBuff && activeBuff.turnsRemaining > 1
-        ? { ...activeBuff, turnsRemaining: activeBuff.turnsRemaining - 1 }
         : null;
+    const activeBuff = combineBattleBuffs(
+      newActiveBuff ? [...activeBuffLayers, newActiveBuff] : activeBuffLayers
+    );
+    const nextActiveBuffLayers = tickBattleBuffLayers(
+      newActiveBuff ? [...activeBuffLayers, newActiveBuff] : activeBuffLayers
+    );
+    const nextActiveBuff = combineBattleBuffs(nextActiveBuffLayers);
     const monster = activeBattleMonster;
     const targetGroupMember =
       battle.groupMembers?.find(
@@ -7543,7 +7592,8 @@ export default function Home() {
         monsterStatuses: statusTick.statuses,
         playerStatuses: battle.playerStatuses,
         monsterSkillCooldown: battle.monsterSkillCooldown,
-        activeBuff: battle.activeBuff,
+        activeBuff: nextActiveBuff,
+        activeBuffs: nextActiveBuffLayers,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [
@@ -8910,6 +8960,7 @@ export default function Home() {
           playerStatuses: nextPlayerStatuses,
           monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
+          activeBuffs: nextActiveBuffLayers,
           actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
           turn: battle.turn + 1,
           logs: [
@@ -9007,6 +9058,7 @@ export default function Home() {
         playerStatuses: nextPlayerStatuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
+        activeBuffs: nextActiveBuffLayers,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
         logs: [...nextLogs, `你被${monster.name}擊倒了！`],
@@ -9123,6 +9175,7 @@ export default function Home() {
       playerStatuses: nextPlayerStatuses,
       monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
+      activeBuffs: nextActiveBuffLayers,
       actionLockTurns:
         selectedSkill?.name === "終焉狙殺"
           ? 1

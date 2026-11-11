@@ -889,17 +889,8 @@ function rollRarity(monster: LootMonster, random: () => number): LootRarity {
   return rarities[rarities.length - 1];
 }
 
-function higherRarity(left: LootRarity, right: LootRarity): LootRarity {
-  return rarityRank[left] >= rarityRank[right] ? left : right;
-}
-
-function getEquipmentPool(monster: LootMonster) {
-  const level = Math.max(1, monster.level);
-  const available = equipmentTemplates.filter(item => item.minLevel <= level);
-  const bossEquipment = monster.isBoss
-    ? available.filter(item => rarityRank[item.rarity] >= rarityRank.史詩)
-    : [];
-  return bossEquipment.length > 0 ? bossEquipment : available;
+function getEquipmentPoolForRarity(rarity: LootRarity) {
+  return equipmentTemplates.filter(template => template.rarity === rarity);
 }
 
 export function getLootProbabilitySummary(
@@ -911,15 +902,9 @@ export function getLootProbabilitySummary(
   const equipmentRarities = Object.fromEntries(
     LOOT_RARITIES.map(rarity => [rarity, 0])
   ) as LootRarityDistribution;
-  const equipmentPool = getEquipmentPool(monster);
-  const templates =
-    equipmentPool.length > 0 ? equipmentPool : equipmentTemplates;
-
-  for (const template of templates) {
-    for (const rarity of LOOT_RARITIES) {
-      const finalRarity = higherRarity(template.rarity, rarity);
-      equipmentRarities[finalRarity] +=
-        rolledRarities[rarity] / templates.length;
+  for (const rarity of LOOT_RARITIES) {
+    if (getEquipmentPoolForRarity(rarity).length > 0) {
+      equipmentRarities[rarity] = rolledRarities[rarity];
     }
   }
 
@@ -1003,9 +988,9 @@ export function rollLoot(
     };
   }
 
-  const pool = getEquipmentPool(monster);
-  const template = pick(pool.length > 0 ? pool : equipmentTemplates, random);
-  const rarity = higherRarity(template.rarity, rolledRarity);
+  const pool = getEquipmentPoolForRarity(rolledRarity);
+  const template = pick(pool, random);
+  const rarity = rolledRarity;
   const affixes = rollEquipmentAffixes(rarity, random);
 
   return {
@@ -1013,7 +998,7 @@ export function rollLoot(
     id: `${template.name}-${idSuffix()}`,
     kind: "equipment",
     rarity,
-    bonus: scaleBonusByRarity(template.bonus, template.rarity, rarity),
+    bonus: template.bonus,
     affixes,
   };
 }
@@ -1037,16 +1022,16 @@ export function rollQuestChestLoot(
   const idSuffix = () => `${now()}-${Math.floor(random() * 1_000_000)}`;
 
   if (itemRoll < 0.35) {
-    const pool = getEquipmentPool(monster);
-    const template = pick(pool.length > 0 ? pool : equipmentTemplates, random);
-    const rarity = higherRarity(template.rarity, rolledRarity);
+    const pool = getEquipmentPoolForRarity(rolledRarity);
+    const template = pick(pool, random);
+    const rarity = rolledRarity;
     const affixes = rollEquipmentAffixes(rarity, random);
     return {
       ...template,
       id: `${template.name}-${idSuffix()}`,
       kind: "equipment",
       rarity,
-      bonus: scaleBonusByRarity(template.bonus, template.rarity, rarity),
+      bonus: template.bonus,
       affixes,
     };
   }
@@ -1349,10 +1334,6 @@ export function prepareEquipmentFusion(
     return null;
   }
 
-  const level = Math.max(
-    1,
-    Math.floor(Number.isFinite(playerLevel) ? playerLevel : 1)
-  );
   const slot = pick(
     ingredients.map(item => item.slot),
     random
@@ -1360,7 +1341,6 @@ export function prepareEquipmentFusion(
   const templates = equipmentTemplates.filter(
     template =>
       template.slot === slot &&
-      template.minLevel <= level &&
       template.rarity === nextRarity
   );
   if (templates.length === 0) return null;
@@ -1371,7 +1351,7 @@ export function prepareEquipmentFusion(
     id: `${template.name}-fusion-${now()}-${Math.floor(random() * 1_000_000)}`,
     kind: "equipment",
     rarity: nextRarity,
-    bonus: scaleBonusByRarity(template.bonus, template.rarity, nextRarity),
+    bonus: template.bonus,
     affixes: rollEquipmentAffixes(nextRarity, random),
   };
 
