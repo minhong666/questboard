@@ -27,6 +27,15 @@
   --green: #6be4ab;
   --pink: #e48bc5;
   --sidebar-width: 252px;
+  --quest-panel: #121a2d;
+  --quest-panel-2: #151f36;
+  --quest-panel-3: #192640;
+  --quest-line: rgba(151, 169, 207, 0.16);
+  --quest-line-bright: rgba(168, 184, 221, 0.28);
+  --quest-accent: #8b7cff;
+  --quest-accent-strong: #b0a8ff;
+  --quest-accent-rgb: 139, 124, 255;
+  --quest-accent-foreground: #100d1b;
 }
 
 * {
@@ -34,11 +43,12 @@
 }
 html {
   scroll-behavior: smooth;
+  background: var(--quest-app-bg);
 }
 body {
   margin: 0;
   min-width: 320px;
-  background: var(--bg);
+  background: var(--quest-app-bg);
 }
 button,
 input,
@@ -62,17 +72,18 @@ button:disabled {
   background:
     radial-gradient(
       circle at 74% -10%,
-      rgba(76, 82, 156, 0.2),
+      rgba(var(--quest-accent-rgb), 0.16),
       transparent 31rem
     ),
     var(--quest-app-bg);
   display: flex;
+  transition: background-color 240ms ease;
 }
 .quest-sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
   border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, #11182b 0%, #0f1628 100%);
+  background: linear-gradient(180deg, var(--quest-panel-2) 0%, var(--quest-panel) 100%);
   padding: 27px 16px 20px;
   display: flex;
   flex-direction: column;
@@ -95,8 +106,8 @@ button:disabled {
   display: grid;
   place-items: center;
   color: #16132f;
-  background: linear-gradient(135deg, #aa9eff, #6c61e7);
-  box-shadow: 0 8px 26px rgba(117, 100, 255, 0.28);
+  background: linear-gradient(135deg, var(--quest-accent-strong), var(--quest-accent));
+  box-shadow: 0 8px 26px rgba(var(--quest-accent-rgb), 0.28);
   transform: rotate(-7deg);
 }
 .brand-mark svg {
@@ -179,10 +190,10 @@ button:disabled {
   color: #f5f3ff;
   background: linear-gradient(
     90deg,
-    rgba(119, 105, 243, 0.28),
-    rgba(102, 93, 218, 0.09)
+    rgba(var(--quest-accent-rgb), 0.28),
+    rgba(var(--quest-accent-rgb), 0.09)
   );
-  box-shadow: inset 2px 0 0 #9c90ff;
+  box-shadow: inset 2px 0 0 var(--quest-accent-strong);
 }
 .sidebar-link.active svg {
   color: var(--violet-bright);
@@ -203,8 +214,8 @@ button:disabled {
   border: 1px solid rgba(139, 124, 255, 0.17);
   background: linear-gradient(
     135deg,
-    rgba(82, 74, 164, 0.22),
-    rgba(31, 46, 77, 0.18)
+    rgba(var(--quest-accent-rgb), 0.17),
+    rgba(var(--quest-accent-rgb), 0.04)
   );
   border-radius: 13px;
 }
@@ -214,8 +225,8 @@ button:disabled {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: rgba(160, 148, 255, 0.16);
-  color: #afa6ff;
+  background: rgba(var(--quest-accent-rgb), 0.16);
+  color: var(--quest-accent-strong);
   flex: 0 0 auto;
 }
 .sidebar-footer-card strong,
@@ -312,7 +323,7 @@ button:disabled {
   justify-content: space-between;
   padding: 0 clamp(24px, 4vw, 58px);
   border-bottom: 1px solid var(--line);
-  background: rgba(11, 16, 32, 0.7);
+  background: color-mix(in srgb, var(--quest-app-bg) 88%, transparent);
 }
 .crumb {
   display: flex;
@@ -338,20 +349,20 @@ button:disabled {
   align-items: center;
   gap: 5px;
   padding: 7px 9px;
-  color: #c6b9ff;
-  border: 1px solid rgba(139, 124, 255, 0.24);
+  color: var(--quest-accent-strong);
+  border: 1px solid rgba(var(--quest-accent-rgb), 0.3);
   border-radius: 8px;
-  background: rgba(139, 124, 255, 0.08);
+  background: rgba(var(--quest-accent-rgb), 0.1);
   font-size: 9px;
   font-weight: 750;
   transition: 0.18s ease;
 }
 .background-theme-button:hover {
   color: #f0edff;
-  border-color: rgba(176, 168, 255, 0.58);
-  background: rgba(139, 124, 255, 0.18);
+  border-color: var(--quest-accent-strong);
+  background: rgba(var(--quest-accent-rgb), 0.2);
 }
-.background-theme-button svg { color: #b0a8ff; }
+.background-theme-button svg { color: var(--quest-accent-strong); }
 .date-chip {
   display: flex;
   align-items: center;
@@ -485,9 +496,9 @@ h1 {
   min-height: 38px;
   padding: 0 15px;
   border-radius: 9px;
-  color: #16152b;
-  background: linear-gradient(135deg, #b1a7ff, #8174f2);
-  box-shadow: 0 8px 24px rgba(103, 90, 226, 0.22);
+  color: var(--quest-accent-foreground);
+  background: linear-gradient(135deg, var(--quest-accent-strong), var(--quest-accent));
+  box-shadow: 0 8px 24px rgba(var(--quest-accent-rgb), 0.22);
   font-size: 12px;
   font-weight: 800;
   transition:
@@ -499,12 +510,12 @@ h1 {
 .secondary-button:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 11px 27px rgba(103, 90, 226, 0.32);
+  box-shadow: 0 11px 27px rgba(var(--quest-accent-rgb), 0.32);
 }
 .secondary-button {
-  color: #cfcaff;
-  background: rgba(133, 119, 255, 0.1);
-  border: 1px solid rgba(149, 137, 255, 0.25);
+  color: var(--quest-accent-strong);
+  background: rgba(var(--quest-accent-rgb), 0.1);
+  border: 1px solid rgba(var(--quest-accent-rgb), 0.3);
   box-shadow: none;
 }
 
@@ -515,9 +526,14 @@ h1 {
   padding: 27px 30px;
   display: flex;
   align-items: center;
-  border: 1px solid rgba(154, 145, 255, 0.23);
+  border: 1px solid rgba(var(--quest-accent-rgb), 0.28);
   border-radius: 16px;
-  background: linear-gradient(110deg, #252450 0%, #1c2344 51%, #192c4d 100%);
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--quest-panel-3) 80%, var(--quest-accent) 20%) 0%,
+    var(--quest-panel-2) 55%,
+    var(--quest-panel) 100%
+  );
   box-shadow: 0 18px 44px rgba(3, 7, 24, 0.2);
 }
 .hero-panel::before {
@@ -527,7 +543,7 @@ h1 {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(177, 164, 255, 0.055) 49%,
+    rgba(var(--quest-accent-rgb), 0.08) 49%,
     transparent 76%
   );
   pointer-events: none;
@@ -543,14 +559,14 @@ h1 {
   height: 240px;
   top: -130px;
   right: 23%;
-  background: rgba(121, 109, 250, 0.12);
+  background: rgba(var(--quest-accent-rgb), 0.14);
 }
 .hero-glow-two {
   width: 190px;
   height: 190px;
   bottom: -135px;
   right: 3%;
-  background: rgba(55, 201, 219, 0.08);
+  background: rgba(var(--quest-accent-rgb), 0.08);
 }
 .hero-profile {
   z-index: 1;
@@ -3107,13 +3123,9 @@ h2 {
   gap: 18px;
 }
 .panel-card {
-  border: 1px solid var(--line);
+  border: 1px solid var(--quest-line);
   border-radius: 15px;
-  background: linear-gradient(
-    145deg,
-    rgba(22, 31, 53, 0.94),
-    rgba(17, 25, 44, 0.96)
-  );
+  background: linear-gradient(145deg, var(--quest-panel-2), var(--quest-panel));
   box-shadow: 0 11px 32px rgba(2, 7, 20, 0.16);
 }
 .bingo-card {

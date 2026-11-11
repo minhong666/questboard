@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  BACKGROUND_THEMES,
+  normalizeBackgroundTheme,
+  type BackgroundThemeId,
+} from "../lib/background-themes";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -546,21 +551,6 @@ function tickBattleStatuses(statuses: BattleStatus[]) {
 }
 
 const BACKGROUND_THEME_STORAGE_KEY = "questboard-background-theme";
-const BACKGROUND_THEMES = [
-  { id: "midnight", label: "夜幕藍", color: "#0b1020" },
-  { id: "forest", label: "森林綠", color: "#0b1e1a" },
-  { id: "ember", label: "熔岩紅", color: "#24151a" },
-  { id: "ocean", label: "深海青", color: "#0a1c2a" },
-  { id: "twilight", label: "暮光紫", color: "#1d1630" },
-] as const;
-type BackgroundThemeId = (typeof BACKGROUND_THEMES)[number]["id"];
-
-function normalizeBackgroundTheme(value: unknown): BackgroundThemeId {
-  return BACKGROUND_THEMES.some(theme => theme.id === value)
-    ? (value as BackgroundThemeId)
-    : "midnight";
-}
-
 type Task = {
   id: string;
   slot: number;
@@ -2834,10 +2824,20 @@ export default function Home() {
     BACKGROUND_THEMES[0];
 
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--quest-app-bg",
-      backgroundTheme.color
-    );
+    const root = document.documentElement;
+    root.style.setProperty("--quest-app-bg", backgroundTheme.color);
+    root.style.setProperty("--quest-panel", backgroundTheme.panel);
+    root.style.setProperty("--quest-panel-2", backgroundTheme.panel2);
+    root.style.setProperty("--quest-panel-3", backgroundTheme.panel3);
+    root.style.setProperty("--quest-line", backgroundTheme.line);
+    root.style.setProperty("--quest-line-bright", backgroundTheme.lineBright);
+    root.style.setProperty("--line", backgroundTheme.line);
+    root.style.setProperty("--line-bright", backgroundTheme.lineBright);
+    root.style.setProperty("--quest-accent", backgroundTheme.accent);
+    root.style.setProperty("--quest-accent-strong", backgroundTheme.accentStrong);
+    root.style.setProperty("--violet", backgroundTheme.accent);
+    root.style.setProperty("--violet-bright", backgroundTheme.accentStrong);
+    root.style.setProperty("--quest-accent-rgb", backgroundTheme.accentRgb);
     window.localStorage.setItem(
       BACKGROUND_THEME_STORAGE_KEY,
       backgroundTheme.id
