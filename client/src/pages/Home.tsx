@@ -238,6 +238,12 @@ type CombatStats = {
 };
 type CombatStatKey = keyof CombatStats;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
+// Soul trials use their own fixed combat identity instead of any saved role.
+const SOUL_TRIAL_JOB_CLASS: JobClass = "warrior";
+const SOUL_TRIAL_SPECIALIZATION = getSpecialization(
+  SOUL_TRIAL_JOB_CLASS,
+  "warrior-guardian"
+);
 type MonsterRequirements = Partial<Record<AbilityKey, number>>;
 type MonsterElementalAttack = {
   element: SkillStatusEffect["element"];
@@ -3854,6 +3860,11 @@ export default function Home() {
   const isSoulTrialBattle = Boolean(
     battle?.monsterId.startsWith("soul-trial-")
   );
+  const battleJobClass = isSoulTrialBattle
+    ? SOUL_TRIAL_JOB_CLASS
+    : state.jobClass;
+  const battleIsMage = battleJobClass === "mage";
+  const battleIsArcher = battleJobClass === "archer";
   // A trial keeps its soul snapshot for the entire fight, even after XP rewards.
   const battleCombatant =
     battle?.soulCombatant ??
@@ -3913,7 +3924,7 @@ export default function Home() {
     ? undefined
     : equippedAmuletAbility;
   const soulSpecializationSkills = getUnlockedSpecializationSkills(
-    currentSpecialization,
+    SOUL_TRIAL_SPECIALIZATION,
     battleLevel
   );
   // Soul memory has no allocated critical/dodge stats or equipment of its own.
@@ -3921,7 +3932,7 @@ export default function Home() {
   const battleCombatStats: CombatStats = isSoulTrialBattle
     ? {
         ...defaultCombatStats,
-        critRate: isMage
+        critRate: battleIsMage
           ? 0
           : Math.min(
               100,
@@ -3955,14 +3966,14 @@ export default function Home() {
                   : 0),
               0
             ),
-          isArcher ? battleArcherDodgeFailStacks : 0
+          battleIsArcher ? battleArcherDodgeFailStacks : 0
         ),
       }
     : effectiveCombatStats;
   const activeCombatSkills = isSoulTrialBattle
     ? [
         ...getUnlockedSpecialSkills(
-          state.jobClass,
+          SOUL_TRIAL_JOB_CLASS,
           battleAbilities.strength,
           battleAbilities.intelligence,
           battleCombatStats.critRate,
@@ -3970,7 +3981,7 @@ export default function Home() {
         ).map(skill =>
           applySpecializationToSkillAtLevel(
             skill,
-            currentSpecialization,
+            SOUL_TRIAL_SPECIALIZATION,
             battleLevel
           )
         ),
@@ -3981,8 +3992,8 @@ export default function Home() {
     activeBattleMonster ?? dailyMonsters[0] ?? allAvailableMonsters[0] ?? null;
   const getSkillDamagePreview = (skill: (typeof allSpecialSkills)[number]) => {
     if (skill.effectType !== "damage" || !skillPreviewMonster) return null;
-    const rawPlayerDamage = getAttackDamage(battleAbilities, state.jobClass);
-    const basePlayerDamage = isArcher
+    const rawPlayerDamage = getAttackDamage(battleAbilities, battleJobClass);
+    const basePlayerDamage = battleIsArcher
       ? applyArcherAttackBonus(rawPlayerDamage, battleArcherDodgeFailStacks)
       : rawPlayerDamage;
     const buffedPlayerDamage = Math.round(
@@ -3994,7 +4005,7 @@ export default function Home() {
       skillPreviewMonster.defense,
       skill
     );
-    const canCrit = !isMage && battleCombatStats.critRate > 0;
+    const canCrit = !battleIsMage && battleCombatStats.critRate > 0;
     const criticalBaseDamage = canCrit
       ? Math.round((buffedPlayerDamage * battleCombatStats.critDamage) / 100)
       : buffedPlayerDamage;
@@ -5271,7 +5282,7 @@ export default function Home() {
     const activeWeaponBuffs = battle.weaponTimedBuffs ?? [];
     const activeWeaponBuffBonuses =
       getWeaponTimedBuffBonuses(activeWeaponBuffs);
-    const mageStaff = isMage
+    const mageStaff = battleIsMage
       ? battleEquippedItems.find(
           item => item.slot === "武器" && item.weaponType === "法杖"
         )
@@ -5566,14 +5577,14 @@ export default function Home() {
       battleAbilities,
       monster.requirements
     );
-    const damageType = selectedSkill?.damageType ?? (isMage ? "魔法" : "物理");
+    const damageType = selectedSkill?.damageType ?? (battleIsMage ? "魔法" : "物理");
     const isDamageAction = Boolean(
       !actionLocked &&
         selectedSkill?.effectType !== "buff" &&
         (!selectedSkill || selectedSkill.damageMultiplier > 0)
     );
     const moonstringArrowShot = Boolean(
-      moonstringArrowReady && isArcher && isDamageAction
+      moonstringArrowReady && battleIsArcher && isDamageAction
     );
     const targetArmorReductionPercent = Math.min(
       80,
@@ -5783,14 +5794,14 @@ export default function Home() {
     const criticalHit =
       attackCanCrit &&
       (guaranteedCounterCritical ||
-        ((!isMage ||
+        ((!battleIsMage ||
           pendingSkillCritRateBonusPercent > 0 ||
           (selectedSkill?.effectType === "damage" &&
             battleAstralSageTwoPieceActive &&
             astralEnergyStacksForAction > 0)) &&
           Math.random() < effectiveCritRate / 100));
-    const rawPlayerDamage = getAttackDamage(battleAbilities, state.jobClass);
-    const basePlayerDamage = isArcher
+    const rawPlayerDamage = getAttackDamage(battleAbilities, battleJobClass);
+    const basePlayerDamage = battleIsArcher
       ? applyArcherAttackBonus(rawPlayerDamage, battleArcherDodgeFailStacks)
       : rawPlayerDamage;
     const nightSetTargetAccuracyReduction = Math.min(
@@ -8359,13 +8370,13 @@ export default function Home() {
         monster.elementalAttack &&
         finalIncomingDamageTaken > 0
     );
-    const nextArcherDodgeFailStacks = isArcher
+    const nextArcherDodgeFailStacks = battleIsArcher
       ? getNextArcherDodgeFailStacks(battleArcherDodgeFailStacks, playerEvaded)
       : 0;
     const nextArcherTalentBonuses = getArcherTalentBonuses(
       nextArcherDodgeFailStacks
     );
-    const archerTalentLog = isArcher
+    const archerTalentLog = battleIsArcher
       ? playerEvaded
         ? "（游擊本能觸發：閃避成功，累積加成重置）"
         : `（游擊本能累積 ${nextArcherDodgeFailStacks} 層：攻擊 +${nextArcherTalentBonuses.attackPercent}%、閃避 +${nextArcherTalentBonuses.dodgePercent}%）`
@@ -11770,7 +11781,7 @@ export default function Home() {
                   </div>
                   <h2>靈魂的試煉</h2>
                   <p>
-                    以所有角色累積的靈魂記憶挑戰試煉；戰鬥使用靈魂自身的等級、生命、力量、防禦與智力，不套用目前角色的能力或裝備加成，也不消耗角色生命。
+                    以所有角色累積的靈魂記憶挑戰試煉；戰鬥使用獨立的「靈魂」職業、靈魂自身的等級、生命、力量、防禦與智力，不套用任何存檔角色的職業、專精、能力或裝備加成，也不消耗角色生命。
                   </p>
                   <small className="soul-trial-cooldown-note">
                     {soulTrialCombatLocked
