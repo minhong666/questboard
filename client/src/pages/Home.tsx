@@ -1607,7 +1607,7 @@ function tripleRegionalBossStats(boss: Monster): Monster {
   return {
     ...boss,
     health: boss.health * 3,
-    reward: boss.reward * 2,
+    reward: boss.reward,
     damage: boss.damage * 3,
     defense: boss.defense * 3,
     intelligence:
