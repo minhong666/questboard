@@ -962,7 +962,7 @@ const ACTIVE_PROFILE_KEY = "questboard-active-profile-v1";
 const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
 const HEALTH_RECOVERY_INTERVAL_MS =
   HEALTH_RECOVERY_INTERVAL_MINUTES * 60 * 1000;
-const HEALTH_RECOVERY_PERCENT = 0.08;
+const HEALTH_RECOVERY_PERCENT = 0.015;
 const POMODORO_ROUND_XP = 25;
 const defaultPomodoroSettings: PomodoroSettings = {
   enabled: false,
@@ -11877,7 +11877,7 @@ export default function Home() {
                     <div className="health-summary-copy">
                       <span>生命</span>
                       <strong>{state.currentHealth}</strong>
-                      <small>/ {effectiveAbilities.health} · 每分鐘 +8%</small>
+                      <small>/ {effectiveAbilities.health} · 每分鐘 +1.5%</small>
                     </div>
                     <em>{healthRecoveryLabel}</em>
                   </div>
