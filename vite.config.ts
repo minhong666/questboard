@@ -185,6 +185,68 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (
+              id.includes("/node_modules/react/") ||
+              id.includes("/node_modules/react-dom/") ||
+              id.includes("/node_modules/scheduler/")
+            ) {
+              return "vendor-react";
+            }
+            if (id.includes("/node_modules/lucide-react/")) {
+              return "vendor-icons";
+            }
+            if (id.includes("/node_modules/framer-motion/")) {
+              return "vendor-motion";
+            }
+            if (id.includes("/node_modules/recharts/")) {
+              return "vendor-charts";
+            }
+            if (id.includes("/node_modules/@radix-ui/")) {
+              return "vendor-radix";
+            }
+            if (
+              id.includes("/node_modules/@tanstack/") ||
+              id.includes("/node_modules/@trpc/") ||
+              id.includes("/node_modules/superjson/")
+            ) {
+              return "vendor-data";
+            }
+            return "vendor-common";
+          }
+
+          if (
+            id.includes("/lib/equipment-") ||
+            id.includes("/lib/loot") ||
+            id.includes("/lib/health")
+          ) {
+            return "game-equipment";
+          }
+
+          if (
+            id.includes("/lib/monster-") ||
+            id.includes("/lib/soul-trial") ||
+            id.includes("/lib/class-") ||
+            id.includes("/lib/archer-talent") ||
+            id.includes("/lib/combat-death-penalty")
+          ) {
+            return "game-combat";
+          }
+
+          if (
+            id.includes("/lib/activity-") ||
+            id.includes("/lib/timer-") ||
+            id.includes("/lib/achievements") ||
+            id.includes("/lib/weekly-stats")
+          ) {
+            return "game-progress";
+          }
+        },
+      },
+    },
   },
   server: {
     host: true,
