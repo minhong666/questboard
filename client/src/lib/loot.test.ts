@@ -790,6 +790,28 @@ describe("Equipment fusion", () => {
     expect(fusion?.result.name).toBe("精鍛鐵盔");
   });
 
+  it("chooses the result slot from all five equipment slots", () => {
+    const commonEquipment = (id: string, slot: EquipmentSlot): EquipmentItem => ({
+      ...equipment(id, slot),
+      rarity: "普通",
+    });
+    const fusion = prepareEquipmentFusion(
+      [
+        commonEquipment("common-helmet", "頭盔"),
+        commonEquipment("common-weapon", "武器"),
+        commonEquipment("common-chest", "胸甲"),
+      ],
+      [],
+      "普通",
+      1,
+      randomSequence(0.99, 0, 0),
+      () => 125
+    );
+
+    expect(fusion?.result.rarity).toBe("精良");
+    expect(fusion?.result.slot).toBe("護身符");
+  });
+
   it("selects the result from the next-rarity templates", () => {
     const fineEquipment = (id: string, slot: EquipmentSlot): EquipmentItem => ({
       ...equipment(id, slot),

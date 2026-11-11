@@ -1334,10 +1334,7 @@ export function prepareEquipmentFusion(
     return null;
   }
 
-  const slot = pick(
-    ingredients.map(item => item.slot),
-    random
-  );
+  const slot = pick([...EQUIPMENT_SLOTS], random);
   const templates = equipmentTemplates.filter(
     template =>
       template.slot === slot &&

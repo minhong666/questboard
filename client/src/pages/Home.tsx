@@ -13494,11 +13494,7 @@ export default function Home() {
                     )}
                     {selectedFusionItems.length === 3 && (
                       <small>
-                        隨機部位：
-                        {selectedFusionItems
-                          .map(item => item.slot)
-                          .join("、")}{" "}
-                        · 詞綴重新生成
+                        五個部位中隨機選擇 · 詞綴重新生成
                       </small>
                     )}
                   </div>
