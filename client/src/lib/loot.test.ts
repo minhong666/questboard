@@ -17,6 +17,7 @@ import {
   parseLootItem,
   prepareEquipmentFusion,
   removeTreasureFromInventory,
+  rollBossLoot,
   rollLoot,
   rollQuestChestLoot,
   scaleBonusByRarity,
@@ -183,13 +184,13 @@ describe("QuestBoard loot", () => {
     ).toBe(true);
   });
 
-  it("preserves the existing 65% ordinary drop chance", () => {
+  it("uses a 70% ordinary drop chance with 40% equipment and 30% treasure", () => {
     const drop = rollLoot(
       { level: 1 },
-      randomSequence(0.65, 0, 0, 0, 0),
+      randomSequence(0.699999, 0, 0, 0, 0),
       () => 1
     );
-    const noDrop = rollLoot({ level: 1 }, randomSequence(0.650001), () => 1);
+    const noDrop = rollLoot({ level: 1 }, randomSequence(0.700001), () => 1);
 
     expect(drop).not.toBeNull();
     expect(noDrop).toBeNull();
@@ -197,10 +198,10 @@ describe("QuestBoard loot", () => {
 
   it("reports ordinary encounter drop rates and each final rarity by current level", () => {
     const lowLevel = getLootProbabilitySummary({ level: 1 });
-    expect(lowLevel.dropChance).toBeCloseTo(0.65, 10);
-    expect(lowLevel.equipmentChance).toBeCloseTo(0.4225, 10);
-    expect(lowLevel.treasureChance).toBeCloseTo(0.2275, 10);
-    expect(lowLevel.noDropChance).toBeCloseTo(0.35, 10);
+    expect(lowLevel.dropChance).toBeCloseTo(0.7, 10);
+    expect(lowLevel.equipmentChance).toBeCloseTo(0.4, 10);
+    expect(lowLevel.treasureChance).toBeCloseTo(0.3, 10);
+    expect(lowLevel.noDropChance).toBeCloseTo(0.3, 10);
     const lowLevelRarities = {
       普通: 0.72,
       精良: 0.1,
@@ -240,8 +241,8 @@ describe("QuestBoard loot", () => {
     const boss = getLootProbabilitySummary({ level: 50, isBoss: true });
     expect(boss).toMatchObject({
       dropChance: 1,
-      equipmentChance: 0.65,
-      treasureChance: 0.35,
+      equipmentChance: 1,
+      treasureChance: 1,
       noDropChance: 0,
     });
     expect(boss.equipmentRarities.普通).toBe(0);
@@ -266,6 +267,18 @@ describe("QuestBoard loot", () => {
     });
   });
 
+  it("gives an area boss one treasure and one to three equipment drops", () => {
+    const drops = rollBossLoot(
+      { level: 50, isBoss: true },
+      randomSequence(0, 0, 0, 0.999999, 0, 0, 0, 0, 0, 0, 0, 0),
+      () => 901
+    );
+
+    expect(drops).toHaveLength(4);
+    expect(drops[0]?.kind).toBe("treasure");
+    expect(drops.slice(1).every(item => item.kind === "equipment")).toBe(true);
+  });
+
   it("selects a template that already has the rolled quality", () => {
     const item = rollLoot(
       { level: 1 },
@@ -282,7 +295,7 @@ describe("QuestBoard loot", () => {
     expect(item.affixes?.[0].description).toContain("生命 +8");
   });
 
-  it("selects a legendary template when the rolled equipment quality is legendary", () => {
+  it("selects a remaining legendary template when the rolled equipment quality is legendary", () => {
     const item = rollLoot(
       { level: 1 },
       randomSequence(0, 0, 0.995, 0, 0, 0),
@@ -291,7 +304,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("傳說");
-    expect(item.name).toBe("區域王冠");
+    expect(item.name).toBe("阿修羅戰神兜盔");
   });
 
   it("gives higher equipment rarities more distinct affixes", () => {
@@ -610,6 +623,31 @@ describe("QuestBoard loot", () => {
     expect(oldTreasure?.kind).toBe("treasure");
     if (oldTreasure?.kind !== "treasure") throw new Error("Expected treasure");
     expect(oldTreasure.affixes).toEqual([]);
+  });
+
+  it("drops equipment removed from the game when loading an old save", () => {
+    expect(
+      parseLootInventory([
+        {
+          id: "removed-crown",
+          name: "區域王冠",
+          slot: "頭盔",
+          rarity: "傳說",
+          description: "已移除裝備",
+          bonus: "力量 +10",
+          icon: "star",
+        },
+        {
+          id: "kept-gear",
+          name: "仍存在的裝備",
+          slot: "頭盔",
+          rarity: "傳說",
+          description: "保留裝備",
+          bonus: "力量 +10",
+          icon: "star",
+        },
+      ])
+    ).toHaveLength(1);
   });
 
   it("preserves generated affix effects when loading saved items", () => {

@@ -69,6 +69,7 @@ import {
   parseLootInventory,
   prepareEquipmentFusion,
   removeTreasureFromInventory,
+  rollBossLoot,
   rollLoot,
   rollQuestChestLoot,
   toggleEquippedItemIds,
@@ -376,6 +377,7 @@ type BattleState = {
   activeBuffs?: TimedBattleBuff[];
   xpReward: number;
   lootDrop: LootItem | null;
+  lootDrops?: LootItem[];
   outcome: "fighting" | "victory" | "defeat";
 };
 
@@ -2707,7 +2709,7 @@ function LootProbabilityGuide({
         {renderRarityTable("treasure")}
       </div>
       <div className="loot-probability-footnote">
-        寶藏依怪物等級抽取品質；小怪的可掉落裝備種類會依等級解鎖。魔王必定掉落一件戰利品，裝備和寶藏類型各自依表列機率計算。
+        普通小怪每次挑戰有 70% 機率掉落物品，其中裝備 40%、寶藏 30%；區域魔王固定掉落 1 件寶藏，並額外掉落 1–3 件裝備。寶藏依怪物等級抽取品質。
       </div>
     </section>
   );
@@ -5134,6 +5136,7 @@ export default function Home() {
       activeBuffs: [],
       xpReward: 0,
       lootDrop: null,
+      lootDrops: [],
       outcome: "fighting",
     });
     setBattleFx(null);
@@ -7570,10 +7573,18 @@ export default function Home() {
         1,
         Math.round(baseMonsterXp * (1 + getExperienceBonusPercent(battleAbilities.intelligence) / 100))
       );
-      const lootDrop = rollLoot(monster);
-      const lootAffixSummary = lootDrop?.affixes?.length
-        ? ` · 詞綴 ${lootDrop.affixes.map(affix => affix.name).join("、")}`
-        : "";
+      const lootDrops = monster.isBoss
+        ? rollBossLoot(monster)
+        : [rollLoot(monster)].filter(
+            (item): item is LootItem => item !== null
+          );
+      const lootDrop = lootDrops[0] ?? null;
+      const lootSummary = lootDrops
+        .map(
+          item =>
+            `${item.kind === "equipment" ? "裝備" : "寶藏"}「${item.name}」（${item.rarity}${item.affixes?.length ? ` · 詞綴 ${item.affixes.map(affix => affix.name).join("、")}` : ""}）`
+        )
+        .join("、");
       const nextTotalXp = state.totalXp + xpReward;
       const nextLevel = getPlayerStats(nextTotalXp).level;
       const levelUps = Math.max(0, nextLevel - state.abilityLevel);
@@ -7676,8 +7687,8 @@ export default function Home() {
             ? `${monster.name}死亡自爆，造成 ${monster.explosionDamage} 固定傷害！`
             : "",
           reflectedDamage ? `受到 ${reflectedDamage} 點反傷。` : "",
-          lootDrop
-            ? `戰利品掉落：${lootDrop.kind === "equipment" ? "裝備" : "寶藏"}「${lootDrop.name}」（${lootDrop.rarity}${lootAffixSummary}）！`
+          lootDrops.length > 0
+            ? `戰利品掉落：${lootSummary}！`
             : "這次沒有發現新的戰利品。",
         ],
         damageDealt: battle.damageDealt + appliedDamage,
@@ -7686,6 +7697,7 @@ export default function Home() {
         dodges,
         xpReward,
         lootDrop,
+        lootDrops,
         outcome: "victory" as const,
       };
       showBattleFx({
@@ -7734,8 +7746,8 @@ export default function Home() {
             new Date()
           ),
           defeatedMonsterIds: [...previousDefeatedMonsterIds, monster.id],
-          inventory: lootDrop
-            ? [...previousInventory, lootDrop]
+          inventory: lootDrops.length
+            ? [...previousInventory, ...lootDrops]
             : previousInventory,
           abilityPoints: previous.abilityPoints + levelUps * 5,
           skillUpgradePoints: previous.skillUpgradePoints + levelUps,
@@ -7765,7 +7777,7 @@ export default function Home() {
         };
       });
       showToast(
-        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrop ? ` · 掉落${lootDrop.name}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${levelUps * 5} 點能力點與 ${levelUps} 點技能升級點數` : ""}`
+        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrops.length ? ` · 掉落${lootDrops.map(item => item.name).join("、")}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${levelUps * 5} 點能力點與 ${levelUps} 點技能升級點數` : ""}`
       );
       return;
     }
@@ -15022,19 +15034,28 @@ export default function Home() {
                 <div
                   className={`battle-loot-result ${battle.lootDrop ? "has-loot" : ""}`}
                 >
-                  {battle.lootDrop ? (
+                  {battle.lootDrops?.length || battle.lootDrop ? (
                     <>
                       <span>戰利品掉落</span>
-                      <strong>{battle.lootDrop.name}</strong>
-                      <small>
-                        {battle.lootDrop.rarity} ·{" "}
-                        {battle.lootDrop.kind === "equipment"
-                          ? `${battle.lootDrop.bonus} · 商城${getShopEquipmentPrice(battle.lootDrop) === null ? "不提供此品質" : `售價 ${getShopEquipmentPrice(battle.lootDrop)} 金幣`}`
-                          : `出售可得 ${battle.lootDrop.sellValue} 金幣`}
-                        {battle.lootDrop.affixes?.length
-                          ? ` · 詞綴：${battle.lootDrop.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
-                          : ""}
-                      </small>
+                      {(battle.lootDrops?.length
+                        ? battle.lootDrops
+                        : battle.lootDrop
+                          ? [battle.lootDrop]
+                          : []
+                      ).map(item => (
+                        <div key={item.id}>
+                          <strong>{item.name}</strong>
+                          <small>
+                            {item.rarity} ·{" "}
+                            {item.kind === "equipment"
+                              ? `${item.bonus} · 商城${getShopEquipmentPrice(item) === null ? "不提供此品質" : `售價 ${getShopEquipmentPrice(item)} 金幣`}`
+                              : `出售可得 ${item.sellValue} 金幣`}
+                            {item.affixes?.length
+                              ? ` · 詞綴：${item.affixes.map(affix => `${affix.name}（${affix.description}）`).join("、")}`
+                              : ""}
+                          </small>
+                        </div>
+                      ))}
                     </>
                   ) : (
                     <>

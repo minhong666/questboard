@@ -52,6 +52,19 @@ export const LOOT_RARITY_CLASS: Record<LootRarity, string> = {
   神話: "mythic",
 };
 
+const REMOVED_EQUIPMENT_NAMES = new Set([
+  "磨亮的冒險者短劍",
+  "森林守護胸甲",
+  "旅者皮帽",
+  "見習者護腿",
+  "森林守護護身符",
+  "專注學者之戒",
+  "迅捷旅者護腿",
+  "不屈心核",
+  "裂空魔刃",
+  "區域王冠",
+]);
+
 export type EquipmentAffixStat =
   | "health"
   | "strength"
@@ -505,8 +518,9 @@ export type LootProbabilitySummary = {
   treasureRarities: LootRarityDistribution;
 };
 
-const ordinaryLootDropChance = 0.65;
-const equipmentDropChance = 0.65;
+const ordinaryLootDropChance = 0.7;
+// Equipment and treasure are absolute encounter chances: 40% and 30%.
+const equipmentDropChance = 0.4 / ordinaryLootDropChance;
 
 const rarityRank: Record<LootRarity, number> = {
   普通: 0,
@@ -626,116 +640,9 @@ const treasureAffixByRarity: Partial<Record<LootRarity, TreasureAffix>> = {
   },
 };
 
-const starterEquipmentTemplates: Array<
-  Omit<EquipmentItem, "id" | "kind"> & { minLevel: number }
-> = [
-  {
-    name: "磨亮的冒險者短劍",
-    slot: "武器",
-    weaponType: "劍",
-    rarity: "普通",
-    description:
-      "它曾陪一位新手穿過第一座村門，如今仍在等待下一場真正的冒險；握緊劍柄，最初的勇氣便會再次回來。",
-    bonus: "力量 +2 · 暴擊率 +3% · 暴擊傷害 +5%",
-    icon: "sword",
-    minLevel: 1,
-  },
-  {
-    name: "森林守護胸甲",
-    slot: "胸甲",
-    rarity: "普通",
-    description:
-      "藤木取自晨霧森林，輕甲片來自老獵人的行囊；這件胸甲把旅人第一次遠行的勇氣牢牢護在心口。",
-    bonus: "生命 +100 · 防禦 +5",
-    icon: "shield-check",
-    minLevel: 1,
-  },
-  {
-    name: "旅者皮帽",
-    slot: "頭盔",
-    rarity: "普通",
-    description:
-      "帽沿縫著旅人從各地帶回的銅扣，曾在無數風沙與碎石間替它的主人守住清醒。",
-    bonus: "生命 +35 · 防禦 +2 · 閃避率 +0.5%",
-    icon: "shield-check",
-    minLevel: 1,
-  },
-  {
-    name: "見習者護腿",
-    slot: "護腿",
-    rarity: "普通",
-    description:
-      "耐磨的布料記錄著穿越荒原的每一道塵痕，它讓疲憊的雙腿仍能朝著下一盞營火前進。",
-    bonus: "生命 +45 · 防禦 +2",
-    icon: "target",
-    minLevel: 1,
-  },
-  {
-    name: "森林守護護身符",
-    slot: "護身符",
-    rarity: "普通",
-    description:
-      "護身符上的露珠永不乾涸，據說那是森林守護者送給第一位迷路旅人的回家指引。",
-    bonus: "生命 +100",
-    icon: "leaf",
-    minLevel: 1,
-  },
-  {
-    name: "專注學者之戒",
-    slot: "護身符",
-    rarity: "稀有",
-    description:
-      "藍晶戒指曾在學者的燈下照亮整夜手稿，佩戴它的人總能在混亂線索中找到真正的答案。",
-    bonus: "智力 +20 · 防禦 +8",
-    icon: "brain",
-    minLevel: 5,
-  },
-  {
-    name: "迅捷旅者護腿",
-    slot: "護腿",
-    rarity: "稀有",
-    description:
-      "它沿著林間獵徑縫製，連落葉都不願驚動；每一次無聲踏步，都是旅者與森林交換的默契。",
-    bonus: "力量 +5 · 閃避率 +8%",
-    icon: "target",
-    minLevel: 8,
-  },
-  {
-    name: "不屈心核",
-    slot: "護身符",
-    rarity: "史詩",
-    description:
-      "心核封存著一簇不肯熄滅的火，曾陪一名倒下的守衛重新站起，直到黎明穿過戰場。",
-    bonus: "生命 +160 · 力量 +10",
-    icon: "heart",
-    minLevel: 15,
-  },
-  {
-    name: "裂空魔刃",
-    slot: "武器",
-    weaponType: "劍",
-    rarity: "史詩",
-    description:
-      "魔刃的裂紋裡流著擊敗古獸時留下的藍光，當高階魔物再次現身，它會替持有者撕開第一道防線。",
-    bonus: "力量 +28 · 暴擊率 +5% · 暴擊傷害 +20%",
-    icon: "sword",
-    minLevel: 25,
-  },
-  {
-    name: "區域王冠",
-    slot: "頭盔",
-    rarity: "傳說",
-    description:
-      "王冠上的缺口記錄著征服區域魔王的最後一擊，只有真正走過那片領地的人，才懂得它沉甸甸的榮耀。",
-    bonus: "力量 +10 · 閃避率 +10% · 生命 +100 · 防禦 +10 · 智力 +10 · 暴擊率 +10% · 暴擊傷害 +10% · 施法速度 +10%",
-    icon: "star",
-    minLevel: 50,
-  },
-];
-
 const equipmentTemplates: Array<
   Omit<EquipmentItem, "id" | "kind"> & { minLevel: number }
-> = [...starterEquipmentTemplates, ...RPG_EQUIPMENT_TEMPLATES];
+> = RPG_EQUIPMENT_TEMPLATES;
 export const EQUIPMENT_CODEX_TEMPLATES = equipmentTemplates;
 const treasureTemplates: Array<
   Omit<TreasureItem, "id" | "kind" | "slot" | "rarity" | "sellValue">
@@ -897,7 +804,7 @@ export function getLootProbabilitySummary(
   monster: LootMonster
 ): LootProbabilitySummary {
   const dropChance = monster.isBoss ? 1 : ordinaryLootDropChance;
-  const treasureDropChance = 1 - equipmentDropChance;
+  const treasureDropChance = 0.3;
   const rolledRarities = getRarityRollDistribution(monster);
   const equipmentRarities = Object.fromEntries(
     LOOT_RARITIES.map(rarity => [rarity, 0])
@@ -910,8 +817,8 @@ export function getLootProbabilitySummary(
 
   return {
     dropChance,
-    equipmentChance: dropChance * equipmentDropChance,
-    treasureChance: dropChance * treasureDropChance,
+    equipmentChance: monster.isBoss ? 1 : 0.4,
+    treasureChance: monster.isBoss ? 1 : treasureDropChance,
     noDropChance: 1 - dropChance,
     equipmentRarities,
     treasureRarities: rolledRarities,
@@ -962,14 +869,12 @@ export function getTreasureSellValue(
   return baseTreasureValues[rarity] * levelMultiplier;
 }
 
-export function rollLoot(
+function rollLootItem(
   monster: LootMonster,
-  random: () => number = Math.random,
-  now: () => number = Date.now
-): LootItem | null {
-  if (!monster.isBoss && random() > ordinaryLootDropChance) return null;
-
-  const kind = random() < equipmentDropChance ? "equipment" : "treasure";
+  kind: "equipment" | "treasure",
+  random: () => number,
+  now: () => number
+): LootItem {
   const rolledRarity = rollRarity(monster, random);
   const idSuffix = () => `${now()}-${Math.floor(random() * 1_000_000)}`;
 
@@ -1001,6 +906,30 @@ export function rollLoot(
     bonus: template.bonus,
     affixes,
   };
+}
+
+export function rollLoot(
+  monster: LootMonster,
+  random: () => number = Math.random,
+  now: () => number = Date.now
+): LootItem | null {
+  if (!monster.isBoss && random() >= ordinaryLootDropChance) return null;
+  const kind = random() < equipmentDropChance ? "equipment" : "treasure";
+  return rollLootItem(monster, kind, random, now);
+}
+
+export function rollBossLoot(
+  monster: LootMonster,
+  random: () => number = Math.random,
+  now: () => number = Date.now
+): LootItem[] {
+  if (!monster.isBoss) return [];
+  const drops: LootItem[] = [rollLootItem(monster, "treasure", random, now)];
+  const equipmentCount = 1 + Math.floor(random() * 3);
+  for (let index = 0; index < equipmentCount; index += 1) {
+    drops.push(rollLootItem(monster, "equipment", random, now));
+  }
+  return drops;
 }
 
 /**
@@ -1129,6 +1058,8 @@ export function parseLootItem(value: unknown): LootItem | null {
     description: typeof item.description === "string" ? item.description : "",
     icon: typeof item.icon === "string" ? item.icon : "star",
   };
+
+  if (REMOVED_EQUIPMENT_NAMES.has(common.name)) return null;
 
   if (item.kind === "treasure") {
     if (

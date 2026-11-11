@@ -51,7 +51,7 @@ describe("permanent equipment codex discoveries", () => {
     expect(parseDiscoveredEquipmentNames("invalid")).toEqual([]);
   });
 
-  it("includes the ten starter and special equipment in the codex", () => {
+  it("does not include the removed starter and special equipment", () => {
     const specialEquipmentNames = [
       "磨亮的冒險者短劍",
       "森林守護胸甲",
@@ -67,9 +67,9 @@ describe("permanent equipment codex discoveries", () => {
 
     expect(
       specialEquipmentNames.every(name =>
-        EQUIPMENT_CODEX_TEMPLATES.some(item => item.name === name)
+        EQUIPMENT_CODEX_TEMPLATES.every(item => item.name !== name)
       )
     ).toBe(true);
-    expect(EQUIPMENT_CODEX_TEMPLATES).toHaveLength(550);
+    expect(EQUIPMENT_CODEX_TEMPLATES).toHaveLength(540);
   });
 });
