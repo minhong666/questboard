@@ -3941,7 +3941,7 @@ export default function Home() {
           ? 0
           : Math.min(
               100,
-              defaultCombatStats.critRate +
+              30 +
                 soulSpecializationSkills.reduce(
                   (total, skill) =>
                     total +
@@ -3952,7 +3952,7 @@ export default function Home() {
                 )
             ),
         critDamage:
-          defaultCombatStats.critDamage +
+          200 +
           soulSpecializationSkills.reduce(
             (total, skill) =>
               total +
@@ -3962,7 +3962,7 @@ export default function Home() {
             0
           ),
         dodgeRate: getArcherEffectiveDodgeRate(
-          defaultCombatStats.dodgeRate +
+          15 +
             soulSpecializationSkills.reduce(
               (total, skill) =>
                 total +
