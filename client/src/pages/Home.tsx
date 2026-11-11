@@ -74,6 +74,10 @@ import {
 import { clampCurrentHealth } from "../lib/health";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
+  mergeDiscoveredEquipmentNames,
+  parseDiscoveredEquipmentNames,
+} from "../lib/equipment-codex";
+import {
   advanceAsuraCritStackTurns,
   getActiveLegendaryEquipmentSetBonuses,
   getActiveEquipmentSpecialEffects,
@@ -949,6 +953,7 @@ const lootCategoryMeta: Record<
 
 const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
+const DISCOVERED_EQUIPMENT_STORAGE_KEY = "questboard-equipment-codex-discovered-v1";
 const SHARED_ACHIEVEMENTS_STORAGE_KEY = "questboard-shared-achievements-v1";
 const NOTIFICATION_SETTINGS_KEY = "questboard-notification-settings-v1";
 const NOTIFICATION_LAST_REMINDER_KEY =
@@ -2716,6 +2721,19 @@ export default function Home() {
     normalizeProfileLoot(loadState())
   );
   const [profiles, setProfiles] = useState<SaveProfile[]>(() => loadProfiles());
+  const [permanentlyDiscoveredEquipmentNames, setPermanentlyDiscoveredEquipmentNames] =
+    useState<string[]>(() => {
+      if (typeof window === "undefined") return [];
+      try {
+        return parseDiscoveredEquipmentNames(
+          JSON.parse(
+            window.localStorage.getItem(DISCOVERED_EQUIPMENT_STORAGE_KEY) ?? "null"
+          )
+        );
+      } catch {
+        return [];
+      }
+    });
   const [sharedAchievementClaimedIds, setSharedAchievementClaimedIds] =
     useState<string[]>(() => loadSharedAchievementClaimedIds());
   const [notificationSettings, setNotificationSettings] =
@@ -3153,19 +3171,7 @@ export default function Home() {
       (codexRarity === "all" || item.rarity === codexRarity) &&
       (codexSlot === "all" || item.slot === codexSlot)
   );
-  const codexProfileStates = [
-    state,
-    ...profiles
-      .filter(profile => profile.id !== activeProfileId)
-      .map(profile => profile.state),
-  ];
-  const discoveredEquipmentNames = new Set(
-    codexProfileStates.flatMap(profileState =>
-      profileState.inventory
-        .filter((item): item is EquipmentItem => item.kind === "equipment")
-        .map(item => item.name)
-    )
-  );
+  const discoveredEquipmentNames = new Set(permanentlyDiscoveredEquipmentNames);
   const codexDiscoveredCount = RPG_EQUIPMENT_TEMPLATES.filter(item =>
     discoveredEquipmentNames.has(item.name)
   ).length;
@@ -4049,6 +4055,23 @@ export default function Home() {
   }, [profiles, activeProfileId]);
 
   useEffect(() => {
+    const mergedNames = mergeDiscoveredEquipmentNames(
+      permanentlyDiscoveredEquipmentNames,
+      [state.inventory, ...profiles.map(profile => profile.state.inventory)]
+    );
+    if (
+      mergedNames.length !== permanentlyDiscoveredEquipmentNames.length ||
+      mergedNames.some((name, index) => name !== permanentlyDiscoveredEquipmentNames[index])
+    ) {
+      setPermanentlyDiscoveredEquipmentNames(mergedNames);
+    }
+    window.localStorage.setItem(
+      DISCOVERED_EQUIPMENT_STORAGE_KEY,
+      JSON.stringify(mergedNames)
+    );
+  }, [state.inventory, profiles, permanentlyDiscoveredEquipmentNames]);
+
+  useEffect(() => {
     window.localStorage.setItem(
       SHARED_ACHIEVEMENTS_STORAGE_KEY,
       JSON.stringify({ claimedIds: sharedAchievementClaimedIds })
@@ -4139,6 +4162,27 @@ export default function Home() {
     window.addEventListener("storage", syncStoredProfiles);
     return () => window.removeEventListener("storage", syncStoredProfiles);
   }, [activeProfileId]);
+
+  useEffect(() => {
+    const syncDiscoveredEquipment = (event: StorageEvent) => {
+      if (event.key !== DISCOVERED_EQUIPMENT_STORAGE_KEY) return;
+      let storedNames: string[] = [];
+      try {
+        storedNames = parseDiscoveredEquipmentNames(
+          JSON.parse(event.newValue ?? "null")
+        );
+      } catch {
+        return;
+      }
+      setPermanentlyDiscoveredEquipmentNames(previous =>
+        mergeDiscoveredEquipmentNames(previous, [
+          storedNames.map(name => ({ kind: "equipment", name })),
+        ])
+      );
+    };
+    window.addEventListener("storage", syncDiscoveredEquipment);
+    return () => window.removeEventListener("storage", syncDiscoveredEquipment);
+  }, []);
 
   useEffect(() => {
     const syncSharedAchievements = (event: StorageEvent) => {
@@ -12921,7 +12965,7 @@ export default function Home() {
                   </div>
                   <h2>裝備圖鑑</h2>
                   <p>
-                    完整收錄遊戲內全部裝備；所有冒險存檔共用同一本收藏冊，等待你從戰鬥與合成裡解鎖。
+                    完整收錄遊戲內全部裝備；所有冒險存檔共用收藏進度，曾經取得過的裝備即永久解鎖，即使之後合成或出售也會保留。
                   </p>
                 </div>
                 <div className="codex-total-badge">
@@ -12939,7 +12983,7 @@ export default function Home() {
                   </strong>
                   <small>
                     尚有 {RPG_EQUIPMENT_TEMPLATES.length - codexDiscoveredCount}{" "}
-                    件裝備等待探索 · 所有存檔共用進度
+                    件裝備等待探索 · 曾取得的裝備永久解鎖，所有存檔共用進度
                   </small>
                 </div>
                 <div className="codex-progress-visual">
