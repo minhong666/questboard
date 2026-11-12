@@ -1,5 +1,3 @@
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { DashboardLayoutSkeleton } from "./components/DashboardLayoutSkeleton";
 import { Route, Switch } from "wouter";
@@ -33,12 +31,9 @@ function App() {
         defaultTheme="light"
         // switchable
       >
-        <TooltipProvider>
-          <Toaster />
-          <Suspense fallback={<DashboardLayoutSkeleton />}>
-            <Router />
-          </Suspense>
-        </TooltipProvider>
+        <Suspense fallback={<DashboardLayoutSkeleton />}>
+          <Router />
+        </Suspense>
       </ThemeProvider>
     </ErrorBoundary>
   );
