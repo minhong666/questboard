@@ -147,6 +147,7 @@ import {
 } from "../lib/activity-timer-lock";
 import { getWarriorTotalHealthGrowth } from "../lib/level-growth";
 import { getPlayerLevelStats, getXpForLevel } from "../lib/leveling";
+import { getIntelligenceExperienceBonusPercent } from "../lib/intelligence-special";
 import { FloatingTimer } from "../components/FloatingTimer";
 import {
   calculateSpecialSkillDamage,
@@ -1760,9 +1761,6 @@ function getEffectiveHealthCap(
   );
 }
 
-function getExperienceBonusPercent(intelligence: number) {
-  return Math.min(500, Math.max(0, intelligence));
-}
 function getAttackDamage(
   abilities: CharacterAbilities,
   jobClass: JobClass = "warrior"
@@ -3872,7 +3870,7 @@ export default function Home() {
         : "未含技能觸發的瞬時效果",
     },
   ];
-  const experienceBonusPercent = getExperienceBonusPercent(
+  const experienceBonusPercent = getIntelligenceExperienceBonusPercent(
     effectiveAbilities.intelligence
   );
   const combatCooldownRemaining = Math.max(
@@ -7609,7 +7607,12 @@ export default function Home() {
       const baseMonsterXp = 30 + Math.floor(Math.random() * 21);
       const xpReward = Math.max(
         1,
-        Math.round(baseMonsterXp * (1 + getExperienceBonusPercent(battleAbilities.intelligence) / 100))
+        Math.round(
+          baseMonsterXp *
+            (1 +
+              getIntelligenceExperienceBonusPercent(battleAbilities.intelligence) /
+                100)
+        )
       );
       const lootDrops = monster.isBoss
         ? rollBossLoot(monster)
@@ -11470,7 +11473,7 @@ export default function Home() {
                       經驗獲取 +{experienceBonusPercent.toFixed(1)}%
                     </strong>
                   </div>
-                  <small>每 1 智力 +1% · 最高 +500%</small>
+                  <small>每 1 智力 +0.1% · 最高 +50%</small>
                 </div>
                 <div className="class-skill-panel">
                   <div className="class-skill-panel-heading">
