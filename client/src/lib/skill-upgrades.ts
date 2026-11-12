@@ -3,7 +3,7 @@ import {
   type SpecialCombatSkill,
 } from "./class-skills";
 
-export const MAX_SKILL_UPGRADE_LEVEL = 50;
+export const MAX_SKILL_UPGRADE_LEVEL = 15;
 
 export type SkillUpgradeLevels = Record<string, number>;
 
@@ -11,17 +11,28 @@ export function getSkillUpgradePointsForLevelUps(levelUps: number) {
   return Math.max(0, Math.floor(Number.isFinite(levelUps) ? levelUps : 0));
 }
 
-export function normalizeSkillUpgradeLevels(value: unknown): SkillUpgradeLevels {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.entries(value).reduce<SkillUpgradeLevels>(
-    (levels, [skillId, level]) => {
-      if (typeof level !== "number" || !Number.isFinite(level)) return levels;
-      const safeLevel = Math.min(MAX_SKILL_UPGRADE_LEVEL, Math.max(0, Math.floor(level)));
-      if (safeLevel > 0) levels[skillId] = safeLevel;
-      return levels;
+export function normalizeSkillUpgradeState(value: unknown): {
+  levels: SkillUpgradeLevels;
+  refundedPoints: number;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { levels: {}, refundedPoints: 0 };
+  }
+  return Object.entries(value).reduce(
+    (result, [skillId, level]) => {
+      if (typeof level !== "number" || !Number.isFinite(level)) return result;
+      const wholeLevel = Math.max(0, Math.floor(level));
+      result.refundedPoints += Math.max(0, wholeLevel - MAX_SKILL_UPGRADE_LEVEL);
+      const safeLevel = Math.min(MAX_SKILL_UPGRADE_LEVEL, wholeLevel);
+      if (safeLevel > 0) result.levels[skillId] = safeLevel;
+      return result;
     },
-    {}
+    { levels: {} as SkillUpgradeLevels, refundedPoints: 0 }
   );
+}
+
+export function normalizeSkillUpgradeLevels(value: unknown): SkillUpgradeLevels {
+  return normalizeSkillUpgradeState(value).levels;
 }
 
 export function applySkillUpgrade(

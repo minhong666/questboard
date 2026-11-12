@@ -161,7 +161,7 @@ import {
   getNextSkillUpgradePreview,
   getSkillUpgradePointsForLevelUps,
   MAX_SKILL_UPGRADE_LEVEL,
-  normalizeSkillUpgradeLevels,
+  normalizeSkillUpgradeState,
   type SkillUpgradeLevels,
 } from "../lib/skill-upgrades";
 import {
@@ -2125,13 +2125,19 @@ function loadState(): AppState {
       parsed.equippedItemIds,
       jobClass
     );
-    const skillUpgradeLevels = normalizeSkillUpgradeLevels(
+    const normalizedSkillUpgrades = normalizeSkillUpgradeState(
       parsed.skillUpgradeLevels
     );
+    const skillUpgradeLevels = normalizedSkillUpgrades.levels;
     const skillUpgradePoints =
       typeof parsed.skillUpgradePoints === "number"
-        ? Math.max(0, Math.floor(parsed.skillUpgradePoints) + levelUpsSinceSave)
-        : playerLevel;
+        ? Math.max(
+            0,
+            Math.floor(parsed.skillUpgradePoints) +
+              levelUpsSinceSave +
+              normalizedSkillUpgrades.refundedPoints
+          )
+        : playerLevel + normalizedSkillUpgrades.refundedPoints;
     const timerState = normalizeTimerSaveState(
       parsed.timerActivities,
       parsed.runningTimer
@@ -2309,6 +2315,9 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     profileState.timerActivities,
     profileState.runningTimer
   );
+  const normalizedSkillUpgrades = normalizeSkillUpgradeState(
+    profileState.skillUpgradeLevels
+  );
   return {
     ...profileState,
     abilities,
@@ -2327,11 +2336,10 @@ function normalizeProfileLoot(profileState: AppState): AppState {
     shopInventory: normalizeShopInventory(profileState.shopInventory),
     skillUpgradePoints: Math.max(
       0,
-      profileState.skillUpgradePoints ?? profileState.abilityLevel ?? 0
+      Math.floor(profileState.skillUpgradePoints ?? profileState.abilityLevel ?? 0) +
+        normalizedSkillUpgrades.refundedPoints
     ),
-    skillUpgradeLevels: normalizeSkillUpgradeLevels(
-      profileState.skillUpgradeLevels
-    ),
+    skillUpgradeLevels: normalizedSkillUpgrades.levels,
     specialization: normalizeSpecialization(
       profileState.specialization,
       jobClass

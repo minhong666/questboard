@@ -6,6 +6,7 @@ import {
   getNextSkillUpgradePreview,
   MAX_SKILL_UPGRADE_LEVEL,
   normalizeSkillUpgradeLevels,
+  normalizeSkillUpgradeState,
 } from "./skill-upgrades";
 
 describe("skill upgrades", () => {
@@ -19,7 +20,16 @@ describe("skill upgrades", () => {
     expect(
       normalizeSkillUpgradeLevels({ "warrior-50": 2.9, "warrior-75": 99, invalid: -1 })
     ).toEqual({ "warrior-50": 2, "warrior-75": MAX_SKILL_UPGRADE_LEVEL });
-    expect(MAX_SKILL_UPGRADE_LEVEL).toBe(50);
+    expect(MAX_SKILL_UPGRADE_LEVEL).toBe(15);
+  });
+
+  it("refunds every saved upgrade level above the cap", () => {
+    expect(
+      normalizeSkillUpgradeState({ first: 18, second: 15, third: 20.8 })
+    ).toEqual({
+      levels: { first: 15, second: 15, third: 15 },
+      refundedPoints: 8,
+    });
   });
 
   it("increases damage skill power without changing its unlock requirement", () => {
