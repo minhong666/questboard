@@ -164,6 +164,7 @@ import {
   normalizeSkillUpgradeState,
   type SkillUpgradeLevels,
 } from "../lib/skill-upgrades";
+import { getLegacyProfileCandidate } from "../lib/profile-migration";
 import {
   ACHIEVEMENTS,
   getAchievementStatBonus,
@@ -2358,11 +2359,39 @@ function normalizeProfileLoot(profileState: AppState): AppState {
 
 function loadProfiles(): SaveProfile[] {
   if (typeof window === "undefined") return [];
+
+  const migrateLegacyProfile = (): SaveProfile[] => {
+    let legacySave: string | null;
+    try {
+      legacySave = window.localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return [];
+    }
+    const legacyCandidate = getLegacyProfileCandidate(legacySave);
+    if (!legacyCandidate) return [];
+
+    const profile = makeProfile(
+      legacyCandidate.name,
+      normalizeProfileLoot(loadState())
+    );
+    const migratedProfiles = [profile];
+    try {
+      window.localStorage.setItem(
+        PROFILES_STORAGE_KEY,
+        JSON.stringify(migratedProfiles)
+      );
+      window.localStorage.setItem(ACTIVE_PROFILE_KEY, profile.id);
+    } catch {
+      // Keep the in-memory migrated profile and the untouched legacy save.
+    }
+    return migratedProfiles;
+  };
+
   try {
     const raw = window.localStorage.getItem(PROFILES_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return migrateLegacyProfile();
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
+    const profiles = Array.isArray(parsed)
       ? parsed
           .filter((profile): profile is SaveProfile =>
             Boolean(
@@ -2378,8 +2407,9 @@ function loadProfiles(): SaveProfile[] {
             state: normalizeProfileLoot(profile.state),
           }))
       : [];
+    return profiles.length > 0 ? profiles : migrateLegacyProfile();
   } catch {
-    return [];
+    return migrateLegacyProfile();
   }
 }
 
