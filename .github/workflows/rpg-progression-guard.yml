@@ -20,8 +20,9 @@ jobs:
         run: corepack enable
       - name: Install dependencies
         run: corepack pnpm install --frozen-lockfile
-      - name: Check fixed XP and specialization thresholds
-        run: >-
-          corepack pnpm exec vitest run
-          client/src/lib/leveling.test.ts
-          client/src/lib/class-specializations.test.ts
+      - name: Run full test suite
+        run: corepack pnpm test -- --run
+      - name: Run TypeScript check
+        run: corepack pnpm run check
+      - name: Run production build
+        run: corepack pnpm run build
