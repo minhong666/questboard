@@ -5,9 +5,9 @@ import {
 } from "./intelligence-special";
 
 describe("intelligence special", () => {
-  it("grants 0.1% experience bonus per intelligence", () => {
-    expect(getIntelligenceExperienceBonusPercent(1)).toBe(0.1);
-    expect(getIntelligenceExperienceBonusPercent(250)).toBe(25);
+  it("grants 0.5% experience bonus per intelligence", () => {
+    expect(getIntelligenceExperienceBonusPercent(1)).toBe(0.5);
+    expect(getIntelligenceExperienceBonusPercent(50)).toBe(25);
   });
 
   it("caps the experience bonus at 50%", () => {

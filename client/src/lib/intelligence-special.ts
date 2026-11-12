@@ -1,4 +1,4 @@
-export const INTELLIGENCE_XP_BONUS_PER_POINT = 0.1;
+export const INTELLIGENCE_XP_BONUS_PER_POINT = 0.5;
 export const MAX_INTELLIGENCE_XP_BONUS_PERCENT = 50;
 
 export function getIntelligenceExperienceBonusPercent(intelligence: number) {

@@ -11473,7 +11473,7 @@ export default function Home() {
                       經驗獲取 +{experienceBonusPercent.toFixed(1)}%
                     </strong>
                   </div>
-                  <small>每 1 智力 +0.1% · 最高 +50%</small>
+                  <small>每 1 智力 +0.5% · 最高 +50%</small>
                 </div>
                 <div className="class-skill-panel">
                   <div className="class-skill-panel-heading">
