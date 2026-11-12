@@ -249,7 +249,7 @@ export default defineConfig({
     },
   },
   server: {
-    host: true,
+    host: process.env.DEV_HOST || "127.0.0.1",
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",
