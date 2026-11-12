@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../_core/hooks/useAuth";
+import { startLogin } from "../const";
+import { trpc } from "../lib/trpc";
 import {
   BACKGROUND_THEMES,
   normalizeBackgroundTheme,
@@ -18,6 +21,7 @@ import {
   ChevronRight,
   Clock3,
   Coins,
+  Cloud,
   Droplets,
   Dumbbell,
   Flame,
@@ -29,6 +33,8 @@ import {
   LayoutGrid,
   LockKeyhole,
   Leaf,
+  LogIn,
+  LogOut,
   Mail,
   Menu,
   Moon,
@@ -148,6 +154,8 @@ import {
 import { getWarriorTotalHealthGrowth } from "../lib/level-growth";
 import { getPlayerLevelStats, getXpForLevel } from "../lib/leveling";
 import { getIntelligenceExperienceBonusPercent } from "../lib/intelligence-special";
+import { GAME_RULES } from "../lib/game-rules";
+import { createSaveArchive, parseSaveArchive } from "../lib/save-format";
 import { FloatingTimer } from "../components/FloatingTimer";
 import {
   calculateSpecialSkillDamage,
@@ -956,16 +964,18 @@ const STORAGE_KEY = "questboard-rpg-state-v1";
 const PROFILES_STORAGE_KEY = "questboard-rpg-profiles-v1";
 const DISCOVERED_EQUIPMENT_STORAGE_KEY = "questboard-equipment-codex-discovered-v1";
 const SHARED_ACHIEVEMENTS_STORAGE_KEY = "questboard-shared-achievements-v1";
+const LOCAL_SAVE_UPDATED_AT_KEY = "questboard-save-updated-at-v1";
 const NOTIFICATION_SETTINGS_KEY = "questboard-notification-settings-v1";
 const NOTIFICATION_LAST_REMINDER_KEY =
   "questboard-notification-last-reminder-v1";
 const BOARD_SIZE_KEY = "questboard-board-size-v1";
 const ACTIVE_PROFILE_KEY = "questboard-active-profile-v1";
-const HEALTH_RECOVERY_INTERVAL_MINUTES = 1;
+const HEALTH_RECOVERY_INTERVAL_MINUTES =
+  GAME_RULES.health.recoveryIntervalMinutes;
 const HEALTH_RECOVERY_INTERVAL_MS =
   HEALTH_RECOVERY_INTERVAL_MINUTES * 60 * 1000;
-const HEALTH_RECOVERY_PERCENT = 0.015;
-const POMODORO_ROUND_XP = 25;
+const HEALTH_RECOVERY_PERCENT = GAME_RULES.health.recoveryPercent;
+const POMODORO_ROUND_XP = GAME_RULES.activityTimer.pomodoroRoundXp;
 const defaultPomodoroSettings: PomodoroSettings = {
   enabled: false,
   focusMinutes: 25,
@@ -1352,7 +1362,10 @@ function generateDailyMonsters(
   playerLevel: number,
   dateKey: string
 ): Monster[] {
-  return selectDailyMonsterDefinitions(dateKey, 6).map(
+  return selectDailyMonsterDefinitions(
+    dateKey,
+    GAME_RULES.monsters.dailySmallMonsterCount
+  ).map(
     ({ definition, catalogIndex }, index) => {
       const offset = dailyMonsterOffsets[index] ?? 0;
       const level = Math.max(1, playerLevel + offset);
@@ -2752,6 +2765,18 @@ function LootProbabilityGuide({
 }
 
 export default function Home() {
+  const {
+    user: accountUser,
+    loading: accountLoading,
+    logout: logoutAccount,
+  } = useAuth();
+  const cloudSaveQuery = trpc.gameSave.get.useQuery(undefined, {
+    enabled: Boolean(accountUser),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const cloudSaveMutation = trpc.gameSave.save.useMutation();
+  const saveCloud = cloudSaveMutation.mutate;
   const [state, setState] = useState<AppState>(() =>
     normalizeProfileLoot(loadState())
   );
@@ -2863,6 +2888,12 @@ export default function Home() {
   const [setupJobClass, setSetupJobClass] = useState<JobClass>("warrior");
   const [setupOpen, setSetupOpen] = useState(() => loadProfiles().length === 0);
   const [newProfileSetupOpen, setNewProfileSetupOpen] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<
+    "local" | "loading" | "synced" | "error"
+  >("local");
+  const [persistenceReady, setPersistenceReady] = useState(false);
+  const saveImportInputRef = useRef<HTMLInputElement | null>(null);
+  const cloudHydratedRef = useRef(false);
 
   const backgroundTheme =
     BACKGROUND_THEMES.find(theme => theme.id === backgroundThemeId) ??
@@ -4089,8 +4120,161 @@ export default function Home() {
     return `${getRepeatPeriodKey("daily", date, state.dailyResetMinutes)}|${getRepeatPeriodKey("weekly", date, state.dailyResetMinutes)}`;
   }, [currentTime, state.dailyResetMinutes]);
 
+  const createCurrentSaveArchive = () =>
+    createSaveArchive({
+      savedAt: Date.now(),
+      profiles: profiles.map(profile =>
+        profile.id === activeProfileId ? { ...profile, state } : profile
+      ),
+      activeProfileId,
+      boardSize,
+      discoveredEquipmentNames: permanentlyDiscoveredEquipmentNames,
+      sharedAchievementClaimedIds,
+      notificationSettings,
+      backgroundThemeId,
+    });
+
   useEffect(() => {
+    if (accountLoading) {
+      setCloudSyncStatus("loading");
+      return;
+    }
+    if (!accountUser) {
+      cloudHydratedRef.current = false;
+      setPersistenceReady(true);
+      setCloudSyncStatus("local");
+      return;
+    }
+    if (cloudSaveQuery.isLoading || cloudHydratedRef.current) return;
+
+    cloudHydratedRef.current = true;
+    if (cloudSaveQuery.error) {
+      setPersistenceReady(true);
+      setCloudSyncStatus("error");
+      return;
+    }
+
+    const remoteSave = cloudSaveQuery.data;
+    const localSavedAt = Number(
+      window.localStorage.getItem(LOCAL_SAVE_UPDATED_AT_KEY) ?? 0
+    );
+    let hydrationFailed = false;
+
+    if (remoteSave && remoteSave.updatedAt > localSavedAt) {
+      try {
+        const archive = parseSaveArchive(remoteSave.payload);
+        const importedProfiles = archive.profiles
+          .filter(profile => {
+            const candidate = profile as {
+              id?: unknown;
+              name?: unknown;
+              state?: unknown;
+            };
+            return (
+              typeof candidate.id === "string" &&
+              typeof candidate.name === "string" &&
+              candidate.state &&
+              typeof (candidate.state as Partial<AppState>).totalXp === "number"
+            );
+          })
+          .map(profile => {
+            const candidate = profile as {
+              id: string;
+              name: string;
+              state: AppState;
+            };
+            return {
+              id: candidate.id,
+              name: candidate.name.slice(0, 24),
+              state: normalizeProfileLoot(candidate.state),
+            };
+          });
+
+        if (importedProfiles.length > 0) {
+          const nextActiveProfileId = importedProfiles.some(
+            profile => profile.id === archive.activeProfileId
+          )
+            ? archive.activeProfileId
+            : importedProfiles[0].id;
+          const nextActiveProfile = importedProfiles.find(
+            profile => profile.id === nextActiveProfileId
+          )!;
+          setProfiles(importedProfiles);
+          setActiveProfileId(nextActiveProfileId);
+          setState(nextActiveProfile.state);
+          setBoardSize(archive.boardSize);
+          setPermanentlyDiscoveredEquipmentNames(
+            parseDiscoveredEquipmentNames(archive.discoveredEquipmentNames)
+          );
+          setSharedAchievementClaimedIds(archive.sharedAchievementClaimedIds);
+          const importedNotifications =
+            archive.notificationSettings as Partial<NotificationSettings> | null;
+          setNotificationSettings({
+            enabled: importedNotifications?.enabled === true,
+            dailyTaskReminder: importedNotifications?.dailyTaskReminder !== false,
+          });
+          setBackgroundThemeId(normalizeBackgroundTheme(archive.backgroundThemeId));
+          window.localStorage.setItem(
+            LOCAL_SAVE_UPDATED_AT_KEY,
+            String(remoteSave.updatedAt)
+          );
+        }
+      } catch {
+        hydrationFailed = true;
+      }
+    }
+
+    setPersistenceReady(true);
+    setCloudSyncStatus(hydrationFailed ? "error" : "synced");
+  }, [
+    accountLoading,
+    accountUser,
+    cloudSaveQuery.data,
+    cloudSaveQuery.error,
+    cloudSaveQuery.isLoading,
+  ]);
+
+  useEffect(() => {
+    if (!persistenceReady || !accountUser || !cloudHydratedRef.current) return;
+    const timeout = window.setTimeout(() => {
+      const archive = createCurrentSaveArchive();
+      saveCloud(
+        {
+          schemaVersion: archive.schemaVersion,
+          payload: JSON.stringify(archive),
+        },
+        {
+          onSuccess: () => {
+            window.localStorage.setItem(
+              LOCAL_SAVE_UPDATED_AT_KEY,
+              String(archive.savedAt)
+            );
+            setCloudSyncStatus("synced");
+          },
+          onError: () => setCloudSyncStatus("error"),
+        }
+      );
+    }, 800);
+    return () => window.clearTimeout(timeout);
+  }, [
+    accountUser,
+    activeProfileId,
+    backgroundThemeId,
+    boardSize,
+    notificationSettings,
+    permanentlyDiscoveredEquipmentNames,
+    persistenceReady,
+    profiles,
+    sharedAchievementClaimedIds,
+    state,
+    saveCloud,
+  ]);
+
+  useEffect(() => {
+    if (!persistenceReady) return;
+    const savedAt = Date.now();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(LOCAL_SAVE_UPDATED_AT_KEY, String(savedAt));
     if (activeProfileId) {
       setProfiles(previous =>
         previous.map(profile =>
@@ -4098,13 +4282,14 @@ export default function Home() {
         )
       );
     }
-  }, [state, activeProfileId]);
+  }, [state, activeProfileId, persistenceReady]);
 
   useEffect(() => {
+    if (!persistenceReady) return;
     window.localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
     if (activeProfileId)
       window.localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfileId);
-  }, [profiles, activeProfileId]);
+  }, [profiles, activeProfileId, persistenceReady]);
 
   useEffect(() => {
     const mergedNames = mergeDiscoveredEquipmentNames(
@@ -9099,8 +9284,14 @@ export default function Home() {
           } : {}),
           coins: getCoinsAfterCombatDeath(previous.coins),
           ...(isSoulTrialBattle
-            ? { soulTrialCooldownUntil: Date.now() + 30 * 60 * 1000 }
-            : { combatCooldownUntil: Date.now() + 30 * 60 * 1000 }),
+            ? {
+                soulTrialCooldownUntil:
+                  Date.now() + GAME_RULES.combat.cooldownMinutes * 60 * 1000,
+              }
+            : {
+                combatCooldownUntil:
+                  Date.now() + GAME_RULES.combat.cooldownMinutes * 60 * 1000,
+              }),
         }));
         showToast(
           isSoulTrialBattle
@@ -9194,7 +9385,8 @@ export default function Home() {
         abilityPoints: Math.floor(previous.abilityPoints / 2),
         skillUpgradePoints: Math.floor(previous.skillUpgradePoints / 2),
         coins: Math.floor(previous.coins / 2),
-        combatCooldownUntil: Date.now() + 30 * 60 * 1000,
+        combatCooldownUntil:
+          Date.now() + GAME_RULES.combat.cooldownMinutes * 60 * 1000,
       }));
       showToast(
         `你被${monster.name}擊倒了！能力與金幣已減半，30 分鐘內無法再次挑戰魔物`
@@ -9408,6 +9600,94 @@ export default function Home() {
     showToast(`「${name.slice(0, 24)}」已保存`);
   };
 
+  const exportSaveArchive = () => {
+    const archive = createCurrentSaveArchive();
+    const blob = new Blob([JSON.stringify(archive, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `questboard-save-${new Date(archive.savedAt)
+      .toISOString()
+      .slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("存檔已匯出，可在其他裝置匯入");
+  };
+
+  const importSaveArchive = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (stateRef.current.runningTimer) {
+      showToast("請先停止計時器，再匯入存檔");
+      return;
+    }
+    try {
+      const archive = parseSaveArchive(await file.text());
+      const importedProfiles = archive.profiles
+        .filter(profile => {
+          const candidate = profile as {
+            id?: unknown;
+            name?: unknown;
+            state?: unknown;
+          };
+          return (
+            typeof candidate.id === "string" &&
+            typeof candidate.name === "string" &&
+            candidate.state &&
+            typeof (candidate.state as Partial<AppState>).totalXp === "number"
+          );
+        })
+        .map(profile => {
+          const candidate = profile as {
+            id: string;
+            name: string;
+            state: AppState;
+          };
+          return {
+            id: candidate.id,
+            name: candidate.name.slice(0, 24),
+            state: normalizeProfileLoot(candidate.state),
+          };
+        });
+      if (!importedProfiles.length) {
+        throw new Error("存檔內沒有有效的冒險角色");
+      }
+      const nextActiveProfileId = importedProfiles.some(
+        profile => profile.id === archive.activeProfileId
+      )
+        ? archive.activeProfileId
+        : importedProfiles[0].id;
+      const nextActiveProfile = importedProfiles.find(
+        profile => profile.id === nextActiveProfileId
+      )!;
+      setProfiles(importedProfiles);
+      setActiveProfileId(nextActiveProfileId);
+      setState(nextActiveProfile.state);
+      setBoardSize(archive.boardSize);
+      setPermanentlyDiscoveredEquipmentNames(
+        parseDiscoveredEquipmentNames(archive.discoveredEquipmentNames)
+      );
+      setSharedAchievementClaimedIds(archive.sharedAchievementClaimedIds);
+      const importedNotifications =
+        archive.notificationSettings as Partial<NotificationSettings> | null;
+      setNotificationSettings({
+        enabled: importedNotifications?.enabled === true,
+        dailyTaskReminder: importedNotifications?.dailyTaskReminder !== false,
+      });
+      setBackgroundThemeId(normalizeBackgroundTheme(archive.backgroundThemeId));
+      setSetupOpen(false);
+      setModal(null);
+      showToast(`已匯入 ${importedProfiles.length} 個冒險存檔`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "存檔匯入失敗");
+    }
+  };
+
   const switchProfile = (profile: SaveProfile) => {
     if (profile.id === activeProfileId) return;
     const latestProfiles = getLatestProfiles();
@@ -9515,6 +9795,19 @@ export default function Home() {
     setState(previous => ({ ...previous, userName: userName.slice(0, 24) }));
     setModal(null);
     showToast(`使用者名稱已更新為「${userName.slice(0, 24)}」`);
+  };
+
+  const handleAccountAction = () => {
+    if (accountUser) {
+      void logoutAccount();
+      return;
+    }
+    try {
+      startLogin();
+    } catch {
+      setCloudSyncStatus("error");
+      showToast("登入服務目前未設定完成");
+    }
   };
 
   const saveRefreshSettings = () => {
@@ -10750,6 +11043,15 @@ export default function Home() {
             <span>
               {equippedTitle ? `「${equippedTitle.title}」 · ` : ""}任務騎士 · Lv.{player.level}
             </span>
+            <span>
+              {accountUser
+                ? cloudSyncStatus === "synced"
+                  ? "雲端同步中"
+                  : cloudSyncStatus === "error"
+                    ? "雲端同步異常"
+                    : "正在同步…"
+                : "僅本機存檔"}
+            </span>
           </div>
           <button
             className="icon-button muted-button"
@@ -10808,6 +11110,26 @@ export default function Home() {
               onClick={openSaveManager}
             >
               <BookOpen size={14} /> <span>存檔</span>
+            </button>
+            <button
+              type="button"
+              className="save-access-button"
+              onClick={handleAccountAction}
+              disabled={accountLoading}
+              title={
+                accountUser
+                  ? `登出 ${accountUser.name ?? accountUser.email ?? "帳號"}`
+                  : "登入以啟用跨裝置同步"
+              }
+            >
+              {accountUser ? <LogOut size={14} /> : <LogIn size={14} />}
+              <span>
+                {accountLoading
+                  ? "帳號…"
+                  : accountUser
+                    ? "登出"
+                    : "登入同步"}
+              </span>
             </button>
             <div className="date-chip">
               <CalendarDays size={15} /> {formatDate()}
@@ -15426,6 +15748,13 @@ export default function Home() {
               </div>
             ) : modal.kind === "saves" ? (
               <div className="modal-form save-manager-form">
+                <input
+                  ref={saveImportInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="visually-hidden"
+                  onChange={event => void importSaveArchive(event)}
+                />
                 <label>
                   目前存檔名稱
                   <input
@@ -15450,6 +15779,20 @@ export default function Home() {
                   >
                     <Plus size={15} />
                     {state.runningTimer ? "先停止計時" : "建立新存檔"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={exportSaveArchive}
+                  >
+                    <Cloud size={15} /> 匯出存檔
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => saveImportInputRef.current?.click()}
+                  >
+                    <Cloud size={15} /> 匯入存檔
                   </button>
                 </div>
                 <div className="save-profile-list">
@@ -15499,7 +15842,7 @@ export default function Home() {
                   ))}
                 </div>
                 <small className="form-help">
-                  每個存檔會獨立保存任務、職業、等級、能力、裝備與獎勵。
+                  每個存檔會獨立保存任務、職業、等級、能力、裝備與獎勵；匯入會取代目前本機存檔。
                 </small>
               </div>
             ) : modal.kind === "task" ? (

@@ -50,3 +50,12 @@
 - `client/src/lib/equipment-database.ts` 保存 `rpg.md` 的六級 HP/ATK/INT/DEF/閃避基準、120 件設計裝備，以及每種稀有度 5 件原創裝備，共 150 件資料。
 - `client/src/lib/loot.ts` 將資料庫模板合併至原有掉落池；`EquipmentItem.equipmentLevel` 為可選欄位，舊存檔不會因缺少等級而失效，舊版裝備仍可裝備、合成及保存。
 - `client/src/pages/Home.tsx` 在戰利品頁顯示六級基準表，裝備卡顯示稀有度、部位及裝備等級；掉落稀有度與原有詞綴、裝備合成規則維持不變。
+
+
+## 追加：集中規則、存檔轉移與帳號同步
+
+- `client/src/lib/game-rules.ts` 集中核心平衡常數；升級與智力特技模組、首頁生命／怪物／戰鬥／計時器流程引用同一來源。
+- `client/src/lib/save-format.ts` 定義 `questboard-save` JSON envelope 與 schema version 2，將舊版裸 profile 陣列／缺少版本欄位的資料遷移至目前格式；Home 仍透過既有 profile 正規化流程驗證資料。
+- `drizzle/schema.ts` 與 migration 新增 `user_game_saves`，每位已登入使用者保留一份完整 JSON 存檔；`server/routers.ts` 只用 `protectedProcedure` 暴露讀寫 API，並限制 payload 大小。
+- Home 維持未登入的 localStorage fallback；登入後以雲端 `updatedAt` 與本機更新時間做 last-write-wins 選擇，雲端狀態採 debounce 保存，匯入／匯出仍可作為人工備份與跨裝置轉移手段。
+- 資料庫 migration 需在已配置 `DATABASE_URL` 的 Webdev 環境執行；資料庫不可用時前端保留本機遊玩與匯出能力。

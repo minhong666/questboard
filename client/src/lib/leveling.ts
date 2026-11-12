@@ -1,3 +1,5 @@
+import { GAME_RULES } from "./game-rules";
+
 export type PlayerLevelStats = {
   level: number;
   currentXp: number;
@@ -6,7 +8,7 @@ export type PlayerLevelStats = {
 };
 
 /** Game-balance invariant: every level requires exactly 250 XP. */
-export const XP_PER_LEVEL = 250;
+export const XP_PER_LEVEL = GAME_RULES.progression.xpPerLevel;
 
 export function getXpForLevel(level: number) {
   const safeLevel = Math.max(0, Math.floor(level));
