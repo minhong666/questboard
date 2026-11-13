@@ -614,6 +614,7 @@ type ShopItem = {
 
 const EXPERIENCE_BOTTLE_ID = "experience-bottle";
 const EXPERIENCE_BOTTLE_DAILY_LIMIT = 3;
+const ABILITY_RESET_SCROLL_ID = "ability-reset-scroll";
 
 const SHOP_EQUIPMENT_BASE_PRICES: Record<string, number> = {
   頭盔: 40,
@@ -643,6 +644,14 @@ const SHOP_ITEMS: ShopItem[] = [
     price: 150,
     category: "growth",
     icon: Brain,
+  },
+  {
+    id: ABILITY_RESET_SCROLL_ID,
+    name: "能力點數重製卷軸",
+    description: "清空已分配的能力與戰鬥屬性點數，退還全部已使用能力點數。",
+    price: 1000,
+    category: "growth",
+    icon: RotateCcw,
   },
   {
     id: "skill-point",
@@ -1611,7 +1620,12 @@ const bosses: Monster[] = [
     magicResistancePercent: 25,
     physicalResistancePercent: -10,
     risk: "極高風險",
-    requirements: {},
+    requirements: {
+      health: 1200,
+      strength: 150,
+      defense: 135,
+      intelligence: 105,
+    },
     icon: Skull,
     tone: "violet",
     isBoss: true,
@@ -1873,6 +1887,67 @@ function formatLevelGrowth(jobClass: JobClass, levelUps: number) {
     growth.combat.critDamage ? `暴擊傷害 +${growth.combat.critDamage}%` : "",
   ].filter(Boolean);
   return parts.join("、");
+}
+
+function getAbilityResetBaseline(jobClass: JobClass, abilityLevel: number) {
+  const growth = getLevelGrowth(jobClass, Math.max(0, abilityLevel - 1));
+  return {
+    abilities: {
+      health: defaultAbilities.health + growth.abilities.health,
+      strength: defaultAbilities.strength + growth.abilities.strength,
+      defense: defaultAbilities.defense + growth.abilities.defense,
+      intelligence: defaultAbilities.intelligence + growth.abilities.intelligence,
+    },
+    combatStats: {
+      ...defaultCombatStats,
+      critRate: defaultCombatStats.critRate + (growth.combat.critRate ?? 0),
+      critDamage:
+        defaultCombatStats.critDamage + (growth.combat.critDamage ?? 0),
+      dodgeRate: defaultCombatStats.dodgeRate,
+      castSpeedPercent: defaultCombatStats.castSpeedPercent ?? 0,
+    },
+  };
+}
+
+function getUsedAbilityPointCount(state: AppState) {
+  const baseline = getAbilityResetBaseline(state.jobClass, state.abilityLevel);
+  const abilityPointCosts: Record<AbilityKey, number> = {
+    health: 10,
+    strength: 1,
+    defense: 1,
+    intelligence: 1,
+  };
+  const attributePoints = (Object.keys(abilityPointCosts) as AbilityKey[]).reduce(
+    (total, key) =>
+      total +
+      Math.max(
+        0,
+        Math.floor(
+          (state.abilities[key] - baseline.abilities[key]) /
+            abilityPointCosts[key]
+        )
+      ),
+    0
+  );
+  const combatPointCosts: Array<[keyof CombatStats, number]> = [
+    ["critRate", 1],
+    ["critDamage", 2.5],
+    ["dodgeRate", 1],
+    ["castSpeedPercent", 1],
+  ];
+  const combatPoints = combatPointCosts.reduce(
+    (total, [key, cost]) =>
+      total +
+      Math.max(
+        0,
+        Math.floor(
+          ((state.combatStats[key] ?? 0) - (baseline.combatStats[key] ?? 0)) /
+            cost
+        )
+      ),
+    0
+  );
+  return attributePoints + combatPoints;
 }
 
 function applyExperienceToState(state: AppState, xpDelta: number): AppState {
@@ -10661,11 +10736,13 @@ export default function Home() {
       shopInventory: {
         ...previous.shopInventory,
         [item.id]: (previous.shopInventory[item.id] ?? 0) +
-          (item.category === "growth" ? 0 : 1),
+          (item.category === "growth" && item.id !== ABILITY_RESET_SCROLL_ID
+            ? 0
+            : 1),
       },
     }));
     showToast(
-      item.category === "growth"
+      item.category === "growth" && item.id !== ABILITY_RESET_SCROLL_ID
         ? `已購買${item.name}`
         : `已購買${item.name}，可在商城背包使用`
     );
@@ -10675,6 +10752,47 @@ export default function Home() {
     const owned = state.shopInventory[item.id] ?? 0;
     if (owned <= 0) {
       showToast(`目前沒有${item.name}`);
+      return;
+    }
+    if (item.id === ABILITY_RESET_SCROLL_ID) {
+      if (battle?.outcome === "fighting") {
+        showToast("戰鬥進行中不能使用能力點數重製卷軸");
+        return;
+      }
+      if (
+        !window.confirm(
+          "使用能力點數重製卷軸後，所有手動分配的能力與戰鬥屬性點數都會被清空，確定要使用嗎？"
+        )
+      ) {
+        return;
+      }
+      const refundedPoints = getUsedAbilityPointCount(state);
+      const baseline = getAbilityResetBaseline(
+        state.jobClass,
+        state.abilityLevel
+      );
+      setState(previous => ({
+        ...previous,
+        abilities: baseline.abilities,
+        abilityPoints: previous.abilityPoints + refundedPoints,
+        combatStats: baseline.combatStats,
+        currentHealth: clampCurrentHealth(
+          previous.currentHealth,
+          getEffectiveHealthCap(
+            baseline.abilities,
+            previous.jobClass,
+            previous.inventory,
+            previous.equippedItemIds
+          )
+        ),
+        shopInventory: {
+          ...previous.shopInventory,
+          [item.id]: Math.max(0, (previous.shopInventory[item.id] ?? 0) - 1),
+        },
+      }));
+      showToast(
+        `能力點數已重製，清空能力分配並退還 ${refundedPoints} 點能力點`
+      );
       return;
     }
     if (item.id === EXPERIENCE_BOTTLE_ID) {
@@ -11382,9 +11500,9 @@ export default function Home() {
                       return (
                         <article className="shop-item-card panel-card" key={item.id}>
                           <div className={`shop-item-icon shop-icon-${category}`}><Icon size={21} /></div>
-                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}{category === "equipment" && item.equipment && <span className="shop-rarity-label">{item.equipment.rarity}</span>}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : isExperienceBottle ? <span className="shop-owned">持有 {owned} · 今日已購 {state.shopExperienceBottlePurchasedCount}/{EXPERIENCE_BOTTLE_DAILY_LIMIT}</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
+                          <div className="shop-item-copy"><div className="shop-item-title"><h4>{item.name}{category === "equipment" && item.equipment && <span className="shop-rarity-label">{item.equipment.rarity}</span>}</h4><strong>{item.price} 金幣</strong></div><p>{item.description}</p>{category === "equipment" ? <span className="shop-owned">購買後加入戰利品庫</span> : isExperienceBottle ? <span className="shop-owned">持有 {owned} · 今日已購 {state.shopExperienceBottlePurchasedCount}/{EXPERIENCE_BOTTLE_DAILY_LIMIT}</span> : item.id === ABILITY_RESET_SCROLL_ID ? <span className="shop-owned">持有 {owned}</span> : category !== "growth" && <span className="shop-owned">持有 {owned}</span>}</div>
                           <div className="shop-item-actions">
-                            {(category === "potion" || category === "elixir" || isExperienceBottle) && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
+                            {(category === "potion" || category === "elixir" || isExperienceBottle || item.id === ABILITY_RESET_SCROLL_ID) && <button className="secondary-button shop-use-button" onClick={() => useShopItem(item)} disabled={owned <= 0}>使用</button>}
                             <button className="primary-button shop-buy-button" onClick={() => buyShopItem(item)} disabled={state.coins < item.price || equipmentPurchased || bottleLimitReached}><Coins size={14} /> {equipmentPurchased ? "今日已售出" : bottleLimitReached ? "今日已達上限" : "購買"}</button>
                           </div>
                         </article>
@@ -15697,7 +15815,7 @@ export default function Home() {
                   <div className="adventurer-subheading"><span>快速使用道具</span><small>持有中的消耗品</small></div>
                   <div className="adventurer-item-list">
                     {SHOP_ITEMS.filter(item =>
-                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID) &&
+                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID || item.id === ABILITY_RESET_SCROLL_ID) &&
                       (state.shopInventory[item.id] ?? 0) > 0
                     ).map(item => {
                       const Icon = item.icon;
@@ -15708,7 +15826,7 @@ export default function Home() {
                       );
                     })}
                     {!SHOP_ITEMS.some(item =>
-                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID) &&
+                      (item.category === "potion" || item.category === "elixir" || item.id === EXPERIENCE_BOTTLE_ID || item.id === ABILITY_RESET_SCROLL_ID) &&
                       (state.shopInventory[item.id] ?? 0) > 0
                     ) && <small className="adventurer-empty-note">目前沒有可快速使用的道具，可前往冒險商城補給。</small>}
                   </div>
