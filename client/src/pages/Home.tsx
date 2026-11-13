@@ -663,7 +663,7 @@ const SHOP_ITEMS: ShopItem[] = [
   {
     id: "small-potion",
     name: "小型治療藥水",
-    description: "使用後恢復 10% 最大生命值，戰鬥外可使用。",
+    description: "使用後恢復 10% 最大生命值，戰鬥中與戰鬥外皆可使用。",
     price: 50,
     category: "potion",
     icon: HeartPulse,
@@ -671,7 +671,7 @@ const SHOP_ITEMS: ShopItem[] = [
   {
     id: "medium-potion",
     name: "中型治療藥水",
-    description: "使用後恢復 20% 最大生命值，戰鬥外可使用。",
+    description: "使用後恢復 20% 最大生命值，戰鬥中與戰鬥外皆可使用。",
     price: 100,
     category: "potion",
     icon: HeartPulse,
@@ -679,7 +679,7 @@ const SHOP_ITEMS: ShopItem[] = [
   {
     id: "large-potion",
     name: "大型治療藥水",
-    description: "使用後恢復 30% 最大生命值，戰鬥外可使用。",
+    description: "使用後恢復 30% 最大生命值，戰鬥中與戰鬥外皆可使用。",
     price: 200,
     category: "potion",
     icon: HeartPulse,
@@ -10699,6 +10699,43 @@ export default function Home() {
       showToast(`經驗瓶生效：立即升級至 Lv.${currentLevel + 1}`);
       return;
     }
+    const healPercent =
+      item.id === "medium-potion" ? 20 : item.id === "large-potion" ? 30 : 10;
+    if (
+      item.category === "potion" &&
+      item.id !== "holy-elixir" &&
+      battle?.outcome === "fighting"
+    ) {
+      if (battle.playerHealth >= battleAbilities.health) {
+        showToast("目前戰鬥生命值已滿，無法使用治療藥水");
+        return;
+      }
+      const healedHealth = Math.min(
+        battleAbilities.health,
+        battle.playerHealth +
+          Math.max(1, Math.floor((battleAbilities.health * healPercent) / 100))
+      );
+      setBattle(previous =>
+        previous
+          ? {
+              ...previous,
+              playerHealth: healedHealth,
+              logs: [
+                ...previous.logs,
+                `你使用${item.name}，恢復 ${healedHealth - previous.playerHealth} 生命。`,
+              ],
+            }
+          : previous
+      );
+      setState(previous => ({
+        ...previous,
+        shopInventory: { ...previous.shopInventory, [item.id]: owned - 1 },
+      }));
+      showToast(
+        `${item.name}生效，戰鬥中恢復 ${healedHealth - battle.playerHealth} 生命`
+      );
+      return;
+    }
     if (item.id === "holy-elixir") {
       if (!battle || battle.outcome !== "fighting") {
         showToast("治療聖劑只能在戰鬥中使用");
@@ -10747,7 +10784,6 @@ export default function Home() {
       showToast(`${item.name}生效，本場戰鬥可持續使用其他不同藥劑`);
       return;
     }
-    const healPercent = item.id === "medium-potion" ? 20 : item.id === "large-potion" ? 30 : 10;
     if (state.currentHealth >= effectiveAbilities.health) {
       showToast("目前生命值已滿，無法使用治療藥水");
       return;
@@ -11317,7 +11353,7 @@ export default function Home() {
                 </div>
                 <div className="shop-balance"><span>目前金幣</span><strong><Coins size={16} /> {state.coins.toLocaleString()}</strong></div>
               </div>
-              <div className="shop-notice panel-card"><Sparkles size={18} /><span>每日提供 6 件隨機裝備，午夜 00:00 會刷新；裝備每日限購一次。治療藥水可在戰鬥外使用，戰鬥藥劑可在戰鬥中不限次數使用，但同種效果不會疊加。</span></div>
+              <div className="shop-notice panel-card"><Sparkles size={18} /><span>每日提供 6 件隨機裝備，午夜 00:00 會刷新；裝備每日限購一次。治療藥水可在戰鬥中與戰鬥外使用；戰鬥藥劑可在戰鬥中使用，但同種效果不會疊加。</span></div>
               {([
                 ["growth", "GROWTH", "角色成長", "永久提升角色能力"],
                 ["potion", "POTIONS", "治療藥水", `目前生命 ${state.currentHealth}/${effectiveAbilities.health}`],
@@ -15256,28 +15292,44 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
-                {(SHOP_ITEMS.some(item => item.category === "elixir" && (state.shopInventory[item.id] ?? 0) > 0) ||
-                  (state.shopInventory["holy-elixir"] ?? 0) > 0) && (
+                {(SHOP_ITEMS.some(
+                  item =>
+                    (item.category === "potion" || item.category === "elixir") &&
+                    (state.shopInventory[item.id] ?? 0) > 0
+                )) && (
                   <div className="battle-elixir-panel">
                     <div className="battle-skill-heading">
-                      <strong>商城藥劑</strong>
-                      <small>每場戰鬥不限使用次數；同種效果不會疊加</small>
+                      <strong>商城藥水與藥劑</strong>
+                      <small>治療藥水可恢復生命；戰鬥藥劑同種效果不會疊加</small>
                     </div>
                     <div className="battle-elixir-list">
-                      {SHOP_ITEMS.filter(item => item.category === "elixir" || item.id === "holy-elixir").map(item => {
+                      {SHOP_ITEMS.filter(
+                        item =>
+                          item.category === "potion" || item.category === "elixir"
+                      ).map(item => {
                         const owned = state.shopInventory[item.id] ?? 0;
                         const alreadyActive = item.category === "elixir" && (battle.shopElixirIds ?? []).includes(item.id);
                         const shieldActive = item.id === "holy-elixir" && (battle.shopShieldTurnsRemaining ?? 0) > 0;
+                        const healthFull =
+                          item.category === "potion" &&
+                          item.id !== "holy-elixir" &&
+                          battle.playerHealth >= battleAbilities.health;
                         return (
                           <button
                             type="button"
                             className="battle-elixir-button"
                             key={item.id}
-                            disabled={owned <= 0 || alreadyActive || shieldActive}
+                            disabled={owned <= 0 || alreadyActive || shieldActive || healthFull}
                             onClick={() => useShopItem(item)}
                           >
                             <strong>{item.name}</strong>
-                            <small>{alreadyActive || shieldActive ? "效果中" : `持有 ${owned} · 使用`}</small>
+                            <small>
+                              {alreadyActive || shieldActive
+                                ? "效果中"
+                                : healthFull
+                                  ? "生命已滿"
+                                  : `持有 ${owned} · 使用`}
+                            </small>
                           </button>
                         );
                       })}
