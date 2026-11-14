@@ -4,6 +4,12 @@ import {
 } from "./equipment-weapon-abilities";
 
 export type EquipmentSpecialAbilityId =
+  | "law-calibration"
+  | "void-gaze"
+  | "omniscient-vision"
+  | "titan-awe"
+  | "blood-god-frenzy"
+  | "myriad-cosmos"
   | "low-health-damage"
   | "low-health-lifesteal"
   | "skill-cooldown"
@@ -96,6 +102,22 @@ export type EquipmentSpecialAbilityId =
   | "azure-dragon-bow";
 
 export type EquipmentSpecialAbilityEffects = {
+  lawCalibrationIntervalTurns?: number;
+  lawCalibrationStatBonusPercent?: number;
+  lawCalibrationMaxStacks?: number;
+  voidGazeCritAfterDodge?: boolean;
+  voidGazeDefensePiercePercent?: number;
+  omniscientSkillRefreshChancePercent?: number;
+  omniscientSkillDamageBonusPercent?: number;
+  titanAweCritDamageReductionPercent?: number;
+  titanAweEnemyAttackReductionPercent?: number;
+  titanAweDurationTurns?: number;
+  bloodFrenzyLifeLossStepPercent?: number;
+  bloodFrenzyLifestealPerStepPercent?: number;
+  bloodFrenzyDamagePerStepPercent?: number;
+  bloodFrenzyMaxStacks?: number;
+  myriadShieldIntelligencePercent?: number;
+  myriadShieldDamageReductionPercent?: number;
   damageBonusBelowHalfHealthPercent?: number;
   lifestealBelowHalfHealthPercent?: number;
   cooldownReductionOnSkill?: number;
@@ -449,6 +471,37 @@ export type DodgeCounterState = {
 const legendaryAbilities: Partial<
   Record<EquipmentSpecialAbilityId, EquipmentSpecialAbility>
 > = {
+  "law-calibration": {
+    id: "law-calibration",
+    name: "法則校準",
+    description: "每 3 回合淨化自身 1 個負面狀態，並使力量、智力與防禦提升 10%，最多疊加 30%。",
+    effects: { lawCalibrationIntervalTurns: 3, lawCalibrationStatBonusPercent: 10, lawCalibrationMaxStacks: 3 },
+  },
+  "void-gaze": {
+    id: "void-gaze", name: "虛空凝視",
+    description: "成功閃避敵人攻擊後，下一次普通攻擊或技能必定暴擊，並無視目標 25% 物理與魔法防禦。",
+    effects: { voidGazeCritAfterDodge: true, voidGazeDefensePiercePercent: 25 },
+  },
+  "omniscient-vision": {
+    id: "omniscient-vision", name: "全知視界",
+    description: "施放技能時有 35% 機率刷新冷卻，並使該次技能傷害提升 30%。",
+    effects: { omniscientSkillRefreshChancePercent: 35, omniscientSkillDamageBonusPercent: 30 },
+  },
+  "titan-awe": {
+    id: "titan-awe", name: "泰坦威壓",
+    description: "受到暴擊時，使該次暴擊傷害降低 80%，並降低敵人攻擊 15%，持續 3 回合。",
+    effects: { titanAweCritDamageReductionPercent: 80, titanAweEnemyAttackReductionPercent: 15, titanAweDurationTurns: 3 },
+  },
+  "blood-god-frenzy": {
+    id: "blood-god-frenzy", name: "嗜血狂熱",
+    description: "每損失 10% 最大生命值，獲得 6% 物理吸血與 5% 物理傷害加成，最高 5 層。",
+    effects: { bloodFrenzyLifeLossStepPercent: 10, bloodFrenzyLifestealPerStepPercent: 6, bloodFrenzyDamagePerStepPercent: 5, bloodFrenzyMaxStacks: 5 },
+  },
+  "myriad-cosmos": {
+    id: "myriad-cosmos", name: "萬象森羅",
+    description: "戰鬥開始時獲得相當於智力 60% 的額外魔法護盾；護盾存在期間，受到傷害減少 15%。",
+    effects: { myriadShieldIntelligencePercent: 60, myriadShieldDamageReductionPercent: 15 },
+  },
   "asura-leggings": {
     id: "asura-leggings",
     name: "阿修羅戰意",
@@ -979,6 +1032,12 @@ const legendaryAbilities: Partial<
 };
 
 const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
+  "創世者·秩序之冠": "law-calibration",
+  "虛空之主·終焉面具": "void-gaze",
+  "全知者·真理之冠": "omniscient-vision",
+  "滅世巨神·荒古重盔 (極品)": "titan-awe",
+  "末日狂刃·血神之面 (極品)": "blood-god-frenzy",
+  萬象冠冕: "myriad-cosmos",
   阿修羅戰神兜盔: "low-health-damage",
   "曙光聖衛·傳說盔": "dawn-guardian-vision",
   夜魔主宰面具: "low-health-lifesteal",
@@ -1043,8 +1102,13 @@ export function getEquipmentSpecialAbility(
   rarity: string,
   abilityId?: EquipmentSpecialAbilityId
 ): EquipmentSpecialAbility | undefined {
-  const id = abilityId ?? getEquipmentSpecialAbilityIdByName(equipmentName);
-  if (!id || rarity !== "傳說") return undefined;
+  const mappedId = getEquipmentSpecialAbilityIdByName(equipmentName);
+  const mythicNames = new Set([
+    "創世者·秩序之冠", "虛空之主·終焉面具", "全知者·真理之冠",
+    "滅世巨神·荒古重盔 (極品)", "末日狂刃·血神之面 (極品)", "萬象冠冕",
+  ]);
+  const id = rarity === "神話" ? mappedId : abilityId ?? mappedId;
+  if (!id || (rarity !== "傳說" && (rarity !== "神話" || !mythicNames.has(equipmentName)))) return undefined;
   return legendaryAbilities[id] ?? getLegendaryWeaponAbility(id);
 }
 

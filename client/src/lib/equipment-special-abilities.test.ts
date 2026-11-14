@@ -60,21 +60,21 @@ describe("legendary helmet abilities", () => {
     });
   });
 
-  it("leaves all six mythic helmets without abilities, including stale IDs", () => {
+  it("assigns the requested passives to all six mythic helmets", () => {
     const mythicItems = [
-      ["創世者·秩序之冠", "low-health-damage"],
-      ["虛空之主·終焉面具", "low-health-lifesteal"],
-      ["全知者·真理之冠", "skill-cooldown"],
-      ["滅世巨神·荒古重盔 (極品)", "low-health-resistance"],
-      ["末日狂刃·血神之面 (極品)", "phoenix-rebirth"],
-      ["萬象冠冕", "high-health-dominance"],
+      ["創世者·秩序之冠", "law-calibration"],
+      ["虛空之主·終焉面具", "void-gaze"],
+      ["全知者·真理之冠", "omniscient-vision"],
+      ["滅世巨神·荒古重盔 (極品)", "titan-awe"],
+      ["末日狂刃·血神之面 (極品)", "blood-god-frenzy"],
+      ["萬象冠冕", "myriad-cosmos"],
     ] as const;
 
     for (const [name, staleAbilityId] of mythicItems) {
-      expect(getEquipmentSpecialAbilityIdByName(name)).toBeUndefined();
-      expect(
-        getEquipmentSpecialAbility(name, "神話", staleAbilityId)
-      ).toBeUndefined();
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBe(staleAbilityId);
+      expect(getEquipmentSpecialAbility(name, "神話", staleAbilityId)?.id).toBe(
+        staleAbilityId
+      );
     }
   });
 
@@ -132,7 +132,7 @@ describe("legendary helmet abilities", () => {
     });
     expect(savedMythicItem).toMatchObject({
       kind: "equipment",
-      specialAbilityId: undefined,
+      specialAbilityId: "myriad-cosmos",
     });
   });
 
@@ -153,7 +153,7 @@ describe("legendary helmet abilities", () => {
       "末日狂刃·血神之面 (極品)",
       "神話"
     );
-    expect(mythicAbility).toBeUndefined();
+    expect(mythicAbility?.id).toBe("blood-god-frenzy");
     expect(resolveLethalProtection(mythicAbility, 10, 11, false)).toEqual({
       triggered: false,
       health: 0,

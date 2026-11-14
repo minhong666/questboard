@@ -377,7 +377,7 @@ const sixSetEquipmentTemplates: EquipmentDatabaseTemplate[] =
       specialAbilityId:
         getEquipmentSpecialAbilityIdByName(
           `${theme.name}·${template.rarity}${pieceName}`
-        ) ?? template.specialAbilityId,
+        ) ?? (template.rarity === "神話" ? undefined : template.specialAbilityId),
       description: `「${theme.name}·${template.rarity}${pieceName}」承載${theme.story}的傳承；${setSlotStories[template.slot]}。`,
     };
   });

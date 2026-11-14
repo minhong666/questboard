@@ -376,6 +376,11 @@ type BattleState = {
   stormSwordSoulChestStacks?: number;
   stormSwordSoulAmuletStacks?: number[];
   stormSwordSoulSetStacks?: number[];
+  mythicHelmetShield?: number;
+  mythicHelmetCalibrationStacks?: number;
+  mythicHelmetCalibrationLastTurn?: number;
+  mythicHelmetFrenzyStacks?: number;
+  mythicHelmetAweTurnsRemaining?: number;
   actionLockTurns?: number;
   shopElixirIds?: string[];
   shopShield?: number;
@@ -5409,6 +5414,11 @@ export default function Home() {
       stormSwordSoulChestStacks: 0,
       stormSwordSoulAmuletStacks: [],
       stormSwordSoulSetStacks: [],
+      mythicHelmetShield: 0,
+      mythicHelmetCalibrationStacks: 0,
+      mythicHelmetCalibrationLastTurn: 0,
+      mythicHelmetFrenzyStacks: 0,
+      mythicHelmetAweTurnsRemaining: 0,
       moonStalkerSetDodgeStacks: 0,
       moonStalkerSetDodgeTurnsRemaining: 0,
       astralEnergyStacks: 0,
@@ -5506,6 +5516,46 @@ export default function Home() {
           amuletItem.specialAbilityId
         )
       : undefined;
+    const mythicCalibrationTriggered = Boolean(
+      helmetAbility?.id === "law-calibration" &&
+        battle.turn > 1 &&
+        battle.turn % (helmetAbility.effects.lawCalibrationIntervalTurns ?? 3) === 0 &&
+        battle.mythicHelmetCalibrationLastTurn !== battle.turn
+    );
+    const mythicCalibrationStacks = Math.min(
+      helmetAbility?.effects.lawCalibrationMaxStacks ?? 3,
+      (battle.mythicHelmetCalibrationStacks ?? 0) +
+        (mythicCalibrationTriggered ? 1 : 0)
+    );
+    const myriadShieldAtStart =
+      helmetAbility?.id === "myriad-cosmos"
+        ? battle.turn === 1 && (battle.mythicHelmetShield ?? 0) <= 0
+          ? Math.floor(
+              battleAbilities.intelligence *
+                ((helmetAbility.effects.myriadShieldIntelligencePercent ?? 60) /
+                  100)
+            )
+          : battle.mythicHelmetShield ?? 0
+        : 0;
+    const omniscientVisionTriggered = Boolean(
+      helmetAbility?.id === "omniscient-vision" &&
+        selectedSkill &&
+        !actionLocked &&
+        rollPercentChance(
+          helmetAbility.effects.omniscientSkillRefreshChancePercent ?? 35
+        )
+    );
+    const mythicFrenzyStacks =
+      helmetAbility?.id === "blood-god-frenzy"
+        ? Math.min(
+            helmetAbility.effects.bloodFrenzyMaxStacks ?? 5,
+            Math.floor(
+              ((battleAbilities.health - battle.playerHealth) * 100) /
+                battleAbilities.health /
+                (helmetAbility.effects.bloodFrenzyLifeLossStepPercent ?? 10)
+            )
+          )
+        : 0;
     const azureDragonShieldTriggeredAtStart = Boolean(
       helmetAbility?.id === "azure-dragon-helmet" &&
         battle.playerHealth <
@@ -5683,7 +5733,7 @@ export default function Home() {
         (astralSageVisionTriggered
           ? (helmetAbility?.effects.astralSageCooldownReductionTurns ?? 2)
           : 0);
-      nextSkillCooldowns[selectedSkill.id] = arcaneEchoTriggered
+      nextSkillCooldowns[selectedSkill.id] = arcaneEchoTriggered || omniscientVisionTriggered
         ? 0
         : Math.max(
             passiveCooldownReduction > 0 || astralSageVisionTriggered ? 0 : 1,
@@ -6179,6 +6229,13 @@ export default function Home() {
         : 0) +
       (arcaneEchoTriggered
         ? (weaponAbility?.effects.starlightStaffEchoDamageBonusPercent ?? 30)
+        : 0) +
+      mythicCalibrationStacks *
+        (helmetAbility?.effects.lawCalibrationStatBonusPercent ?? 10) +
+      mythicFrenzyStacks *
+        (helmetAbility?.effects.bloodFrenzyDamagePerStepPercent ?? 5) +
+      (omniscientVisionTriggered
+        ? (helmetAbility?.effects.omniscientSkillDamageBonusPercent ?? 30)
         : 0);
     const physicalDamageBonusPercent =
       damageType === "物理"
@@ -7571,6 +7628,8 @@ export default function Home() {
     const helmetLifestealPercent =
       activeHelmetEffects.lifestealPercent +
       (battleActiveLegendarySetBonuses.asura ? 20 : 0) +
+      mythicFrenzyStacks *
+        (helmetAbility?.effects.bloodFrenzyLifestealPerStepPercent ?? 6) +
       (actualDamageDealt > 0 ? pendingAttackLifestealPercent : 0);
     const helmetLifestealHealing =
       actualDamageDealt > 0
@@ -8142,6 +8201,12 @@ export default function Home() {
       !(monsterDisarmed && !monsterUsesSkill) &&
       !playerEvadedBeforeLethalCheck &&
       Math.random() < (targetGroupMember?.critRate ?? monster.critRate) / 100;
+    const titanAweTriggered = Boolean(
+      helmetAbility?.id === "titan-awe" && monsterCritical
+    );
+    const titanAweTurnsRemaining = titanAweTriggered
+      ? (helmetAbility?.effects.titanAweDurationTurns ?? 3)
+      : Math.max(0, (battle.mythicHelmetAweTurnsRemaining ?? 0) - 1);
     const groupDamage = battle.groupMembers
       ? getLivingMonsterGroupMembers(battle.groupMembers).reduce(
           (total, member) =>
@@ -8172,7 +8237,9 @@ export default function Home() {
               ? (helmetAbility.effects
                   .azureDragonDefenseBonusAbove60HealthPercent ?? 10)
               : 0) +
-            (leggingsAbility?.id === "titan-bastion-leggings" ? 10 : 0)) /
+            (leggingsAbility?.id === "titan-bastion-leggings" ? 10 : 0) +
+            mythicCalibrationStacks *
+              (helmetAbility?.effects.lawCalibrationStatBonusPercent ?? 10)) /
             100)
     );
     const reducedDamage =
@@ -8249,6 +8316,12 @@ export default function Home() {
                       activeHelmetEffects.enemyDamageReductionPercent +
                       activeChestEffects.enemyDamageReductionPercent +
                       targetOutgoingDamageReductionPercent +
+                      (titanAweTurnsRemaining > 0
+                        ? (helmetAbility?.effects.titanAweEnemyAttackReductionPercent ?? 15)
+                        : 0) +
+                      (myriadShieldAtStart > 0
+                        ? (helmetAbility?.effects.myriadShieldDamageReductionPercent ?? 15)
+                        : 0) +
                       stormChestSingleTargetDamageReductionPercent +
                       ironGuardDamageReductionPercent +
                       (battleActiveLegendarySetBonuses.mountain ? 35 : 0)
@@ -8271,9 +8344,14 @@ export default function Home() {
           ? 0
           : monsterCritical
             ? Math.ceil(
-                (buffReducedDamage *
+                ((buffReducedDamage *
                   (targetGroupMember?.critDamage ?? monster.critDamage)) /
-                  100
+                  100) *
+                  (1 -
+                    (helmetAbility?.id === "titan-awe"
+                      ? (helmetAbility.effects.titanAweCritDamageReductionPercent ?? 80)
+                      : 0) /
+                      100)
               )
             : buffReducedDamage;
     const deepSeaStarCoreTriggered = Boolean(
@@ -8334,12 +8412,16 @@ export default function Home() {
       shopShieldAtStart,
       astralIncomingShieldResolution.damageRemaining
     );
+    const myriadShieldResolution = resolveStarCoreShieldDamage(
+      myriadShieldAtStart,
+      shopShieldResolution.damageRemaining
+    );
     const potentialDivineShieldResolution = resolveDivineShieldDamage(
       chestAbility,
       statusShieldResolution.state,
       healedPlayerHealth,
       battleAbilities.health,
-      shopShieldResolution.damageRemaining,
+      myriadShieldResolution.damageRemaining,
       true
     );
     const shadowmoonEvasion = resolveShadowmoonLethalEvasion(
@@ -8503,6 +8585,10 @@ export default function Home() {
     const shopShieldAfterTurn =
       shopShieldTurnsRemainingAfterTurn > 0
         ? shopShieldResolution.shieldRemaining
+        : 0;
+    const mythicHelmetShieldAfterTurn =
+      helmetAbility?.id === "myriad-cosmos"
+        ? myriadShieldResolution.shieldRemaining
         : 0;
     const azureDragonShieldTurnsRemainingAfterTurn =
       azureDragonShieldTriggeredAtStart
@@ -8681,6 +8767,9 @@ export default function Home() {
                 ]
               : []
           );
+    const calibratedPlayerStatuses = mythicCalibrationTriggered
+      ? nextPlayerStatuses.filter((_, index) => index > 0)
+      : nextPlayerStatuses;
     const burnApplied = Boolean(
       monsterUsesSkill &&
         monster.elementalAttack &&
@@ -8745,6 +8834,9 @@ export default function Home() {
       playerEvaded,
       actualDamageDealt > 0
     );
+    if (helmetAbility?.id === "void-gaze" && playerEvaded) {
+      nextDodgeCounterState.guaranteedCrit = true;
+    }
     const nextGaleStacks =
       chestAbility?.id === "gale-dancer"
         ? resolveGaleStackCount(
@@ -8806,7 +8898,10 @@ export default function Home() {
       (phantomStepTriggered
         ? (weaponAbility?.effects.phantomStepDefensePiercePercent ?? 20)
         : 0) +
-      (battleMoonStalkerTwoPieceActive && playerEvaded ? 10 : 0);
+      (battleMoonStalkerTwoPieceActive && playerEvaded ? 10 : 0) +
+      (helmetAbility?.id === "void-gaze" && playerEvaded
+        ? (helmetAbility.effects.voidGazeDefensePiercePercent ?? 25)
+        : 0);
     const nextAttackDamageBonusPercent =
       nextDodgeCounterState.damageBonusPercent +
       (moonshadowTriggered
@@ -9328,7 +9423,7 @@ export default function Home() {
             : (battle.galeSetLastEvasionTurn ?? 0),
           divineShield: divineShieldResolution.state,
           monsterStatuses: monsterStatusesAfterTurn,
-          playerStatuses: nextPlayerStatuses,
+          playerStatuses: calibratedPlayerStatuses,
           monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
           activeBuffs: nextActiveBuffLayers,
@@ -9432,7 +9527,7 @@ export default function Home() {
         shopShield: shopShieldAfterTurn,
         shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
         monsterStatuses: monsterStatusesAfterTurn,
-        playerStatuses: nextPlayerStatuses,
+        playerStatuses: calibratedPlayerStatuses,
         monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         activeBuffs: nextActiveBuffLayers,
@@ -9535,6 +9630,11 @@ export default function Home() {
       moonStalkerGuaranteedHitsRemaining: moonStalkerGuaranteedHitsAfterAction,
       moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
       titanBastionState: titanBastionStateAfterTurn,
+      mythicHelmetShield: mythicHelmetShieldAfterTurn,
+      mythicHelmetCalibrationStacks: mythicCalibrationStacks,
+      mythicHelmetCalibrationLastTurn: mythicCalibrationTriggered ? battle.turn : battle.mythicHelmetCalibrationLastTurn ?? 0,
+      mythicHelmetFrenzyStacks: mythicFrenzyStacks,
+      mythicHelmetAweTurnsRemaining: titanAweTurnsRemaining,
       stormSwordSoulGuaranteedCritsRemaining:
         stormPhoenixCritsAfterPlayerAction,
       stormSwordSoulChestStacks: stormSwordSoulChestStacksAfterAction,
@@ -9550,7 +9650,7 @@ export default function Home() {
       galeStacks: nextGaleStacks,
       divineShield: divineShieldResolution.state,
       monsterStatuses: monsterStatusesAfterTurn,
-      playerStatuses: nextPlayerStatuses,
+      playerStatuses: calibratedPlayerStatuses,
       monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
       activeBuffs: nextActiveBuffLayers,
