@@ -381,6 +381,12 @@ type BattleState = {
   mythicHelmetCalibrationLastTurn?: number;
   mythicHelmetFrenzyStacks?: number;
   mythicHelmetAweTurnsRemaining?: number;
+  genesisChestReviveUsed?: boolean;
+  genesisChestInvulnerabilityTurnsRemaining?: number;
+  voidChestLastCooldownRefreshAt?: number;
+  omniscientChestStacks?: number;
+  eternalFortressRockStacks?: number;
+  starCreationGlowTurnsRemaining?: number;
   actionLockTurns?: number;
   shopElixirIds?: string[];
   shopShield?: number;
@@ -5419,6 +5425,12 @@ export default function Home() {
       mythicHelmetCalibrationLastTurn: 0,
       mythicHelmetFrenzyStacks: 0,
       mythicHelmetAweTurnsRemaining: 0,
+      genesisChestReviveUsed: false,
+      genesisChestInvulnerabilityTurnsRemaining: 0,
+      voidChestLastCooldownRefreshAt: 0,
+      omniscientChestStacks: 0,
+      eternalFortressRockStacks: 0,
+      starCreationGlowTurnsRemaining: 0,
       moonStalkerSetDodgeStacks: 0,
       moonStalkerSetDodgeTurnsRemaining: 0,
       astralEnergyStacks: 0,
@@ -5492,6 +5504,13 @@ export default function Home() {
           chestItem.specialAbilityId
         )
       : undefined;
+    const omniscientChestStacksAtStart = chestAbility?.id === "omniscient-elemental-chest"
+      ? Math.min(chestAbility.effects.omniscientChestMaxStacks ?? 3, battle.omniscientChestStacks ?? 0)
+      : 0;
+    const eternalFortressRockStacksForTurn = chestAbility?.id === "eternal-fortress-chest"
+      ? Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, (battle.eternalFortressRockStacks ?? 0) + 1)
+      : 0;
+    const genesisChestInvulnerableAtStart = chestAbility?.id === "genesis-immortal-chest" && (battle.genesisChestInvulnerabilityTurnsRemaining ?? 0) > 0;
     const weaponItem = battleEquippedItems.find(item => item.slot === "武器");
     const weaponAbility = weaponItem
       ? getEquipmentSpecialAbility(
@@ -6184,9 +6203,13 @@ export default function Home() {
       ? Math.round((basePlayerDamage * effectiveCritDamage) / 100)
       : basePlayerDamage;
     const counterDamageBonusPercent = battle.nextAttackDamageBonusPercent ?? 0;
+    const omniscientChestSkillDamageBonusPercent = selectedSkill && selectedSkill.effectType !== "buff"
+      ? Math.min(chestAbility?.effects.omniscientChestMaxStacks ?? 3, omniscientChestStacksAtStart + 1) * (chestAbility?.effects.omniscientChestSkillDamageBonusPerStackPercent ?? 8)
+      : 0;
     const equipmentAttackBonusPercent =
       activeHelmetEffects.attackDamageBonusPercent +
       activeChestEffects.attackDamageBonusPercent +
+      omniscientChestSkillDamageBonusPercent +
       counterDamageBonusPercent +
       activeWeaponBuffBonuses.attackDamageBonusPercent +
       (helmetAbility?.id === "moon-stalker-vision" &&
@@ -6597,6 +6620,17 @@ export default function Home() {
           )
         )
       : 0;
+    const omniscientChestTrueDamage = Boolean(
+      selectedSkill && selectedSkill.effectType !== "buff" &&
+      chestAbility?.id === "omniscient-elemental-chest" &&
+      omniscientChestStacksAtStart >= (chestAbility.effects.omniscientChestMaxStacks ?? 3) &&
+      baseRawDamageDealt > 0
+    )
+      ? Math.max(1, Math.round(baseRawDamageDealt * ((chestAbility?.effects.omniscientChestNextSkillTrueDamagePercent ?? 60) / 100)))
+      : 0;
+    const slayingArmorBonusDamage = chestAbility?.id === "slaying-armor-chest" && isDamageAction && !monsterDodges
+      ? Math.max(1, Math.round(Math.max(1, battleAbilities.health * ((chestAbility.effects.slayingArmorBonusDamageMaxHealthPercent ?? 5) / 100) - getDefenseReduction(targetDefenseAfterDebuff)) * (1 - targetPhysicalResistance / 100)))
+      : 0;
     const damageDealt = instantExecute
       ? battle.monsterHealth
       : rawDamageDealt === 0
@@ -6612,7 +6646,9 @@ export default function Home() {
           astralSageSwordArcaneDamage +
           astralSageBowArcaneDamage +
           titanSwordTrueDamage +
-          stormDaggerTrueDamage;
+          stormDaggerTrueDamage +
+          omniscientChestTrueDamage +
+          slayingArmorBonusDamage;
     const weaponHitLanded = isDamageAction && damageDealt > 0;
     const titanSwordStunTriggered = Boolean(
       weaponAbility?.id === "titan-bastion-sword" &&
@@ -7574,7 +7610,25 @@ export default function Home() {
       nextGroupMembers = echoAreaResult.members;
       weaponAreaDamageApplied += echoAreaResult.totalDamageApplied;
     }
-    const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied;
+    const starCreationTriggered = chestAbility?.id === "star-creation-chest" && battle.turn % (chestAbility.effects.starCreationIntervalTurns ?? 3) === 0;
+    const starCreationRawDamage = starCreationTriggered
+      ? Math.round(battleAbilities.defense * ((chestAbility?.effects.starCreationDefenseDamagePercent ?? 40) / 100) + battleAbilities.strength * ((chestAbility?.effects.starCreationStrengthDamagePercent ?? 30) / 100))
+      : 0;
+    let starCreationDamageApplied = 0;
+    if (starCreationRawDamage > 0 && nextGroupMembers) {
+      const starfieldResult = applyMonsterGroupMappedAreaDamage(nextGroupMembers, member => {
+        const defense = member.defense ?? monster.defense;
+        const resistance = Math.max(0, member.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0);
+        return Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(defense)) * (1 - resistance / 100)));
+      });
+      nextGroupMembers = starfieldResult.members;
+      starCreationDamageApplied = starfieldResult.totalDamageApplied;
+    } else if (starCreationRawDamage > 0 && !battle.groupMembers) {
+      const resistance = Math.max(0, targetPhysicalResistance);
+      const fieldDamage = Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(targetDefenseAfterDebuff)) * (1 - resistance / 100)));
+      starCreationDamageApplied = Math.min(fieldDamage, Math.max(0, battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied));
+    }
+    const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied + starCreationDamageApplied;
     const hunterFangKillTriggered = Boolean(
       amuletAbility?.id === "hunter-king-fang" &&
         (nextGroupMembers
@@ -7636,6 +7690,12 @@ export default function Home() {
         ? Math.floor((actualDamageDealt * helmetLifestealPercent) / 100)
         : 0;
     const lifestealHealing = helmetLifestealHealing;
+    const slayingArmorHealing = chestAbility?.id === "slaying-armor-chest" && actualDamageDealt > 0
+      ? Math.floor(actualDamageDealt * ((chestAbility.effects.slayingArmorLifestealPercent ?? 10) / 100))
+      : 0;
+    const starCreationHealing = starCreationDamageApplied > 0
+      ? Math.floor(starCreationDamageApplied * ((chestAbility?.effects.starCreationHealingPercent ?? 5) / 100))
+      : 0;
     const reflectedDamage =
       actualDamageDealt > 0
         ? (targetGroupMember?.reflectDamage ?? monster.reflectDamage ?? 0)
@@ -7710,6 +7770,8 @@ export default function Home() {
       : 0;
     const healingBeforeDawnArmorBonus =
       lifestealHealing +
+      slayingArmorHealing +
+      starCreationHealing +
       dawnMarkLifestealHealing +
       activeBuffHealing +
       natureHealing +
@@ -7744,6 +7806,21 @@ export default function Home() {
         : "",
       activeChestEffects.attackDamageBonusPercent > 0
         ? `【${chestAbility?.name}】攻擊 +${activeChestEffects.attackDamageBonusPercent}%`
+        : "",
+      chestAbility?.id === "omniscient-elemental-chest" && selectedSkill
+        ? `【元素共鳴】技能傷害 +${omniscientChestSkillDamageBonusPercent}%${omniscientChestTrueDamage > 0 ? `，追加 ${omniscientChestTrueDamage} 點真實傷害` : ""}`
+        : "",
+      slayingArmorBonusDamage > 0
+        ? `【血肉獻祭】額外造成 ${slayingArmorBonusDamage} 點物理傷害`
+        : "",
+      slayingArmorHealing > 0
+        ? `【血肉獻祭】吸血恢復 ${slayingArmorHealing} 生命`
+        : "",
+      chestAbility?.id === "slaying-armor-chest"
+        ? `【血肉獻祭】本回合消耗 ${Math.floor(battleAbilities.health * ((chestAbility.effects.slayingArmorSelfDamageMaxHealthPercent ?? 8) / 100))} 生命`
+        : "",
+      starCreationTriggered
+        ? `【星辰力場】星輝造成 ${starCreationDamageApplied} 點範圍傷害，恢復 ${starCreationHealing} 生命`
         : "",
       activeChestEffects.defenseBonusPercent > 0
         ? `【${chestAbility?.name}】防禦 +${activeChestEffects.defenseBonusPercent}%`
@@ -7903,13 +7980,17 @@ export default function Home() {
       specialAbilityActionLogs.length > 0
         ? `；${specialAbilityActionLogs.join("；")}`
         : "";
-    const healedPlayerHealth = Math.min(
+    const healedPlayerHealthBeforeSacrifice = Math.min(
       battleAbilities.health,
-      healthAfterPlayerStatus +
-        healingBeforeDawnArmorBonus +
-        dawnArmorHealingReceivedBonus +
-        dawnArmorFullStackHealing
+      healthAfterPlayerStatus + healingBeforeDawnArmorBonus + dawnArmorHealingReceivedBonus + dawnArmorFullStackHealing
     );
+    const slayingSelfDamage = chestAbility?.id === "slaying-armor-chest"
+      ? Math.min(
+          Math.floor(battleAbilities.health * ((chestAbility.effects.slayingArmorSelfDamageMaxHealthPercent ?? 8) / 100)),
+          Math.max(0, healedPlayerHealthBeforeSacrifice - 1)
+        )
+      : 0;
+    const healedPlayerHealth = Math.max(1, healedPlayerHealthBeforeSacrifice - slayingSelfDamage);
     const actionLabel = actionLocked
       ? "停滯"
       : selectedSkill
@@ -8193,6 +8274,14 @@ export default function Home() {
         : Math.random() < effectivePlayerDodgeRate / 100;
     const playerEvadedBeforeLethalCheck =
       playerDodges || galeSetEvasionTriggered;
+    const voidPhaseRefreshAt = Date.now();
+    const voidPhaseRefreshTriggered = Boolean(
+      chestAbility?.id === "void-phase-chest" && playerEvadedBeforeLethalCheck &&
+      voidPhaseRefreshAt - (battle.voidChestLastCooldownRefreshAt ?? 0) >= (chestAbility.effects.voidArmorCooldownRefreshIntervalMs ?? 2000)
+    );
+    if (voidPhaseRefreshTriggered) {
+      for (const skill of activeCombatSkills) nextSkillCooldowns[skill.id] = 0;
+    }
     const monsterCritical =
       !statusTick.frozen &&
       !dawnWardenSwordTriggered &&
@@ -8249,8 +8338,12 @@ export default function Home() {
             1,
             incomingBaseDamage - getDefenseReduction(effectivePlayerDefense)
           );
+    const fortressReductionPercent = chestAbility?.id === "eternal-fortress-chest"
+      ? eternalFortressRockStacksForTurn * (chestAbility.effects.eternalFortressDamageReductionPercentPerStack ?? 3) +
+        (eternalFortressRockStacksForTurn >= (chestAbility.effects.eternalFortressMaxStacks ?? 10) ? (chestAbility.effects.eternalFortressMaxStackDamageReductionPercent ?? 20) : 0)
+      : 0;
     const equipmentResistancePercent = monsterUsesSkill
-      ? activeHelmetEffects.magicResistancePercent +
+      ? activeHelmetEffects.magicResistancePercent + fortressReductionPercent +
         activeChestEffects.magicResistancePercent +
         activeLeggingsEffects.magicResistancePercent +
         (battleActiveLegendarySetBonuses.mountain ? 50 : 0) +
@@ -8258,6 +8351,7 @@ export default function Home() {
           ? (amuletAbility?.effects.leviathanLowHealthResistancePercent ?? 20)
           : 0)
       : activeHelmetEffects.physicalResistancePercent +
+        fortressReductionPercent +
         activeChestEffects.physicalResistancePercent +
         activeLeggingsEffects.physicalResistancePercent +
         (battleActiveLegendarySetBonuses.mountain ? 50 : 0) +
@@ -8338,7 +8432,7 @@ export default function Home() {
             )
           );
     const incomingDamageTaken =
-      titanBastionInvincibleAtStart || statusTick.frozen
+      titanBastionInvincibleAtStart || genesisChestInvulnerableAtStart || statusTick.frozen
         ? 0
         : playerEvadedBeforeLethalCheck
           ? 0
@@ -9130,8 +9224,18 @@ export default function Home() {
       Boolean(battle.lethalProtectionUsed)
     );
     const lethalProtectionTriggered = lethalProtection.triggered;
+    const genesisChestReviveTriggered = Boolean(
+      chestAbility?.id === "genesis-immortal-chest" && !battle.genesisChestReviveUsed &&
+      !lethalProtectionTriggered && !titanSetLethalProtectionTriggered && healedPlayerHealth > 0 && damageTaken > 0 &&
+      healedPlayerHealth - damageTaken <= 0
+    );
+    const genesisChestInvulnerabilityTurnsAfterTurn = genesisChestReviveTriggered
+      ? (chestAbility?.effects.genesisBodyInvulnerabilityTurns ?? 1)
+      : genesisChestInvulnerableAtStart
+        ? Math.max(0, (battle.genesisChestInvulnerabilityTurnsRemaining ?? 0) - 1)
+        : 0;
     const timeReversalTriggered = Boolean(
-      !lethalProtectionTriggered &&
+      !lethalProtectionTriggered && !genesisChestReviveTriggered &&
         rollSpacetimeReversal(
           amuletAbility,
           healedPlayerHealth,
@@ -9140,13 +9244,14 @@ export default function Home() {
         )
     );
     const totalDamageTaken =
-      statusDamageActuallyTaken +
-      (lethalProtectionTriggered || timeReversalTriggered ? 0 : damageTaken);
-    const playerHealth = Math.min(
-      battleAbilities.health,
-      (timeReversalTriggered ? healedPlayerHealth : lethalProtection.health) +
-        shadowmoonDodgeHealing
-    );
+      statusDamageActuallyTaken + slayingSelfDamage +
+      (lethalProtectionTriggered || timeReversalTriggered || genesisChestReviveTriggered ? 0 : damageTaken);
+    const playerHealth = genesisChestReviveTriggered
+      ? Math.floor(battleAbilities.health * ((chestAbility?.effects.genesisBodyHealPercent ?? 20) / 100))
+      : Math.min(
+          battleAbilities.health,
+          (timeReversalTriggered ? healedPlayerHealth : lethalProtection.health) + shadowmoonDodgeHealing
+        );
     const nextAttackLifestealPercent = lethalProtectionTriggered
       ? lethalProtection.nextAttackLifestealPercent
       : actualDamageDealt > 0
@@ -9196,6 +9301,9 @@ export default function Home() {
             `【${chestAbility?.name}】龍鎧反震：敵人造成傷害 -${chestAbility?.effects.azureDragonEnemyDamageReductionPercent ?? 15}%、防禦 -${chestAbility?.effects.azureDragonEnemyDefenseReductionPercent ?? 10}%`,
           ]
         : []),
+      ...(voidPhaseRefreshTriggered ? [`【${chestAbility?.name}】相位轉移刷新所有技能冷卻。`] : []),
+      ...(genesisChestReviveTriggered ? [`【${chestAbility?.name}】不朽神格觸發：恢復 ${playerHealth} 生命、清除負面狀態並獲得 1 回合無敵。`] : []),
+      ...(chestAbility?.id === "eternal-fortress-chest" ? [`【${chestAbility.name}】岩甲 ${Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, eternalFortressRockStacksForTurn + (finalIncomingDamageTaken > 0 ? 1 : 0))}/${chestAbility.effects.eternalFortressMaxStacks ?? 10} 層。`] : []),
       ...(dawnWardenShieldTriggered
         ? [
             `【曙光聖衛】聖光護體觸發，生成 ${Math.floor(incomingDamageTaken * 0.5)} 點護盾，持續 2 回合。`,
@@ -9423,7 +9531,19 @@ export default function Home() {
             : (battle.galeSetLastEvasionTurn ?? 0),
           divineShield: divineShieldResolution.state,
           monsterStatuses: monsterStatusesAfterTurn,
-          playerStatuses: calibratedPlayerStatuses,
+          playerStatuses: genesisChestReviveTriggered ? [] : calibratedPlayerStatuses,
+      genesisChestReviveUsed: Boolean(battle.genesisChestReviveUsed || genesisChestReviveTriggered),
+      genesisChestInvulnerabilityTurnsRemaining: genesisChestInvulnerabilityTurnsAfterTurn,
+      voidChestLastCooldownRefreshAt: voidPhaseRefreshTriggered ? voidPhaseRefreshAt : (battle.voidChestLastCooldownRefreshAt ?? 0),
+      omniscientChestStacks: chestAbility?.id === "omniscient-elemental-chest"
+        ? selectedSkill
+          ? (selectedSkill.effectType !== "buff" && omniscientChestStacksAtStart >= (chestAbility.effects.omniscientChestMaxStacks ?? 3) ? 0 : Math.min(chestAbility.effects.omniscientChestMaxStacks ?? 3, omniscientChestStacksAtStart + 1))
+          : omniscientChestStacksAtStart
+        : 0,
+      eternalFortressRockStacks: chestAbility?.id === "eternal-fortress-chest"
+        ? Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, eternalFortressRockStacksForTurn + (finalIncomingDamageTaken > 0 ? 1 : 0))
+        : 0,
+      starCreationGlowTurnsRemaining: starCreationTriggered ? 1 : Math.max(0, (battle.starCreationGlowTurnsRemaining ?? 0) - 1),
           monsterSkillCooldown: nextMonsterSkillCooldown,
           activeBuff: nextActiveBuff,
           activeBuffs: nextActiveBuffLayers,
@@ -9527,7 +9647,19 @@ export default function Home() {
         shopShield: shopShieldAfterTurn,
         shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
         monsterStatuses: monsterStatusesAfterTurn,
-        playerStatuses: calibratedPlayerStatuses,
+        playerStatuses: genesisChestReviveTriggered ? [] : calibratedPlayerStatuses,
+      genesisChestReviveUsed: Boolean(battle.genesisChestReviveUsed || genesisChestReviveTriggered),
+      genesisChestInvulnerabilityTurnsRemaining: genesisChestInvulnerabilityTurnsAfterTurn,
+      voidChestLastCooldownRefreshAt: voidPhaseRefreshTriggered ? voidPhaseRefreshAt : (battle.voidChestLastCooldownRefreshAt ?? 0),
+      omniscientChestStacks: chestAbility?.id === "omniscient-elemental-chest"
+        ? selectedSkill
+          ? (selectedSkill.effectType !== "buff" && omniscientChestStacksAtStart >= (chestAbility.effects.omniscientChestMaxStacks ?? 3) ? 0 : Math.min(chestAbility.effects.omniscientChestMaxStacks ?? 3, omniscientChestStacksAtStart + 1))
+          : omniscientChestStacksAtStart
+        : 0,
+      eternalFortressRockStacks: chestAbility?.id === "eternal-fortress-chest"
+        ? Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, eternalFortressRockStacksForTurn + (finalIncomingDamageTaken > 0 ? 1 : 0))
+        : 0,
+      starCreationGlowTurnsRemaining: starCreationTriggered ? 1 : Math.max(0, (battle.starCreationGlowTurnsRemaining ?? 0) - 1),
         monsterSkillCooldown: nextMonsterSkillCooldown,
         activeBuff: nextActiveBuff,
         activeBuffs: nextActiveBuffLayers,
@@ -9650,7 +9782,19 @@ export default function Home() {
       galeStacks: nextGaleStacks,
       divineShield: divineShieldResolution.state,
       monsterStatuses: monsterStatusesAfterTurn,
-      playerStatuses: calibratedPlayerStatuses,
+      playerStatuses: genesisChestReviveTriggered ? [] : calibratedPlayerStatuses,
+      genesisChestReviveUsed: Boolean(battle.genesisChestReviveUsed || genesisChestReviveTriggered),
+      genesisChestInvulnerabilityTurnsRemaining: genesisChestInvulnerabilityTurnsAfterTurn,
+      voidChestLastCooldownRefreshAt: voidPhaseRefreshTriggered ? voidPhaseRefreshAt : (battle.voidChestLastCooldownRefreshAt ?? 0),
+      omniscientChestStacks: chestAbility?.id === "omniscient-elemental-chest"
+        ? selectedSkill
+          ? (selectedSkill.effectType !== "buff" && omniscientChestStacksAtStart >= (chestAbility.effects.omniscientChestMaxStacks ?? 3) ? 0 : Math.min(chestAbility.effects.omniscientChestMaxStacks ?? 3, omniscientChestStacksAtStart + 1))
+          : omniscientChestStacksAtStart
+        : 0,
+      eternalFortressRockStacks: chestAbility?.id === "eternal-fortress-chest"
+        ? Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, eternalFortressRockStacksForTurn + (finalIncomingDamageTaken > 0 ? 1 : 0))
+        : 0,
+      starCreationGlowTurnsRemaining: starCreationTriggered ? 1 : Math.max(0, (battle.starCreationGlowTurnsRemaining ?? 0) - 1),
       monsterSkillCooldown: nextMonsterSkillCooldown,
       activeBuff: nextActiveBuff,
       activeBuffs: nextActiveBuffLayers,

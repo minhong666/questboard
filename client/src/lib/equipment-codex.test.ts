@@ -70,6 +70,6 @@ describe("permanent equipment codex discoveries", () => {
         EQUIPMENT_CODEX_TEMPLATES.every(item => item.name !== name)
       )
     ).toBe(true);
-    expect(EQUIPMENT_CODEX_TEMPLATES).toHaveLength(540);
+    expect(EQUIPMENT_CODEX_TEMPLATES).toHaveLength(544);
   });
 });

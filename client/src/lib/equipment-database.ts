@@ -176,6 +176,8 @@ const LEGACY_EQUIPMENT_TEMPLATES: EquipmentDatabaseTemplate[] = [
   { name: '永恆星核', slot: '護身符', rarity: '傳說', description: "「永恆星核」在海岸燈塔的鍛造火光中成形，以遙遠的星辰淬鍊出傳說階的護身符；將持有者的誓言收進微光裡，在最需要時回應那份信念。", bonus: '智力 +52 · 生命 +220', icon: 'star', minLevel: 41, equipmentLevel: 5 },
   { name: '萬象冠冕', slot: '頭盔', rarity: '神話', description: "「萬象冠冕」在王城戰場的鍛造火光中成形，以漫長旅途中的微光淬鍊出神話階的頭盔；守住視線與意志，讓持有者在混亂中仍能看清前路。", bonus: '生命 +360 · 防禦 +60 · 智力 +70', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
   { name: '終界斬艦', slot: '武器', weaponType: '劍', rarity: '神話', description: "「終界斬艦」在失落遺跡的鍛造火光中成形，以漫長旅途中的微光淬鍊出一柄神話階的劍；出鞘的瞬間，古老的誓言隨刃光一同甦醒。", bonus: '力量 +80 · 閃避率 +12.0% · 暴擊率 +5% · 暴擊傷害 +25%', icon: 'sword', minLevel: 51, equipmentLevel: 6 },
+  { name: '創世者·不朽聖軀', slot: '胸甲', rarity: '神話', description: "創世者鑄成的不朽聖軀，承受致命一擊後仍能重燃生命。", bonus: '生命 +400 · 防禦 +65 · 力量 +60', icon: 'shield-check', minLevel: 51, equipmentLevel: 6 },
+  { name: '虛空之主·無形影甲', slot: '胸甲', rarity: '神話', description: "虛空凝成的無形影甲，令穿戴者以相位轉移避開攻勢。", bonus: '生命 +320 · 防禦 +48 · 閃避率 +12.0%', icon: 'sparkles', minLevel: 51, equipmentLevel: 6 },
   { name: '創星神鎧', slot: '胸甲', rarity: '神話', description: "「創星神鎧」在山巔祭壇的鍛造火光中成形，以遙遠的星辰淬鍊出神話階的胸甲；替持有者擋下迎面而來的衝擊，也替身後的人留下喘息之地。", bonus: '生命 +380 · 防禦 +62 · 力量 +60', icon: 'shield', minLevel: 51, equipmentLevel: 6 },
   { name: '逐日神腿', slot: '護腿', rarity: '神話', description: "「逐日神腿」在失落遺跡的鍛造火光中成形，以漫長旅途中的微光淬鍊出神話階的護腿；把每一步都化成穩定的力量，陪持有者走過危險地形。", bonus: '力量 +78 · 閃避率 +14.0%', icon: 'target', minLevel: 51, equipmentLevel: 6 },
   { name: '宇宙心印', slot: '護身符', rarity: '神話', description: "「宇宙心印」在古老工坊的鍛造火光中成形，以遙遠的星辰淬鍊出神話階的護身符；將持有者的誓言收進微光裡，在最需要時回應那份信念。", bonus: '生命 +380 · 智力 +85 · 防禦 +55', icon: 'star', minLevel: 51, equipmentLevel: 6 },

@@ -99,7 +99,13 @@ export type EquipmentSpecialAbilityId =
   | "azure-dragon-chest"
   | "azure-dragon-leggings"
   | "azure-dragon-amulet"
-  | "azure-dragon-bow";
+  | "azure-dragon-bow"
+  | "genesis-immortal-chest"
+  | "void-phase-chest"
+  | "omniscient-elemental-chest"
+  | "eternal-fortress-chest"
+  | "slaying-armor-chest"
+  | "star-creation-chest";
 
 export type EquipmentSpecialAbilityEffects = {
   lawCalibrationIntervalTurns?: number;
@@ -363,6 +369,23 @@ export type EquipmentSpecialAbilityEffects = {
   azureDragonBowAoeDamagePercentStrengthAndIntelligence?: number;
   azureDragonBowCritDamageTakenBonusPercent?: number;
   azureDragonBowDurationTurns?: number;
+  genesisBodyHealPercent?: number;
+  genesisBodyInvulnerabilityTurns?: number;
+  voidArmorDodgeRateBonusPercent?: number;
+  voidArmorCooldownRefreshIntervalMs?: number;
+  omniscientChestSkillDamageBonusPerStackPercent?: number;
+  omniscientChestMaxStacks?: number;
+  omniscientChestNextSkillTrueDamagePercent?: number;
+  eternalFortressDamageReductionPercentPerStack?: number;
+  eternalFortressMaxStacks?: number;
+  eternalFortressMaxStackDamageReductionPercent?: number;
+  slayingArmorSelfDamageMaxHealthPercent?: number;
+  slayingArmorBonusDamageMaxHealthPercent?: number;
+  slayingArmorLifestealPercent?: number;
+  starCreationIntervalTurns?: number;
+  starCreationDefenseDamagePercent?: number;
+  starCreationStrengthDamagePercent?: number;
+  starCreationHealingPercent?: number;
 };
 
 export type EquipmentSpecialAbility = {
@@ -1008,6 +1031,36 @@ const legendaryAbilities: Partial<
       azureDragonChestDurationTurns: 2,
     },
   },
+  "genesis-immortal-chest": {
+    id: "genesis-immortal-chest", name: "不朽神格",
+    description: "每場戰鬥首次受到致命傷害時，恢復最大生命值 20%、清除負面狀態，並獲得 1 回合無敵。",
+    effects: { genesisBodyHealPercent: 20, genesisBodyInvulnerabilityTurns: 1 },
+  },
+  "void-phase-chest": {
+    id: "void-phase-chest", name: "相位轉移",
+    description: "閃避率提高 10%；成功閃避時刷新所有技能冷卻（每 2 秒最多觸發一次）。",
+    effects: { voidArmorDodgeRateBonusPercent: 10, voidArmorCooldownRefreshIntervalMs: 2000 },
+  },
+  "omniscient-elemental-chest": {
+    id: "omniscient-elemental-chest", name: "元素共鳴",
+    description: "施放技能獲得 1 層元素共鳴，每層技能傷害 +8%，最多 3 層；滿層後下一個傷害技能追加相當於該技能傷害 60% 的真實傷害。",
+    effects: { omniscientChestSkillDamageBonusPerStackPercent: 8, omniscientChestMaxStacks: 3, omniscientChestNextSkillTrueDamagePercent: 60 },
+  },
+  "eternal-fortress-chest": {
+    id: "eternal-fortress-chest", name: "不動如山",
+    description: "每回合及受到傷害時獲得 1 層岩甲；每層使物理與魔法減傷 +3%，最多 10 層，滿層時額外減傷 20%。",
+    effects: { eternalFortressDamageReductionPercentPerStack: 3, eternalFortressMaxStacks: 10, eternalFortressMaxStackDamageReductionPercent: 20 },
+  },
+  "slaying-armor-chest": {
+    id: "slaying-armor-chest", name: "血肉獻祭",
+    description: "每回合損失最大生命值 8%；攻擊額外造成最大生命值 5% 的物理傷害，命中後恢復該次攻擊傷害的 10%。",
+    effects: { slayingArmorSelfDamageMaxHealthPercent: 8, slayingArmorBonusDamageMaxHealthPercent: 5, slayingArmorLifestealPercent: 10 },
+  },
+  "star-creation-chest": {
+    id: "star-creation-chest", name: "星辰力場",
+    description: "每 3 回合生成持續 1 回合的星輝，對敵人造成防禦力 40% + 力量 30% 傷害，並恢復造成傷害總量的 5%。",
+    effects: { starCreationIntervalTurns: 3, starCreationDefenseDamagePercent: 40, starCreationStrengthDamagePercent: 30, starCreationHealingPercent: 5 },
+  },
   "azure-dragon-leggings": {
     id: "azure-dragon-leggings",
     name: "影月龍行",
@@ -1062,6 +1115,12 @@ const abilityIdsByEquipmentName: Record<string, EquipmentSpecialAbilityId> = {
   "風暴劍魂·傳說胸甲": "storm-sword-soul-chest",
   神諭聖甲: "oracle-blessing",
   "蒼龍天命·傳說胸甲": "azure-dragon-chest",
+  "創世者·不朽聖軀": "genesis-immortal-chest",
+  "虛空之主·無形影甲": "void-phase-chest",
+  "全知者·元素起源法袍": "omniscient-elemental-chest",
+  "滅世巨神·永恆堡壘 (極品)": "eternal-fortress-chest",
+  "末日狂刃·屠戮胸甲 (極品)": "slaying-armor-chest",
+  "創星神鎧": "star-creation-chest",
   阿修羅戰神護腿: "asura-leggings",
   "曙光聖衛·傳說護腿": "dawn-guardian-step",
   夜魔主宰護腿: "night-leggings",
@@ -1106,6 +1165,8 @@ export function getEquipmentSpecialAbility(
   const mythicNames = new Set([
     "創世者·秩序之冠", "虛空之主·終焉面具", "全知者·真理之冠",
     "滅世巨神·荒古重盔 (極品)", "末日狂刃·血神之面 (極品)", "萬象冠冕",
+    "創世者·不朽聖軀", "虛空之主·無形影甲", "全知者·元素起源法袍",
+    "滅世巨神·永恆堡壘 (極品)", "末日狂刃·屠戮胸甲 (極品)", "創星神鎧",
   ]);
   const id = rarity === "神話" ? mappedId : abilityId ?? mappedId;
   if (!id || (rarity !== "傳說" && (rarity !== "神話" || !mythicNames.has(equipmentName)))) return undefined;
@@ -1177,6 +1238,7 @@ export function getActiveEquipmentSpecialEffects(
     dodgeRateBonusPercent:
       (belowHalfHealth ? (effects?.nightDodgeBelowHalfHealthPercent ?? 0) : 0) +
       (effects?.shadowmoonDodgeRateBonusAtBattleStartPercent ?? 0) +
+      (effects?.voidArmorDodgeRateBonusPercent ?? 0) +
       (effects?.dawnStepDodgeRateBonusPercent ?? 0) +
       activeWindStacks * (effects?.galeDodgePercentPerStack ?? 0),
     physicalDamageBonusPercent:

@@ -1120,4 +1120,21 @@ describe("Titan Bastion legendary passives", () => {
       ).toBe(abilityId);
     }
   });
+
+  it("assigns the requested unique passives to all six mythic chest armors", () => {
+    const cases = [
+      ["創世者·不朽聖軀", "genesis-immortal-chest", { genesisBodyHealPercent: 20, genesisBodyInvulnerabilityTurns: 1 }],
+      ["虛空之主·無形影甲", "void-phase-chest", { voidArmorDodgeRateBonusPercent: 10, voidArmorCooldownRefreshIntervalMs: 2000 }],
+      ["全知者·元素起源法袍", "omniscient-elemental-chest", { omniscientChestSkillDamageBonusPerStackPercent: 8, omniscientChestMaxStacks: 3, omniscientChestNextSkillTrueDamagePercent: 60 }],
+      ["滅世巨神·永恆堡壘 (極品)", "eternal-fortress-chest", { eternalFortressDamageReductionPercentPerStack: 3, eternalFortressMaxStacks: 10, eternalFortressMaxStackDamageReductionPercent: 20 }],
+      ["末日狂刃·屠戮胸甲 (極品)", "slaying-armor-chest", { slayingArmorSelfDamageMaxHealthPercent: 8, slayingArmorBonusDamageMaxHealthPercent: 5, slayingArmorLifestealPercent: 10 }],
+      ["創星神鎧", "star-creation-chest", { starCreationIntervalTurns: 3, starCreationDefenseDamagePercent: 40, starCreationStrengthDamagePercent: 30, starCreationHealingPercent: 5 }],
+    ] as const;
+    for (const [name, abilityId, effects] of cases) {
+      expect(getEquipmentSpecialAbilityIdByName(name)).toBe(abilityId);
+      expect(getEquipmentSpecialAbility(name, "神話")?.effects).toMatchObject(effects);
+      expect(RPG_EQUIPMENT_TEMPLATES.some(item => item.name === name && item.slot === "胸甲")).toBe(true);
+    }
+    expect(getActiveEquipmentSpecialEffects(getEquipmentSpecialAbility("虛空之主·無形影甲", "神話"), 100, 100).dodgeRateBonusPercent).toBe(10);
+  });
 });

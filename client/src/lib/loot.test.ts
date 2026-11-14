@@ -130,7 +130,7 @@ describe("QuestBoard loot", () => {
     for (const rarity of LOOT_RARITIES) {
       expect(
         module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)
-      ).toHaveLength(90);
+      ).toHaveLength(rarity === "神話" ? 94 : 90);
       for (const weaponType of weaponTypes) {
         const weapons = module.RPG_EQUIPMENT_TEMPLATES.filter(
           item =>
@@ -171,10 +171,10 @@ describe("QuestBoard loot", () => {
 
   it("keeps the original database equipment and adds six named set copies", async () => {
     const module = await import("./equipment-database");
-    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 270);
-    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(270);
+    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 272);
+    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(272);
     expect(originals.every(item => item.setId === undefined)).toBe(true);
-    expect(setCopies).toHaveLength(270);
+    expect(setCopies).toHaveLength(272);
     expect(
       setCopies.every(item => Boolean(item.setId) && item.name.includes("·"))
     ).toBe(true);
