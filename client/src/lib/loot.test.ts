@@ -130,7 +130,7 @@ describe("QuestBoard loot", () => {
     for (const rarity of LOOT_RARITIES) {
       expect(
         module.RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === rarity)
-      ).toHaveLength(rarity === "神話" ? 94 : 90);
+      ).toHaveLength(90);
       for (const weaponType of weaponTypes) {
         const weapons = module.RPG_EQUIPMENT_TEMPLATES.filter(
           item =>
@@ -171,10 +171,10 @@ describe("QuestBoard loot", () => {
 
   it("keeps the original database equipment and adds six named set copies", async () => {
     const module = await import("./equipment-database");
-    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 272);
-    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(272);
+    const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 270);
+    const setCopies = module.RPG_EQUIPMENT_TEMPLATES.slice(270);
     expect(originals.every(item => item.setId === undefined)).toBe(true);
-    expect(setCopies).toHaveLength(272);
+    expect(setCopies).toHaveLength(270);
     expect(
       setCopies.every(item => Boolean(item.setId) && item.name.includes("·"))
     ).toBe(true);
@@ -182,6 +182,17 @@ describe("QuestBoard loot", () => {
     expect(
       setCopies.every((item, index) => item.bonus === originals[index].bonus)
     ).toBe(true);
+  });
+
+  it("does not duplicate equipment names within the same rarity and slot", async () => {
+    const module = await import("./equipment-database");
+    const keys = module.RPG_EQUIPMENT_TEMPLATES.map(item => `${item.rarity}::${item.slot}::${item.name}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    const duplicatedMythicChests = module.RPG_EQUIPMENT_TEMPLATES.filter(
+      item => item.rarity === "神話" && item.slot === "胸甲" &&
+        ["創世者·不朽聖軀", "虛空之主·無形影甲"].includes(item.name)
+    );
+    expect(duplicatedMythicChests).toHaveLength(2);
   });
 
   it("uses a 70% ordinary drop chance with 40% equipment and 30% treasure", () => {
