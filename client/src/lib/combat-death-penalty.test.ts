@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   applyCombatDeathPenalty,
@@ -32,6 +33,42 @@ describe("combat death penalty", () => {
       coins: 50,
     });
     expect(previousState.coins).toBe(101);
+  });
+
+  it("keeps every player-defeat state update gold-only", () => {
+    const homeSource = readFileSync(
+      new URL("../pages/Home.tsx", import.meta.url),
+      "utf8"
+    );
+    const goldOnlyCheck = homeSource.indexOf(
+      "if (isGoldOnlyCombatDeath(monster.id)) {"
+    );
+    const deathStart = homeSource.lastIndexOf(
+      "if (playerHealth <= 0) {",
+      goldOnlyCheck
+    );
+    const deathEnd = homeSource.indexOf("\n    showBattleFx({", goldOnlyCheck);
+    expect(goldOnlyCheck).toBeGreaterThanOrEqual(0);
+    expect(deathStart).toBeGreaterThanOrEqual(0);
+    expect(deathEnd).toBeGreaterThan(goldOnlyCheck);
+
+    const deathBranch = homeSource.slice(deathStart, deathEnd);
+    const stateUpdates = Array.from(
+      deathBranch.matchAll(
+        /setState\(previous\s*=>\s*\(\{([\s\S]*?)\n\s*\}\)\);/g
+      ),
+      match => match[1] ?? ""
+    );
+    expect(stateUpdates.length).toBeGreaterThan(0);
+    for (const update of stateUpdates) {
+      expect(update).toMatch(
+        /applyCombatDeathPenalty\(previous\)|coins:\s*getCoinsAfterCombatDeath\(previous\.coins\)/
+      );
+      expect(update).not.toMatch(
+        /\b(?:abilities|totalXp|abilityLevel|abilityPoints|skillUpgradePoints)\s*:/
+      );
+    }
+    expect(deathBranch).not.toMatch(/\b(?:reducedAbilities|reducedLevel)\b/);
   });
 
   it("preserves the existing half-gold loss without allowing negative coins", () => {
