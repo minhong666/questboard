@@ -801,7 +801,6 @@ describe("Equipment fusion", () => {
       inventory,
       ["fine-legs"],
       "精良",
-      21,
       () => 0,
       () => 123
     );
@@ -813,7 +812,7 @@ describe("Equipment fusion", () => {
     ]);
     expect(fusion?.result.rarity).toBe("稀有");
     expect(fusion?.result.kind).toBe("equipment");
-    expect(["頭盔", "武器", "胸甲"]).toContain(fusion?.result.slot);
+    expect(EQUIPMENT_SLOTS).toContain(fusion?.result.slot);
     expect(fusion?.result.affixes).toHaveLength(1);
   });
 
@@ -830,7 +829,6 @@ describe("Equipment fusion", () => {
       ],
       [],
       "普通",
-      1,
       randomSequence(0, 0, 0),
       () => 124
     );
@@ -852,13 +850,70 @@ describe("Equipment fusion", () => {
       ],
       [],
       "普通",
-      1,
       randomSequence(0.99, 0, 0),
       () => 125
     );
 
     expect(fusion?.result.rarity).toBe("精良");
     expect(fusion?.result.slot).toBe("護身符");
+  });
+
+  it("selects each of the five output slots uniformly, independent of material slots", () => {
+    const fineWeapon = (id: string): EquipmentItem => ({
+      ...equipment(id, "武器"),
+      rarity: "精良",
+    });
+    const inventory = [
+      fineWeapon("fine-weapon-a"),
+      fineWeapon("fine-weapon-b"),
+      fineWeapon("fine-weapon-c"),
+    ];
+
+    const outputSlots = EQUIPMENT_SLOTS.map((expectedSlot, index) => {
+      const slotRoll = (index + 0.5) / EQUIPMENT_SLOTS.length;
+      const fusion = prepareEquipmentFusion(
+        inventory,
+        [],
+        "精良",
+        () => slotRoll,
+        () => 333
+      );
+
+      expect(fusion?.result.slot).toBe(expectedSlot);
+      expect(fusion?.result.rarity).toBe("稀有");
+      return fusion?.result.slot;
+    });
+
+    expect(outputSlots).toEqual([...EQUIPMENT_SLOTS]);
+  });
+
+  it("selects next-rarity templates without a character-level restriction", () => {
+    const fineMaterial = (id: string): EquipmentItem => ({
+      ...equipment(id, "武器"),
+      rarity: "精良",
+    });
+    const inventory = [
+      fineMaterial("fine-material-a"),
+      fineMaterial("fine-material-b"),
+      fineMaterial("fine-material-c"),
+    ];
+    const rareHelmets = RPG_EQUIPMENT_TEMPLATES.filter(
+      template => template.slot === "頭盔" && template.rarity === "稀有"
+    );
+    const highLevelIndex = rareHelmets.findIndex(template => template.minLevel > 1);
+    expect(highLevelIndex).toBeGreaterThanOrEqual(0);
+
+    const fusion = prepareEquipmentFusion(
+      inventory,
+      [],
+      "精良",
+      randomSequence(0, (highLevelIndex + 0.5) / rareHelmets.length),
+      () => 654
+    );
+
+    expect(fusion?.result.name).toBe(rareHelmets[highLevelIndex]?.name);
+    expect(fusion?.result.slot).toBe("頭盔");
+    expect(fusion?.result.rarity).toBe("稀有");
   });
 
   it("selects the result from the next-rarity templates", () => {
@@ -879,7 +934,6 @@ describe("Equipment fusion", () => {
       inventory,
       [],
       "精良",
-      21,
       randomSequence(0, 0),
       () => 321
     );
@@ -910,7 +964,6 @@ describe("Equipment fusion", () => {
       inventory,
       [],
       "精良",
-      21,
       () => 0,
       () => 456,
       selectedIds
@@ -937,7 +990,6 @@ describe("Equipment fusion", () => {
         inventory,
         equipped,
         "精良",
-        1,
         () => 0,
         () => 789,
         selectedIds
@@ -961,7 +1013,6 @@ describe("Equipment fusion", () => {
         commonItems,
         [],
         "普通",
-        1,
         () => 0,
         () => 1
       )
@@ -977,7 +1028,6 @@ describe("Equipment fusion", () => {
         ],
         [],
         "神話",
-        50,
         () => 0,
         () => 1
       )

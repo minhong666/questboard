@@ -1234,7 +1234,6 @@ export function prepareEquipmentFusion(
   inventory: LootItem[],
   equippedItemIds: unknown,
   rarity: LootRarity,
-  playerLevel: number,
   random: () => number = Math.random,
   now: () => number = Date.now,
   selectedItemIds?: string[]

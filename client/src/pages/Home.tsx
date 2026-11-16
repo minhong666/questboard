@@ -5264,7 +5264,6 @@ export default function Home() {
       inventory,
       equippedItemIds,
       rarity,
-      player.level,
       Math.random,
       Date.now,
       selectedIds
@@ -14269,7 +14268,7 @@ export default function Home() {
                     )}
                     {selectedFusionItems.length === 3 && (
                       <small>
-                        五個部位中隨機選擇 · 詞綴重新生成
+                        輸出部位：頭盔、胸甲、武器、護腿、護身符等機率隨機 · 詞綴重新生成
                       </small>
                     )}
                   </div>
