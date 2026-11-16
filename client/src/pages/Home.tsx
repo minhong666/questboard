@@ -144,6 +144,7 @@ import {
   getNextDailyMonsterRefreshAt,
 } from "../lib/monster-refresh";
 import {
+  applyCombatDeathPenalty,
   getCoinsAfterCombatDeath,
   isGoldOnlyCombatDeath,
 } from "../lib/combat-death-penalty";
@@ -9551,9 +9552,7 @@ export default function Home() {
           turn: battle.turn + 1,
           logs: [
             ...nextLogs,
-            isSoulTrialBattle
-              ? `你被${monster.name}擊倒了！靈魂試煉失敗，只損失一半金幣。`
-              : `你被${monster.name}擊倒了！區域魔王戰敗，只損失一半金幣；經驗、等級、能力值與能力點數不受影響。`,
+            `你被${monster.name}擊倒了！只損失一半金幣；能力、等級、經驗與點數不受影響。`,
           ],
           damageDealt:
             battle.damageDealt +
@@ -9585,19 +9584,11 @@ export default function Home() {
         }));
         showToast(
           isSoulTrialBattle
-            ? "靈魂試煉失敗：僅損失一半金幣，經驗、等級與能力點不受影響；靈魂試煉冷卻 30 分鐘"
-            : `區域魔王戰敗：只損失一半金幣，經驗、等級、能力與能力點不受影響；30 分鐘內無法再次挑戰魔物`
+            ? "靈魂試煉失敗：只損失一半金幣；能力、等級、經驗與點數不受影響；靈魂試煉冷卻 30 分鐘"
+            : `你被${monster.name}擊倒了！只損失一半金幣；能力、等級、經驗與點數不受影響；30 分鐘內無法再次挑戰魔物`
         );
         return;
       }
-      const currentLevel = getPlayerStats(state.totalXp).level;
-      const reducedLevel = Math.floor(currentLevel / 2);
-      const reducedAbilities: CharacterAbilities = {
-        health: Math.max(100, Math.floor(state.abilities.health / 2)),
-        strength: Math.max(3, Math.floor(state.abilities.strength / 2)),
-        defense: Math.max(3, Math.floor(state.abilities.defense / 2)),
-        intelligence: Math.max(5, Math.floor(state.abilities.intelligence / 2)),
-      };
       setBattle({
         ...battle,
         playerHealth: 0,
@@ -9665,7 +9656,10 @@ export default function Home() {
         activeBuffs: nextActiveBuffLayers,
         actionLockTurns: Math.max(0, (battle.actionLockTurns ?? 0) - 1),
         turn: battle.turn + 1,
-        logs: [...nextLogs, `你被${monster.name}擊倒了！`],
+        logs: [
+          ...nextLogs,
+          `你被${monster.name}擊倒了！只損失一半金幣；能力、等級、經驗與點數不受影響。`,
+        ],
         damageDealt:
           battle.damageDealt +
           appliedDamage +
@@ -9677,21 +9671,15 @@ export default function Home() {
         outcome: "defeat",
       });
       setState(previous => ({
-        ...previous,
+        ...applyCombatDeathPenalty(previous),
         archerDodgeFailStacks: nextArcherDodgeFailStacks,
-        abilities: reducedAbilities,
-        currentHealth: reducedAbilities.health,
+        currentHealth: battleAbilities.health,
         nextHealthRecoveryAt: 0,
-        totalXp: getXpForLevel(reducedLevel),
-        abilityLevel: reducedLevel,
-        abilityPoints: Math.floor(previous.abilityPoints / 2),
-        skillUpgradePoints: Math.floor(previous.skillUpgradePoints / 2),
-        coins: Math.floor(previous.coins / 2),
         combatCooldownUntil:
           Date.now() + GAME_RULES.combat.cooldownMinutes * 60 * 1000,
       }));
       showToast(
-        `你被${monster.name}擊倒了！能力與金幣已減半，30 分鐘內無法再次挑戰魔物`
+        `你被${monster.name}擊倒了！只損失一半金幣；能力、等級、經驗與點數不受影響；30 分鐘內無法再次挑戰魔物`
       );
       return;
     }

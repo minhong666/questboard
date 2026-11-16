@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCombatDeathPenalty,
   getCoinsAfterCombatDeath,
   isGoldOnlyCombatDeath,
 } from "./combat-death-penalty";
 
 describe("combat death penalty", () => {
-  it("uses gold-only penalties for regional bosses and soul trials", () => {
+  it("uses gold-only penalties for every monster type", () => {
+    expect(isGoldOnlyCombatDeath("daily-small-2026-11-09-1")).toBe(true);
     expect(isGoldOnlyCombatDeath("boss-shadow-king-boss-2026-11-09")).toBe(
       true
     );
@@ -14,8 +16,22 @@ describe("combat death penalty", () => {
     );
   });
 
-  it("keeps the existing progression penalty for ordinary monsters", () => {
-    expect(isGoldOnlyCombatDeath("daily-small-2026-11-09-1")).toBe(false);
+  it("changes only coins and preserves abilities and character progression", () => {
+    const previousState = {
+      coins: 101,
+      abilities: { health: 500, strength: 20, defense: 18, intelligence: 16 },
+      currentHealth: 190,
+      totalXp: 3_250,
+      abilityLevel: 13,
+      abilityPoints: 7,
+      skillUpgradePoints: 4,
+    };
+
+    expect(applyCombatDeathPenalty(previousState)).toEqual({
+      ...previousState,
+      coins: 50,
+    });
+    expect(previousState.coins).toBe(101);
   });
 
   it("preserves the existing half-gold loss without allowing negative coins", () => {
