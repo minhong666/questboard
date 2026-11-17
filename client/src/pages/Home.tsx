@@ -85,6 +85,11 @@ import {
   type TreasureItem,
 } from "../lib/loot";
 import { clampCurrentHealth } from "../lib/health";
+import {
+  capCombinedDamageModifierPercent,
+  getCappedDamageBonusMultiplier,
+  getCappedDamageReductionMultiplier,
+} from "../lib/combat-damage-modifiers";
 import { TASK_DIFFICULTY_REWARDS } from "../lib/task-rewards";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
@@ -428,13 +433,11 @@ function combineBattleBuffs(
   return {
     skillId: buffLayers.map(buff => buff.skillId).join(","),
     turnsRemaining: Math.max(...buffLayers.map(buff => buff.turnsRemaining)),
-    damageBonusPercent: buffLayers.reduce(
-      (total, buff) => total + buff.damageBonusPercent,
-      0
+    damageBonusPercent: capCombinedDamageModifierPercent(
+      buffLayers.map(buff => buff.damageBonusPercent)
     ),
-    damageReductionPercent: buffLayers.reduce(
-      (total, buff) => total + buff.damageReductionPercent,
-      0
+    damageReductionPercent: capCombinedDamageModifierPercent(
+      buffLayers.map(buff => buff.damageReductionPercent)
     ),
     healPercentMaxHealth: buffLayers.reduce(
       (total, buff) => total + buff.healPercentMaxHealth,
@@ -4165,9 +4168,14 @@ export default function Home() {
     const basePlayerDamage = battleIsArcher
       ? applyArcherAttackBonus(rawPlayerDamage, battleArcherDodgeFailStacks)
       : rawPlayerDamage;
+    const previewBuff = combineBattleBuffs(
+      battle ? getBattleBuffLayers(battle) : []
+    );
     const buffedPlayerDamage = Math.round(
       basePlayerDamage *
-        (1 + (battle?.activeBuff?.damageBonusPercent ?? 0) / 100)
+        getCappedDamageBonusMultiplier([
+          previewBuff?.damageBonusPercent ?? 0,
+        ])
     );
     const normalDamage = calculateSpecialSkillDamage(
       buffedPlayerDamage,
@@ -6302,11 +6310,13 @@ export default function Home() {
             ((weaponAbility.effects.titanBowDamageBonusDefensePercent ?? 100) /
               100)
           : 0)) *
-        (1 + equipmentAttackBonusPercent / 100) *
-        (1 + physicalDamageBonusPercent / 100) *
-        (1 + frozenTargetDamageBonusPercent / 100) *
-        (1 + shopElixirDamageBonusPercent / 100) *
-        (1 + (activeBuff?.damageBonusPercent ?? 0) / 100) *
+        getCappedDamageBonusMultiplier([
+          equipmentAttackBonusPercent,
+          physicalDamageBonusPercent,
+          frozenTargetDamageBonusPercent,
+          shopElixirDamageBonusPercent,
+          activeBuff?.damageBonusPercent ?? 0,
+        ]) *
         (1 - physicalDamageReductionPercent / 100)
     );
     const instantExecute = Boolean(
@@ -6610,7 +6620,9 @@ export default function Home() {
                 ((weaponAbility.effects.titanSwordTrueDamageDefensePercent ??
                   80) /
                   100) *
-                (1 + (battleEquipmentBonuses.combat.damageBonusPercent ?? 0) / 100)
+                getCappedDamageBonusMultiplier([
+                  battleEquipmentBonuses.combat.damageBonusPercent ?? 0,
+                ])
             )
           )
         : 0;
@@ -8402,6 +8414,36 @@ export default function Home() {
       ? weaponPassiveState.ironGuardStacks *
         (weaponAbility?.effects.ironGuardDamageReductionPercentPerStack ?? 10)
       : 0;
+    const incomingDamageReductionPercent = capCombinedDamageModifierPercent([
+      battleCombatStats.damageReductionPercent ?? 0,
+      activeBuff?.damageReductionPercent ?? 0,
+      (battle.shopElixirIds ?? []).includes("guard-elixir") ? 10 : 0,
+      equipmentResistancePercent,
+      battleTitanBastionTwoPieceActive ? 25 : 0,
+      dawnArmorStacksAtStart *
+        (chestAbility?.effects.dawnArmorDamageReductionPercentPerStack ?? 0),
+      activeHelmetEffects.enemyDamageReductionPercent,
+      activeChestEffects.enemyDamageReductionPercent,
+      targetOutgoingDamageReductionPercent,
+      titanAweTurnsRemaining > 0
+        ? (helmetAbility?.effects.titanAweEnemyAttackReductionPercent ?? 15)
+        : 0,
+      myriadShieldAtStart > 0
+        ? (helmetAbility?.effects.myriadShieldDamageReductionPercent ?? 15)
+        : 0,
+      stormChestSingleTargetDamageReductionPercent,
+      ironGuardDamageReductionPercent,
+      battleActiveLegendarySetBonuses.mountain ? 35 : 0,
+    ]);
+    const baseDamageReductionMultiplier =
+      1 - incomingDamageReductionPercent / 100;
+    const criticalDamageReductionMultiplier =
+      getCappedDamageReductionMultiplier([
+        incomingDamageReductionPercent,
+        helmetAbility?.id === "titan-awe"
+          ? (helmetAbility.effects.titanAweCritDamageReductionPercent ?? 80)
+          : 0,
+      ]);
     const buffReducedDamage =
       reducedDamage <= 0
         ? 0
@@ -8409,31 +8451,7 @@ export default function Home() {
             1,
             Math.ceil(
               reducedDamage *
-                (1 -
-                  Math.min(
-                    80,
-                    (battleCombatStats.damageReductionPercent ?? 0) +
-                      (activeBuff?.damageReductionPercent ?? 0) +
-                      ((battle.shopElixirIds ?? []).includes("guard-elixir") ? 10 : 0) +
-                      equipmentResistancePercent +
-                      (battleTitanBastionTwoPieceActive ? 25 : 0) +
-                      dawnArmorStacksAtStart *
-                        (chestAbility?.effects
-                          .dawnArmorDamageReductionPercentPerStack ?? 0) +
-                      activeHelmetEffects.enemyDamageReductionPercent +
-                      activeChestEffects.enemyDamageReductionPercent +
-                      targetOutgoingDamageReductionPercent +
-                      (titanAweTurnsRemaining > 0
-                        ? (helmetAbility?.effects.titanAweEnemyAttackReductionPercent ?? 15)
-                        : 0) +
-                      (myriadShieldAtStart > 0
-                        ? (helmetAbility?.effects.myriadShieldDamageReductionPercent ?? 15)
-                        : 0) +
-                      stormChestSingleTargetDamageReductionPercent +
-                      ironGuardDamageReductionPercent +
-                      (battleActiveLegendarySetBonuses.mountain ? 35 : 0)
-                  ) /
-                    100) *
+                baseDamageReductionMultiplier *
                 (battleActiveLegendarySetBonuses.asura ? 1.2 : 1) *
                 ((battle.shadowmoonAfterimageTurns ?? 0) > 0 ? 0.7 : 1) *
                 (shadowmoonStealthActive
@@ -8454,11 +8472,8 @@ export default function Home() {
                 ((buffReducedDamage *
                   (targetGroupMember?.critDamage ?? monster.critDamage)) /
                   100) *
-                  (1 -
-                    (helmetAbility?.id === "titan-awe"
-                      ? (helmetAbility.effects.titanAweCritDamageReductionPercent ?? 80)
-                      : 0) /
-                      100)
+                  (criticalDamageReductionMultiplier /
+                    baseDamageReductionMultiplier)
               )
             : buffReducedDamage;
     const deepSeaStarCoreTriggered = Boolean(
