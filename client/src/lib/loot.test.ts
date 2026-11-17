@@ -290,6 +290,29 @@ describe("QuestBoard loot", () => {
     expect(drops.slice(1).every(item => item.kind === "equipment")).toBe(true);
   });
 
+  it("guarantees at least one equipment drop with a 60/30/10 count distribution", () => {
+    for (const [equipmentRoll, expectedCount] of [
+      [0, 1],
+      [0.599999, 1],
+      [0.6, 2],
+      [0.899999, 2],
+      [0.9, 3],
+      [0.999999, 3],
+    ] as const) {
+      let randomCall = 0;
+      const drops = rollBossLoot(
+        { level: 50, isBoss: true },
+        () => (randomCall++ === 3 ? equipmentRoll : 0),
+        () => 902
+      );
+
+      expect(drops.filter(item => item.kind === "equipment")).toHaveLength(
+        expectedCount
+      );
+      expect(drops.filter(item => item.kind === "treasure")).toHaveLength(1);
+    }
+  });
+
   it("selects a template that already has the rolled quality", () => {
     const item = rollLoot(
       { level: 1 },
