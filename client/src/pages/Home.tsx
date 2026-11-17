@@ -2845,7 +2845,7 @@ function LootProbabilityGuide({
         {renderRarityTable("treasure")}
       </div>
       <div className="loot-probability-footnote">
-        普通小怪每次挑戰有 70% 機率掉落物品，其中裝備 40%、寶藏 30%；區域魔王固定掉落 1 件寶藏，並額外掉落 1–3 件裝備。寶藏依怪物等級抽取品質。
+        普通小怪每次挑戰有 70% 機率掉落物品，其中裝備 40%、寶藏 30%；區域魔王必定掉落 1 件寶藏及至少 1 件裝備，裝備數量為 1 件機率 60%、2 件機率 30%、3 件機率 10%。寶藏依怪物等級抽取品質。
       </div>
     </section>
   );
