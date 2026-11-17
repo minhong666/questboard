@@ -4,7 +4,7 @@
  */
 export const GAME_RULES = {
   progression: {
-    xpPerLevel: 250,
+    xpPerLevel: 300,
   },
   intelligence: {
     xpBonusPerPointPercent: 0.5,
