@@ -157,6 +157,10 @@ import { getPlayerLevelStats, getXpForLevel } from "../lib/leveling";
 import { getIntelligenceExperienceBonusPercent } from "../lib/intelligence-special";
 import { GAME_RULES } from "../lib/game-rules";
 import { createSaveArchive, parseSaveArchive } from "../lib/save-format";
+import {
+  createLatestSaveQueue,
+  type LatestSaveQueue,
+} from "../lib/latest-save-queue";
 import { FloatingTimer } from "../components/FloatingTimer";
 import {
   calculateSpecialSkillDamage,
@@ -2863,7 +2867,12 @@ export default function Home() {
     refetchOnWindowFocus: false,
   });
   const cloudSaveMutation = trpc.gameSave.save.useMutation();
-  const saveCloud = cloudSaveMutation.mutate;
+  type QueuedCloudSave = {
+    archive: ReturnType<typeof createSaveArchive>;
+    generation: number;
+  };
+  const cloudSaveGenerationRef = useRef(0);
+  const cloudSaveQueueRef = useRef<LatestSaveQueue<QueuedCloudSave> | null>(null);
   const [state, setState] = useState<AppState>(() =>
     normalizeProfileLoot(loadState())
   );
@@ -4322,25 +4331,40 @@ export default function Home() {
   ]);
 
   useEffect(() => {
-    if (!persistenceReady || !accountUser || !cloudHydratedRef.current) return;
-    const timeout = window.setTimeout(() => {
-      const archive = createCurrentSaveArchive();
-      saveCloud(
-        {
+    const queue = createLatestSaveQueue<QueuedCloudSave>(
+      async ({ archive }) => {
+        await cloudSaveMutation.mutateAsync({
           schemaVersion: archive.schemaVersion,
           payload: JSON.stringify(archive),
-        },
-        {
-          onSuccess: () => {
-            window.localStorage.setItem(
-              LOCAL_SAVE_UPDATED_AT_KEY,
-              String(archive.savedAt)
-            );
-            setCloudSyncStatus("synced");
-          },
-          onError: () => setCloudSyncStatus("error"),
+        });
+      },
+      ({ archive, generation }) => {
+        if (generation !== cloudSaveGenerationRef.current) return;
+        window.localStorage.setItem(
+          LOCAL_SAVE_UPDATED_AT_KEY,
+          String(archive.savedAt)
+        );
+        setCloudSyncStatus("synced");
+      },
+      (_error, { generation }) => {
+        if (generation === cloudSaveGenerationRef.current) {
+          setCloudSyncStatus("error");
         }
-      );
+      }
+    );
+    cloudSaveQueueRef.current = queue;
+    return () => {
+      queue.dispose();
+      if (cloudSaveQueueRef.current === queue) cloudSaveQueueRef.current = null;
+    };
+  }, [accountUser?.id, cloudSaveMutation.mutateAsync]);
+
+  useEffect(() => {
+    if (!persistenceReady || !accountUser || !cloudHydratedRef.current) return;
+    const generation = ++cloudSaveGenerationRef.current;
+    const timeout = window.setTimeout(() => {
+      const archive = createCurrentSaveArchive();
+      cloudSaveQueueRef.current?.enqueue({ archive, generation });
     }, 800);
     return () => window.clearTimeout(timeout);
   }, [
@@ -4354,7 +4378,6 @@ export default function Home() {
     profiles,
     sharedAchievementClaimedIds,
     state,
-    saveCloud,
   ]);
 
   useEffect(() => {
@@ -11377,11 +11400,12 @@ export default function Home() {
               {activePage === "timers" && <span className="active-dot" />}
             </button>
             <button
-              className="sidebar-link"
+              className={`sidebar-link ${activePage === "achievements" ? "active" : ""}`}
               onClick={() => navigateTo("achievements")}
             >
               <Trophy size={18} />
               <span>成就里程碑</span>
+              {activePage === "achievements" && <span className="active-dot" />}
             </button>
           </nav>
           <div className="sidebar-section-label sidebar-label-spaced">系統</div>
