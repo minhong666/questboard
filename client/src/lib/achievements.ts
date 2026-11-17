@@ -89,6 +89,15 @@ export const getAchievementTitle = (achievement: AchievementDefinition) =>
 export const isTitleAchievement = (achievement: AchievementDefinition) =>
   TITLE_ACHIEVEMENT_IDS.has(achievement.id);
 
+export function getAchievementClaimRewards(
+  achievement: Pick<AchievementDefinition, "rewardCoins" | "rewardSkillPoints">
+) {
+  return {
+    coins: Math.max(0, Math.floor(achievement.rewardCoins)),
+    skillUpgradePoints: Math.max(0, Math.floor(achievement.rewardSkillPoints ?? 0)),
+  };
+}
+
 export function getAchievementStatBonus(claimedIds: string[]) {
   const claimed = new Set(claimedIds);
   const permanentBonus = ACHIEVEMENTS.filter(

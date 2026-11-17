@@ -925,7 +925,8 @@ export function rollBossLoot(
 ): LootItem[] {
   if (!monster.isBoss) return [];
   const drops: LootItem[] = [rollLootItem(monster, "treasure", random, now)];
-  const equipmentCount = 1 + Math.floor(random() * 3);
+  const equipmentRoll = random();
+  const equipmentCount = equipmentRoll < 0.6 ? 1 : equipmentRoll < 0.9 ? 2 : 3;
   for (let index = 0; index < equipmentCount; index += 1) {
     drops.push(rollLootItem(monster, "equipment", random, now));
   }
