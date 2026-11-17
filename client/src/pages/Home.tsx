@@ -90,6 +90,7 @@ import {
   getCappedDamageBonusMultiplier,
   getCappedDamageReductionMultiplier,
 } from "../lib/combat-damage-modifiers";
+import { TASK_DIFFICULTY_REWARDS } from "../lib/task-rewards";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
   mergeDiscoveredEquipmentNames,
@@ -182,6 +183,7 @@ import {
 import { getLegacyProfileCandidate } from "../lib/profile-migration";
 import {
   ACHIEVEMENTS,
+  getAchievementClaimRewards,
   getAchievementStatBonus,
   getAchievementTitle,
   getAchievementProgress,
@@ -232,13 +234,19 @@ import {
 import {
   addWeeklyStats,
   createWeeklyStats,
+  getWeeklyStatsKey,
   isWeeklyReportTime,
   normalizeWeeklyStats,
+  subtractWeeklyStats,
   type WeeklyStats,
 } from "../lib/weekly-stats";
+import {
+  getTaskCompletionRollback,
+  type TaskCompletionReceipt,
+} from "../lib/task-completion";
 
 type Category = "工作" | "學習" | "健康" | "生活" | "心情";
-type TaskDifficulty = "輕量" | "標準" | "挑戰";
+type TaskDifficulty = keyof typeof TASK_DIFFICULTY_REWARDS;
 type TaskCategoryFilter = Category | "all";
 type TaskDifficultyFilter = TaskDifficulty | "all";
 type TaskRepeat = "none" | "daily" | "weekly";
@@ -596,6 +604,7 @@ type Task = {
   coins: number;
   completed: boolean;
   awardedXp?: number;
+  completionReceipt?: TaskCompletionReceipt;
   repeat?: TaskRepeat;
   completedPeriodKey?: string;
 };
@@ -3026,6 +3035,7 @@ export default function Home() {
       ...task,
       completed: false,
       awardedXp: undefined,
+      completionReceipt: undefined,
       completedPeriodKey: undefined,
     })),
     totalXp: 0,
@@ -4936,6 +4946,7 @@ export default function Home() {
               slot: index,
               completed: false,
               awardedXp: undefined,
+              completionReceipt: undefined,
               completedPeriodKey: undefined,
             })),
           ]
@@ -4969,6 +4980,7 @@ export default function Home() {
             repeat,
             completed: false,
             awardedXp: undefined,
+            completionReceipt: undefined,
             completedPeriodKey: undefined,
           };
         }
@@ -5074,6 +5086,7 @@ export default function Home() {
               ...task,
               completed: false,
               awardedXp: undefined,
+              completionReceipt: undefined,
               completedPeriodKey: undefined,
             }
           : task
@@ -10164,15 +10177,8 @@ export default function Home() {
       showToast("先替任務取一個名字吧");
       return;
     }
-    const difficultyValues: Record<
-      TaskDifficulty,
-      { xp: number; coins: number }
-    > = {
-      輕量: { xp: 35, coins: 20 },
-      標準: { xp: 55, coins: 30 },
-      挑戰: { xp: 85, coins: 45 },
-    };
     const isEditingTask = modal?.kind === "task" && Boolean(modal.taskId);
+    const now = new Date();
     setState(previous => {
       if (modal?.kind === "task" && modal.taskId) {
         return {
@@ -10185,18 +10191,27 @@ export default function Home() {
               title,
               category: taskDraft.category,
               difficulty: taskDraft.difficulty,
+              xp: TASK_DIFFICULTY_REWARDS[taskDraft.difficulty].xp,
+              coins: TASK_DIFFICULTY_REWARDS[taskDraft.difficulty].coins,
               icon: taskDraft.icon,
               repeat: taskDraft.repeat,
-              completed: repeatChanged ? false : task.completed,
-              awardedXp: repeatChanged ? undefined : task.awardedXp,
+              completed: task.completed,
+              awardedXp: task.awardedXp,
+              completionReceipt: task.completionReceipt,
               completedPeriodKey: repeatChanged
-                ? undefined
+                ? task.completed && taskDraft.repeat !== "none"
+                  ? getRepeatPeriodKey(
+                      taskDraft.repeat,
+                      now,
+                      previous.dailyResetMinutes
+                    )
+                  : undefined
                 : task.completedPeriodKey,
             };
           }),
         };
       }
-      const reward = difficultyValues[taskDraft.difficulty];
+      const reward = TASK_DIFFICULTY_REWARDS[taskDraft.difficulty];
       const newTask: Task = {
         id: `task-${Date.now()}`,
         slot: taskDraft.slot,
@@ -10283,11 +10298,41 @@ export default function Home() {
   const toggleTask = (task: Task) => {
     const previousState = state;
     const nextCompleted = !task.completed;
+    const completionReceipt = task.completionReceipt;
+    if (task.completed && !completionReceipt) {
+      showToast(
+        "這是舊版完成記錄，沒有完整獎勵回執，為避免部分回收無法取消完成。"
+      );
+      return;
+    }
+    const rollback =
+      task.completed && completionReceipt
+        ? getTaskCompletionRollback(
+            {
+              totalXp: state.totalXp,
+              coins: state.coins,
+              abilityPoints: state.abilityPoints,
+              skillUpgradePoints: state.skillUpgradePoints,
+              inventoryIds: state.inventory.map(item => item.id),
+              equippedItemIds: state.equippedItemIds,
+            },
+            completionReceipt
+          )
+        : null;
+    if (task.completed && !rollback) {
+      showToast(
+        "該次任務的部分金幣、點數或寶箱物品已使用，無法安全完整回收；請保留完成狀態。"
+      );
+      return;
+    }
+    const now = new Date();
     const earnedXp = Math.max(
       1,
       Math.round(task.xp * (1 + experienceBonusPercent / 100))
     );
-    const xpDelta = nextCompleted ? earnedXp : -(task.awardedXp ?? task.xp);
+    const xpDelta = nextCompleted
+      ? earnedXp
+      : -(rollback?.totalXpToRemove ?? 0);
     const nextTasksPreview = state.tasks.map(item =>
       item.id === task.id ? { ...item, completed: nextCompleted } : item
     );
@@ -10297,7 +10342,7 @@ export default function Home() {
     const dailyChestMilestones = [3, 6, 9];
     const currentDailyPeriodKey = getRepeatPeriodKey(
       "daily",
-      new Date(),
+      now,
       state.dailyResetMinutes
     );
     const claimedChestMilestones =
@@ -10338,91 +10383,171 @@ export default function Home() {
     const earnedAbilityPoints = levelUps * 5;
     const repeat = task.repeat ?? "none";
     const completedPeriodKey = nextCompleted
-      ? getRepeatPeriodKey(repeat, new Date(), state.dailyResetMinutes)
+      ? getRepeatPeriodKey(repeat, now, state.dailyResetMinutes)
       : undefined;
     setState(previous => {
-      const nextTasks = previous.tasks.map(item =>
+      const tasksWithoutReceipt = previous.tasks.map(item =>
         item.id === task.id
           ? {
               ...item,
               completed: nextCompleted,
               awardedXp: nextCompleted ? earnedXp : undefined,
+              completionReceipt: undefined,
               completedPeriodKey,
             }
           : item
       );
-      const allTasksCompleted = nextTasks
+      const allTasksCompleted = tasksWithoutReceipt
         .filter(item => item.slot < boardSlotCount)
         .every(item => item.completed);
       const allTasksBonus =
         nextCompleted && allTasksCompleted && !previous.allTasksBonusClaimed;
       const levelGrowth = getLevelGrowth(previous.jobClass, levelUps);
+      const combatGrowth = levelGrowth.combat;
+      const appliedCritRateGrowth =
+        Math.min(
+          100,
+          previous.combatStats.critRate + (combatGrowth.critRate ?? 0)
+        ) - previous.combatStats.critRate;
+      const appliedCritDamageGrowth = combatGrowth.critDamage ?? 0;
+      const weeklyStatsChanges = {
+        tasksCompleted: 1,
+        coinsEarned: task.coins + chestGold + (allTasksBonus ? 50 : 0),
+        levelsGained: levelUps,
+        abilitiesGained: levelGrowth.abilities,
+      };
+      const newCompletionReceipt: TaskCompletionReceipt | undefined =
+        nextCompleted
+          ? {
+              taskXp: earnedXp,
+              taskCoins: task.coins,
+              chestXp,
+              chestCoins: chestGold,
+              chestLootIds: chestLoot.map(item => item.id),
+              chestMilestones: newlyUnlockedChestMilestones,
+              levelUps,
+              abilityGrowth: levelGrowth.abilities,
+              critRateGrowth: appliedCritRateGrowth,
+              critDamageGrowth: appliedCritDamageGrowth,
+              allTasksBonus,
+              dailyPeriodKey: currentDailyPeriodKey,
+              weeklyStatsWeekKey: getWeeklyStatsKey(now),
+              weeklyStats: weeklyStatsChanges,
+            }
+          : undefined;
+      const nextTasks = tasksWithoutReceipt.map(item =>
+        item.id === task.id
+          ? { ...item, completionReceipt: newCompletionReceipt }
+          : item
+      );
+      const rollbackReceipt = task.completionReceipt;
+      const sameDailyPeriod =
+        rollbackReceipt?.dailyPeriodKey === currentDailyPeriodKey;
+      const removedChestMilestones =
+        !nextCompleted &&
+        rollbackReceipt &&
+        previous.dailyQuestChestPeriodKey === rollbackReceipt.dailyPeriodKey
+          ? rollbackReceipt.chestMilestones
+          : [];
+      const nextAbilities = nextCompleted
+        ? {
+            health: previous.abilities.health + levelGrowth.abilities.health,
+            strength:
+              previous.abilities.strength + levelGrowth.abilities.strength,
+            defense: previous.abilities.defense + levelGrowth.abilities.defense,
+            intelligence:
+              previous.abilities.intelligence +
+              levelGrowth.abilities.intelligence,
+          }
+        : {
+            health:
+              previous.abilities.health -
+              (rollbackReceipt?.abilityGrowth.health ?? 0),
+            strength:
+              previous.abilities.strength -
+              (rollbackReceipt?.abilityGrowth.strength ?? 0),
+            defense:
+              previous.abilities.defense -
+              (rollbackReceipt?.abilityGrowth.defense ?? 0),
+            intelligence:
+              previous.abilities.intelligence -
+              (rollbackReceipt?.abilityGrowth.intelligence ?? 0),
+          };
+      const coinsToRemove = rollback?.coinsToRemove ?? 0;
+      const abilityPointsToRemove = rollback?.abilityPointsToRemove ?? 0;
+      const skillPointsToRemove = rollback?.skillUpgradePointsToRemove ?? 0;
       return {
         ...previous,
         tasks: nextTasks,
         totalXp: nextTotalXp,
-        coins: Math.max(
-          0,
-          previous.coins +
-            (nextCompleted ? task.coins : -task.coins) +
-            chestGold +
-            (allTasksBonus ? 50 : 0)
-        ),
-        abilityPoints:
-          previous.abilityPoints +
-          earnedAbilityPoints +
-          (allTasksBonus ? 5 : 0),
-        skillUpgradePoints: previous.skillUpgradePoints + levelUps,
-        abilityLevel: Math.max(previous.abilityLevel, nextLevel),
-        allTasksBonusClaimed: previous.allTasksBonusClaimed || allTasksBonus,
-        dailyQuestChestClaims:
-          nextCompleted && newlyUnlockedChestMilestones.length > 0
-            ? [
-                ...new Set([
-                  ...claimedChestMilestones,
-                  ...newlyUnlockedChestMilestones,
-                ]),
-              ]
-            : claimedChestMilestones,
-        dailyQuestChestPeriodKey: currentDailyPeriodKey,
-        inventory:
-          chestLoot.length > 0
-            ? [...previous.inventory, ...chestLoot]
-            : previous.inventory,
+        coins: nextCompleted
+          ? previous.coins + task.coins + chestGold + (allTasksBonus ? 50 : 0)
+          : previous.coins - coinsToRemove,
+        abilityPoints: nextCompleted
+          ? previous.abilityPoints +
+            earnedAbilityPoints +
+            (allTasksBonus ? 5 : 0)
+          : previous.abilityPoints - abilityPointsToRemove,
+        skillUpgradePoints: nextCompleted
+          ? previous.skillUpgradePoints + levelUps
+          : previous.skillUpgradePoints - skillPointsToRemove,
+        abilityLevel: nextCompleted
+          ? Math.max(previous.abilityLevel, nextLevel)
+          : getPlayerStats(nextTotalXp).level,
+        allTasksBonusClaimed: nextCompleted
+          ? previous.allTasksBonusClaimed || allTasksBonus
+          : rollbackReceipt?.allTasksBonus && sameDailyPeriod
+            ? false
+            : previous.allTasksBonusClaimed,
+        dailyQuestChestClaims: nextCompleted
+          ? [
+              ...new Set([
+                ...claimedChestMilestones,
+                ...newlyUnlockedChestMilestones,
+              ]),
+            ]
+          : (previous.dailyQuestChestClaims ?? []).filter(
+              milestone => !removedChestMilestones.includes(milestone)
+            ),
+        dailyQuestChestPeriodKey: nextCompleted
+          ? currentDailyPeriodKey
+          : previous.dailyQuestChestPeriodKey,
+        inventory: nextCompleted
+          ? [...previous.inventory, ...chestLoot]
+          : previous.inventory.filter(
+              item => !rollback?.lootIdsToRemove.includes(item.id)
+            ),
         weeklyStats: nextCompleted
-          ? addWeeklyStats(
-              previous.weeklyStats,
-              {
-                tasksCompleted: 1,
-                coinsEarned: task.coins + chestGold + (allTasksBonus ? 50 : 0),
-                levelsGained: levelUps,
-                abilitiesGained: levelGrowth.abilities,
-              },
-              new Date()
-            )
-          : previous.weeklyStats,
-        abilities: {
-          health: previous.abilities.health + levelGrowth.abilities.health,
-          strength:
-            previous.abilities.strength + levelGrowth.abilities.strength,
-          defense: previous.abilities.defense + levelGrowth.abilities.defense,
-          intelligence:
-            previous.abilities.intelligence +
-            levelGrowth.abilities.intelligence,
-        },
+          ? addWeeklyStats(previous.weeklyStats, weeklyStatsChanges, now)
+          : rollbackReceipt?.weeklyStatsWeekKey === getWeeklyStatsKey(now)
+            ? subtractWeeklyStats(
+                previous.weeklyStats,
+                rollbackReceipt.weeklyStats,
+                now
+              )
+            : previous.weeklyStats,
+        abilities: nextAbilities,
         combatStats: {
           ...previous.combatStats,
-          critRate: Math.min(
-            100,
-            previous.combatStats.critRate +
-              (getLevelGrowth(previous.jobClass, levelUps).combat.critRate ?? 0)
-          ),
-          critDamage:
-            previous.combatStats.critDamage +
-            (getLevelGrowth(previous.jobClass, levelUps).combat.critDamage ??
-              0),
+          critRate: nextCompleted
+            ? previous.combatStats.critRate + appliedCritRateGrowth
+            : previous.combatStats.critRate -
+              (rollbackReceipt?.critRateGrowth ?? 0),
+          critDamage: nextCompleted
+            ? previous.combatStats.critDamage + appliedCritDamageGrowth
+            : previous.combatStats.critDamage -
+              (rollbackReceipt?.critDamageGrowth ?? 0),
         },
-        currentHealth: previous.currentHealth + levelGrowth.abilities.health,
+        currentHealth: nextCompleted
+          ? previous.currentHealth + levelGrowth.abilities.health
+          : Math.max(
+              0,
+              Math.min(
+                nextAbilities.health,
+                previous.currentHealth -
+                  (rollbackReceipt?.abilityGrowth.health ?? 0)
+              )
+            ),
       };
     });
     showUndoToast(nextCompleted ? "任務已完成" : "任務完成狀態已取消", () => {
@@ -11173,24 +11298,38 @@ export default function Home() {
     );
     if (!status || !status.progress.completed || status.claimed) return;
     const { achievement } = status;
+    const rewards = getAchievementClaimRewards(achievement);
     setSharedAchievementClaimedIds(previous =>
       previous.includes(achievement.id)
         ? previous
         : [...previous, achievement.id]
     );
-    setState(previous => ({
-      ...previous,
-      achievementClaimedIds: normalizeAchievementIds([
-        ...(Array.isArray(previous.achievementClaimedIds)
-          ? previous.achievementClaimedIds
-          : []),
-        achievement.id,
-      ]),
-    }));
+    setState(previous => {
+      const previousClaimedIds = normalizeAchievementIds(
+        previous.achievementClaimedIds
+      );
+      if (previousClaimedIds.includes(achievement.id)) return previous;
+      return {
+        ...previous,
+        coins: previous.coins + rewards.coins,
+        skillUpgradePoints:
+          previous.skillUpgradePoints + rewards.skillUpgradePoints,
+        achievementClaimedIds: [...previousClaimedIds, achievement.id],
+      };
+    });
+    const unlockedReward = isTitleAchievement(achievement)
+      ? `稱號「${getAchievementTitle(achievement)}」已解鎖`
+      : "生命、力量、防禦、智力永久 +1";
+    const resourceRewards = [
+      rewards.coins > 0 ? `+${rewards.coins} 金幣` : "",
+      rewards.skillUpgradePoints > 0
+        ? `+${rewards.skillUpgradePoints} 技能升級點`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("、");
     showToast(
-      isTitleAchievement(achievement)
-        ? `成就「${achievement.title}」已領取：稱號「${getAchievementTitle(achievement)}」已解鎖`
-        : `成就「${achievement.title}」已領取：生命、力量、防禦、智力永久 +1`
+      `成就「${achievement.title}」已領取：${unlockedReward}${resourceRewards ? `；${resourceRewards}` : ""}`
     );
   };
 
@@ -13300,6 +13439,16 @@ export default function Home() {
                       100,
                       Math.round((progress.value / progress.goal) * 100)
                     );
+                    const claimRewards = getAchievementClaimRewards(achievement);
+                    const rewardLabels = [
+                      isTitleAchievement(achievement)
+                        ? `稱號：${getAchievementTitle(achievement)}`
+                        : "永久能力：生命、力量、防禦、智力各 +1",
+                      claimRewards.coins > 0 ? `+${claimRewards.coins} 金幣` : "",
+                      claimRewards.skillUpgradePoints > 0
+                        ? `+${claimRewards.skillUpgradePoints} 技能升級點`
+                        : "",
+                    ].filter(Boolean);
                     return (
                       <article
                         className={`achievement-card panel-card ${progress.completed ? "is-complete" : ""} ${claimed ? "is-claimed" : ""}`}
@@ -13329,11 +13478,7 @@ export default function Home() {
                           <span style={{ width: `${progressPercent}%` }} />
                         </div>
                         <div className="achievement-reward-row">
-                          <span>
-                            {isTitleAchievement(achievement)
-                              ? `稱號：${getAchievementTitle(achievement)}`
-                              : "獎勵：生命、力量、防禦、智力永久 +1"}
-                          </span>
+                          <span>{rewardLabels.join(" · ")}</span>
                           {claimed && isTitleAchievement(achievement) ? (
                             <button
                               type="button"
@@ -16352,23 +16497,11 @@ export default function Home() {
                 <div className="modal-reward-preview">
                   <Zap size={15} /> 完成後可獲得{" "}
                   <strong>
-                    +
-                    {taskDraft.difficulty === "輕量"
-                      ? 35
-                      : taskDraft.difficulty === "挑戰"
-                        ? 85
-                        : 55}{" "}
-                    XP
+                    +{TASK_DIFFICULTY_REWARDS[taskDraft.difficulty].xp} XP
                   </strong>{" "}
                   與{" "}
                   <strong>
-                    +
-                    {taskDraft.difficulty === "輕量"
-                      ? 20
-                      : taskDraft.difficulty === "挑戰"
-                        ? 45
-                        : 30}{" "}
-                    金幣
+                    +{TASK_DIFFICULTY_REWARDS[taskDraft.difficulty].coins} 金幣
                   </strong>
                 </div>
                 <button

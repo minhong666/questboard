@@ -5,6 +5,7 @@ import {
   getWeeklyStatsKey,
   isWeeklyReportTime,
   normalizeWeeklyStats,
+  subtractWeeklyStats,
 } from "./weekly-stats";
 
 describe("weekly stats", () => {
@@ -39,6 +40,31 @@ describe("weekly stats", () => {
       coinsEarned: 95,
       abilitiesGained: { health: 20, strength: 2, defense: 0, intelligence: 4 },
     });
+  });
+
+  it("reverses only recorded contributions without going below zero", () => {
+    const date = new Date(2026, 9, 21);
+    const current = addWeeklyStats(createWeeklyStats(date), {
+      tasksCompleted: 3,
+      levelsGained: 2,
+      coinsEarned: 95,
+      abilitiesGained: { health: 20, strength: 2, intelligence: 4 },
+    }, date);
+    expect(subtractWeeklyStats(current, {
+      tasksCompleted: 1,
+      levelsGained: 1,
+      coinsEarned: 35,
+      abilitiesGained: { health: 8, strength: 1 },
+    }, date)).toMatchObject({
+      tasksCompleted: 2,
+      levelsGained: 1,
+      coinsEarned: 60,
+      abilitiesGained: { health: 12, strength: 1, defense: 0, intelligence: 4 },
+    });
+    expect(subtractWeeklyStats(createWeeklyStats(date), {
+      tasksCompleted: 10,
+      coinsEarned: 50,
+    }, date)).toMatchObject({ tasksCompleted: 0, coinsEarned: 0 });
   });
 
   it("resets incompatible or malformed saved stats without breaking the save", () => {
