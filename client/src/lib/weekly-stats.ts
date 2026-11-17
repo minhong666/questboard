@@ -107,6 +107,52 @@ export function addWeeklyStats(
   } satisfies WeeklyStats;
 }
 
+export function subtractWeeklyStats(
+  current: unknown,
+  changes: WeeklyStatsChanges,
+  date: Date
+) {
+  const base = normalizeWeeklyStats(current, date);
+  const abilities = changes.abilitiesGained ?? {};
+  return {
+    ...base,
+    tasksCompleted: Math.max(
+      0,
+      base.tasksCompleted - safeInteger(changes.tasksCompleted)
+    ),
+    monstersDefeated: Math.max(
+      0,
+      base.monstersDefeated - safeInteger(changes.monstersDefeated)
+    ),
+    levelsGained: Math.max(
+      0,
+      base.levelsGained - safeInteger(changes.levelsGained)
+    ),
+    coinsEarned: Math.max(
+      0,
+      base.coinsEarned - safeInteger(changes.coinsEarned)
+    ),
+    abilitiesGained: {
+      health: Math.max(
+        0,
+        base.abilitiesGained.health - safeInteger(abilities.health)
+      ),
+      strength: Math.max(
+        0,
+        base.abilitiesGained.strength - safeInteger(abilities.strength)
+      ),
+      defense: Math.max(
+        0,
+        base.abilitiesGained.defense - safeInteger(abilities.defense)
+      ),
+      intelligence: Math.max(
+        0,
+        base.abilitiesGained.intelligence - safeInteger(abilities.intelligence)
+      ),
+    },
+  } satisfies WeeklyStats;
+}
+
 export function isWeeklyReportTime(date: Date) {
   return date.getDay() === 0 && date.getHours() >= 23;
 }

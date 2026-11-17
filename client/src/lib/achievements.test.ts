@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACHIEVEMENTS,
+  getAchievementClaimRewards,
   getAchievementProgress,
   getAchievementStatBonus,
   isTitleAchievement,
@@ -97,6 +98,21 @@ describe("achievements", () => {
       strength: 1,
       defense: 1,
       intelligence: 1,
+    });
+  });
+
+  it("returns configured coin and skill-point rewards", () => {
+    expect(getAchievementClaimRewards(ACHIEVEMENTS.find(item => item.id === "first-quest")!)).toEqual({
+      coins: 30,
+      skillUpgradePoints: 0,
+    });
+    expect(getAchievementClaimRewards(ACHIEVEMENTS.find(item => item.id === "quest-master")!)).toEqual({
+      coins: 120,
+      skillUpgradePoints: 1,
+    });
+    expect(getAchievementClaimRewards({ rewardCoins: -2, rewardSkillPoints: -1 })).toEqual({
+      coins: 0,
+      skillUpgradePoints: 0,
     });
   });
 });
