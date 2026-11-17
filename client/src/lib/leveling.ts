@@ -7,7 +7,7 @@ export type PlayerLevelStats = {
   progress: number;
 };
 
-/** Game-balance invariant: every level requires exactly 250 XP. */
+/** Game-balance invariant: every level requires exactly 300 XP. */
 export const XP_PER_LEVEL = GAME_RULES.progression.xpPerLevel;
 
 export function getXpForLevel(level: number) {
