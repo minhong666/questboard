@@ -85,6 +85,7 @@ import {
   type TreasureItem,
 } from "../lib/loot";
 import { clampCurrentHealth } from "../lib/health";
+import { isEscapeSuccessful } from "../lib/battle-escape";
 import {
   capCombinedDamageModifierPercent,
   getCappedDamageBonusMultiplier,
@@ -5504,10 +5505,28 @@ export default function Home() {
     setBattleFx(null);
   };
 
-  const runBattleTurn = (skillId?: string) => {
+  const runBattleTurn = (
+    skillId?: string,
+    action: "attack" | "escape" = "attack"
+  ) => {
     if (!battle || !activeBattleMonster || battle.outcome !== "fighting")
       return;
-    const actionLocked = (battle.actionLockTurns ?? 0) > 0;
+    const escapeAttempt = action === "escape";
+    if (escapeAttempt && isEscapeSuccessful(Math.random())) {
+      if (!isSoulTrialBattle) {
+        setState(previous => ({
+          ...previous,
+          currentHealth: Math.max(
+            0,
+            Math.min(battle.playerHealth, battleAbilities.health)
+          ),
+        }));
+      }
+      setBattle(null);
+      showToast(`成功逃離${activeBattleMonster.name}，不會獲得這場戰鬥的獎勵。`);
+      return;
+    }
+    const actionLocked = escapeAttempt || (battle.actionLockTurns ?? 0) > 0;
     if (actionLocked && skillId) {
       showToast("終焉狙殺的反噬尚未結束，這一回合不能使用技能");
       return;
@@ -8039,15 +8058,17 @@ export default function Home() {
         )
       : 0;
     const healedPlayerHealth = Math.max(1, healedPlayerHealthBeforeSacrifice - slayingSelfDamage);
-    const actionLabel = actionLocked
-      ? "停滯"
-      : selectedSkill
-        ? `「${selectedSkill.name}」`
-        : "攻擊";
+    const actionLabel = escapeAttempt
+      ? "逃跑"
+      : actionLocked
+        ? "停滯"
+        : selectedSkill
+          ? `「${selectedSkill.name}」`
+          : "攻擊";
     const monsterHealth = Math.max(0, battle.monsterHealth - appliedDamage);
     const logs = [
       ...battle.logs,
-      `第 ${battle.turn} 回合：${actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${actualDamageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}${specialAbilityActionLog}`}`,
+      `第 ${battle.turn} 回合：${escapeAttempt ? "逃跑失敗，未能脫離戰鬥；本回合無法攻擊或施放技能" : actionLocked ? "你因終焉狙殺的反噬停滯一回合，無法攻擊或使用技能" : monsterDodges ? `${monster.name}閃避了你的${actionLabel}！` : `${selectedSkill ? `你使出${actionLabel}` : "你"}造成 ${actualDamageDealt} 傷害${criticalHit ? "（暴擊！）" : ""}${statusLogs}${groupDamageLog}${specialAbilityActionLog}`}`,
     ];
     const criticalHits = battle.criticalHits + (criticalHit ? 1 : 0);
     const dodges = battle.dodges + (monsterDodges ? 1 : 0);
@@ -8190,7 +8211,7 @@ export default function Home() {
         outcome: "victory" as const,
       };
       showBattleFx({
-        action: selectedSkill ? "skill" : "attack",
+        action: actionLocked ? "idle" : selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage,
         playerDamage: reactiveDamageOnDeath,
         healing:
@@ -9505,7 +9526,7 @@ export default function Home() {
     const nextDamageTaken = battle.damageTaken + totalDamageTaken;
     if (playerHealth <= 0) {
       showBattleFx({
-        action: selectedSkill ? "skill" : "attack",
+        action: actionLocked ? "idle" : selectedSkill ? "skill" : "attack",
         monsterDamage: appliedDamage + dawnWardenReflectionDamage,
         playerDamage: totalDamageTaken,
         healing:
@@ -9734,7 +9755,7 @@ export default function Home() {
       return;
     }
     showBattleFx({
-      action: selectedSkill ? "skill" : "attack",
+      action: actionLocked ? "idle" : selectedSkill ? "skill" : "attack",
       monsterDamage:
         appliedDamage + dawnWardenReflectionDamage + titanDaggerCounterDamage,
       playerDamage: totalDamageTaken,
@@ -15942,6 +15963,18 @@ export default function Home() {
                     : `普通攻擊 · 第 ${battle.turn} 回合`}{" "}
                   <ChevronRight size={16} />
                 </button>
+                <button
+                  type="button"
+                  className="secondary-button battle-escape-button"
+                  onClick={() => runBattleTurn(undefined, "escape")}
+                  aria-label="嘗試逃跑，成功率 70%；失敗時消耗本回合並遭受魔物反擊"
+                >
+                  <LogOut size={15} />
+                  嘗試逃跑 · 成功率 70%
+                </button>
+                <small className="battle-escape-note">
+                  失敗機率 30%：本回合無法攻擊或施放技能，魔物會反擊。
+                </small>
               </>
             ) : (
               <>
