@@ -3930,7 +3930,7 @@ export default function Home() {
       value: effectiveAbilities.health,
       tone: "mint",
       icon: HeartPulse,
-      description: "手動每點 +5 · 每級 +10",
+      description: "手動每點 +10 · 每級 +10",
     },
     {
       key: "strength" as const,
@@ -5266,7 +5266,9 @@ export default function Home() {
         new Date()
       ),
     }));
-    showToast(`${label} +${increment}（50%戰鬥效益），能力點數已使用`);
+    showToast(
+      `${label} +${increment}${key === "health" ? " HP" : "（50%戰鬥效益）"}，能力點數已使用`
+    );
   };
 
   const upgradeCombatStat = (
@@ -12248,12 +12250,16 @@ export default function Home() {
                           <span style={{ width: `${Math.min(100, value)}%` }} />
                         </div>
                         <div className="ability-card-foot">
-                          <span>目前能力（升級效果50%）</span>
+                          <span>
+                            {key === "health"
+                              ? "目前生命（加點效果維持原值）"
+                              : "目前能力（升級效果50%）"}
+                          </span>
                           <button
                             className="ability-upgrade"
                             disabled={state.abilityPoints <= 0}
                             onClick={() => allocateAbilityPoint(key, label)}
-                            aria-label={`將 1 點能力點分配給${label}，效果為原本的 50%`}
+                            aria-label={`將 1 點能力點分配給${label}${key === "health" ? "，增加10 HP" : "，效果為原本的 50%"}`}
                           >
                             ＋{getAbilityPointAttributeGain(key)}
                           </button>

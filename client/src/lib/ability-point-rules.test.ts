@@ -8,11 +8,11 @@ import {
 import { GAME_RULES } from "./game-rules";
 
 describe("ability point balance rules", () => {
-  it("awards three selectable ability points per level and halves their effects", () => {
+  it("awards three points per level, keeps health intact, and halves other effects", () => {
     expect(GAME_RULES.progression.abilityPointsPerLevel).toBe(3);
     expect(GAME_RULES.abilityPoints.combatEffectivenessPercent).toBe(50);
     expect(ABILITY_POINT_EFFECTIVENESS).toBe(0.5);
-    expect(getAbilityPointAttributeGain("health")).toBe(5);
+    expect(getAbilityPointAttributeGain("health")).toBe(10);
     expect(getAbilityPointAttributeGain("strength")).toBe(0.5);
     expect(getAbilityPointAttributeGain("intelligence")).toBe(0.5);
     expect(getAbilityPointCombatGain("critRate")).toBe(0.5);

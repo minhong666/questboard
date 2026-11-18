@@ -32,7 +32,9 @@ const LEGACY_COMBAT_GAIN: Record<AbilityPointCombatStat, number> = {
 };
 
 export function getAbilityPointAttributeGain(key: AbilityPointAttribute) {
-  return LEGACY_ATTRIBUTE_GAIN[key] * ABILITY_POINT_EFFECTIVENESS;
+  return key === "health"
+    ? LEGACY_ATTRIBUTE_GAIN.health
+    : LEGACY_ATTRIBUTE_GAIN[key] * ABILITY_POINT_EFFECTIVENESS;
 }
 
 export function getAbilityPointCombatGain(key: AbilityPointCombatStat) {
