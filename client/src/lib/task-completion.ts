@@ -1,3 +1,5 @@
+import { GAME_RULES } from "./game-rules";
+
 export type TaskAbilityGrowth = {
   health: number;
   strength: number;
@@ -56,7 +58,8 @@ export function getTaskCompletionRollback(
   const coinsToRemove =
     receipt.taskCoins + receipt.chestCoins + (receipt.allTasksBonus ? 50 : 0);
   const abilityPointsToRemove =
-    receipt.levelUps * 5 + (receipt.allTasksBonus ? 5 : 0);
+    receipt.levelUps * GAME_RULES.progression.abilityPointsPerLevel +
+    (receipt.allTasksBonus ? 5 : 0);
   const skillUpgradePointsToRemove = receipt.levelUps;
 
   if (
