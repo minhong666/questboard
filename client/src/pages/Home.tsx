@@ -181,6 +181,7 @@ import {
   getNextSkillUpgradePreview,
   getSkillUpgradePointsForLevelUps,
   MAX_SKILL_UPGRADE_LEVEL,
+  isSkillUpgradeable,
   normalizeSkillUpgradeState,
   type SkillUpgradeLevels,
 } from "../lib/skill-upgrades";
@@ -3694,7 +3695,7 @@ export default function Home() {
     specializationPassiveBonuses.dodgeRate;
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
-      ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
+      ? 30
       : 0;
   const effectiveCombatStats: CombatStats = {
     critRate: isMage
@@ -11049,6 +11050,11 @@ export default function Home() {
 
   const upgradeSkill = (skillId: string, skillName: string) => {
     const currentLevel = state.skillUpgradeLevels[skillId] ?? 0;
+    const skill = allSpecialSkillsBase.find(item => item.id === skillId);
+    if (!skill || !isSkillUpgradeable(skill)) {
+      showToast(`「${skillName}」是固定被動技能，無法升級`);
+      return;
+    }
     if (state.skillUpgradePoints <= 0) {
       showToast("技能升級點數不足，請先提升角色等級");
       return;
@@ -12540,8 +12546,9 @@ export default function Home() {
                   <span className="mini-kicker">SKILL UPGRADE POINTS</span>
                   <strong>{state.skillUpgradePoints}</strong>
                   <small>
-                    每升 1 級獲得 1 點；增益技能每級 +1% 增益，傷害技能每級 +5%
-                    傷害；每項技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。
+                    每升 1 級獲得 1 點；傷害技能倍率每級 +2.5%，增傷／減傷技能各增加
+                    0.5 個百分點；防禦穿透固定。暴擊傷害被動是固定效果，不隨等級成長且不可升級；
+                    其他技能最多升級 {MAX_SKILL_UPGRADE_LEVEL} 次。
                   </small>
                 </div>
                 <Zap size={24} />
@@ -12552,20 +12559,29 @@ export default function Home() {
                     item => item.id === skill.id
                   );
                   const isBuff = skill.effectType === "buff";
+                  const upgradeable = isSkillUpgradeable(skill);
                   const upgradeLevel = state.skillUpgradeLevels[skill.id] ?? 0;
                   const baseSkill =
                     allSpecialSkillsBase.find(item => item.id === skill.id) ??
                     skill;
                   const upgradeBonusLabel =
-                    upgradeLevel > 0
-                      ? skill.effectType === "damage"
-                        ? `升級額外：傷害倍率 +${upgradeLevel * 5}%${skill.defensePiercePercent > baseSkill.defensePiercePercent ? ` · 防禦穿透 +${skill.defensePiercePercent - baseSkill.defensePiercePercent}%` : ""}`
-                        : skill.effectType === "buff"
-                          ? `升級額外：傷害增益 +${upgradeLevel}% · 減傷 +${upgradeLevel}%`
-                          : `升級額外：暴擊傷害 +${upgradeLevel * 5}%`
+                    upgradeable && upgradeLevel > 0
+                      ? [
+                          skill.effectType === "damage"
+                            ? `傷害倍率 +${(upgradeLevel * 2.5).toFixed(1)}%`
+                            : "",
+                          skill.damageBonusPercent !== 0
+                            ? `增傷 +${(upgradeLevel * 0.5).toFixed(1)} 個百分點`
+                            : "",
+                          skill.damageReductionPercent !== 0
+                            ? `減傷 +${(upgradeLevel * 0.5).toFixed(1)} 個百分點`
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
                       : "";
                   const nextUpgradeSkill =
-                    unlocked && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
+                    unlocked && upgradeable && upgradeLevel < MAX_SKILL_UPGRADE_LEVEL
                       ? getNextSkillUpgradePreview(baseSkill, upgradeLevel)
                       : null;
                   const damagePreview = unlocked
@@ -12652,13 +12668,27 @@ export default function Home() {
                               {skill.damageMultiplier.toFixed(2)}× →{" "}
                               {nextUpgradeSkill.damageMultiplier.toFixed(2)}×{" "}
                               {skill.damageType}傷害
+                              {skill.damageBonusPercent !== 0 && (
+                                <>
+                                  {" · 增傷 "}
+                                  {skill.damageBonusPercent.toFixed(1)}% →{" "}
+                                  {nextUpgradeSkill.damageBonusPercent.toFixed(1)}%
+                                </>
+                              )}
+                              {skill.damageReductionPercent !== 0 && (
+                                <>
+                                  {" · 減傷 "}
+                                  {skill.damageReductionPercent.toFixed(1)}% →{" "}
+                                  {nextUpgradeSkill.damageReductionPercent.toFixed(1)}%
+                                </>
+                              )}
                             </span>
                           ) : skill.effectType === "buff" ? (
                             <span>
-                              傷害增益 {skill.damageBonusPercent}% →{" "}
-                              {nextUpgradeSkill.damageBonusPercent}% · 減傷{" "}
-                              {skill.damageReductionPercent}% →{" "}
-                              {nextUpgradeSkill.damageReductionPercent}%
+                              傷害增益 {skill.damageBonusPercent.toFixed(1)}% →{" "}
+                              {nextUpgradeSkill.damageBonusPercent.toFixed(1)}% · 減傷{" "}
+                              {skill.damageReductionPercent.toFixed(1)}% →{" "}
+                              {nextUpgradeSkill.damageReductionPercent.toFixed(1)}%
                             </span>
                           ) : (
                             <span>
@@ -12682,20 +12712,24 @@ export default function Home() {
                         {skill.cooldownTurns > 0 && (
                           <span>冷卻 {skill.cooldownTurns} 回合</span>
                         )}
-                        <button
-                          type="button"
-                          className="skill-upgrade-button"
-                          disabled={
-                            !unlocked ||
-                            state.skillUpgradePoints <= 0 ||
-                            upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
-                          }
-                          onClick={() => upgradeSkill(skill.id, skill.name)}
-                        >
-                          {upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
-                            ? "已滿級"
-                            : `升級 ${upgradeLevel}/${MAX_SKILL_UPGRADE_LEVEL}`}
-                        </button>
+                        {upgradeable ? (
+                          <button
+                            type="button"
+                            className="skill-upgrade-button"
+                            disabled={
+                              !unlocked ||
+                              state.skillUpgradePoints <= 0 ||
+                              upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
+                            }
+                            onClick={() => upgradeSkill(skill.id, skill.name)}
+                          >
+                            {upgradeLevel >= MAX_SKILL_UPGRADE_LEVEL
+                              ? "已滿級"
+                              : `升級 ${upgradeLevel}/${MAX_SKILL_UPGRADE_LEVEL}`}
+                          </button>
+                        ) : (
+                          <span>固定被動效果 · 不隨等級成長</span>
+                        )}
                       </div>
                     </article>
                   );
