@@ -1,7 +1,12 @@
 import {
-  clampDefensePiercePercent,
+  getAllSpecialSkills,
+  type SkillJobClass,
   type SpecialCombatSkill,
 } from "./class-skills";
+import {
+  getAllSpecializationSkills,
+  getAllSpecializations,
+} from "./class-specializations";
 
 export const MAX_SKILL_UPGRADE_LEVEL = 15;
 
@@ -10,6 +15,28 @@ export type SkillUpgradeLevels = Record<string, number>;
 export function getSkillUpgradePointsForLevelUps(levelUps: number) {
   return Math.max(0, Math.floor(Number.isFinite(levelUps) ? levelUps : 0));
 }
+
+const SKILL_JOB_CLASSES: SkillJobClass[] = [
+  "warrior",
+  "archer",
+  "mage",
+  "rogue",
+];
+
+export function isSkillUpgradeable(skill: SpecialCombatSkill) {
+  return skill.effectType !== "passive";
+}
+
+const NON_UPGRADEABLE_SKILL_IDS = new Set(
+  [
+    ...SKILL_JOB_CLASSES.flatMap(jobClass => getAllSpecialSkills(jobClass)),
+    ...getAllSpecializations().flatMap(specialization =>
+      getAllSpecializationSkills(specialization)
+    ),
+  ]
+    .filter(skill => !isSkillUpgradeable(skill))
+    .map(skill => skill.id)
+);
 
 export function normalizeSkillUpgradeState(value: unknown): {
   levels: SkillUpgradeLevels;
@@ -22,6 +49,10 @@ export function normalizeSkillUpgradeState(value: unknown): {
     (result, [skillId, level]) => {
       if (typeof level !== "number" || !Number.isFinite(level)) return result;
       const wholeLevel = Math.max(0, Math.floor(level));
+      if (NON_UPGRADEABLE_SKILL_IDS.has(skillId)) {
+        result.refundedPoints += wholeLevel;
+        return result;
+      }
       result.refundedPoints += Math.max(0, wholeLevel - MAX_SKILL_UPGRADE_LEVEL);
       const safeLevel = Math.min(MAX_SKILL_UPGRADE_LEVEL, wholeLevel);
       if (safeLevel > 0) result.levels[skillId] = safeLevel;
@@ -43,28 +74,23 @@ export function applySkillUpgrade(
     MAX_SKILL_UPGRADE_LEVEL,
     Math.max(0, Math.floor(Number.isFinite(upgradeLevel) ? upgradeLevel : 0))
   );
-  if (level === 0) return skill;
+  if (level === 0 || !isSkillUpgradeable(skill)) return skill;
   const damageSkill = skill.effectType === "damage";
-  const buffSkill = skill.effectType === "buff";
-  const passiveSkill = skill.effectType === "passive";
-  const descriptionIncludesDefensePierce = skill.description.includes("防禦穿透");
+  const hasDamageBonus = skill.damageBonusPercent !== 0;
+  const hasDamageReduction = skill.damageReductionPercent !== 0;
   return {
     ...skill,
     damageMultiplier: damageSkill
-      ? skill.damageMultiplier * (1 + level * 0.05)
+      ? skill.damageMultiplier * (1 + level * 0.025)
       : skill.damageMultiplier,
-    defensePiercePercent: damageSkill && descriptionIncludesDefensePierce
-      ? clampDefensePiercePercent(skill.defensePiercePercent + level * 2)
-      : skill.defensePiercePercent,
-    damageBonusPercent: buffSkill
-      ? skill.damageBonusPercent + level
+    defensePiercePercent: skill.defensePiercePercent,
+    damageBonusPercent: hasDamageBonus
+      ? skill.damageBonusPercent + level * 0.5
       : skill.damageBonusPercent,
-    damageReductionPercent: buffSkill
-      ? skill.damageReductionPercent + level
+    damageReductionPercent: hasDamageReduction
+      ? skill.damageReductionPercent + level * 0.5
       : skill.damageReductionPercent,
-    critDamageBonusPercent: passiveSkill
-      ? skill.critDamageBonusPercent + level * 5
-      : skill.critDamageBonusPercent,
+    critDamageBonusPercent: skill.critDamageBonusPercent,
     description: `${skill.description}（技能升級 Lv.${level}）`,
   };
 }
@@ -79,6 +105,8 @@ export function getNextSkillUpgradePreview(
       Number.isFinite(currentUpgradeLevel) ? currentUpgradeLevel : 0
     )
   );
-  if (currentLevel >= MAX_SKILL_UPGRADE_LEVEL) return null;
+  if (!isSkillUpgradeable(baseSkill) || currentLevel >= MAX_SKILL_UPGRADE_LEVEL) {
+    return null;
+  }
   return applySkillUpgrade(baseSkill, currentLevel + 1);
 }
