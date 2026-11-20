@@ -101,6 +101,13 @@ import {
   getCappedDamageBonusMultiplier,
   getCappedDamageReductionMultiplier,
 } from "../lib/combat-damage-modifiers";
+import {
+  capPlayerCombatStatUpgradeValue,
+  getEffectiveCombatStatWithBonuses,
+  getNextPlayerCombatStatUpgradeValue,
+  PLAYER_COMBAT_STAT_UPGRADE_CAPS,
+  type PlayerCombatStatUpgradeKey,
+} from "../lib/player-combat-stat-upgrades";
 import { TASK_DIFFICULTY_REWARDS } from "../lib/task-rewards";
 import { RPG_EQUIPMENT_TEMPLATES } from "../lib/equipment-database";
 import {
@@ -277,7 +284,7 @@ type CombatStats = {
   magicPenetrationPercent?: number;
   damageBonusPercent?: number;
 };
-type CombatStatKey = keyof CombatStats;
+type CombatStatKey = PlayerCombatStatUpgradeKey;
 type JobClass = "warrior" | "archer" | "mage" | "rogue";
 // Soul trials use their own fixed combat identity instead of any saved role.
 const SOUL_TRIAL_JOB_CLASS: JobClass = "warrior";
@@ -1717,15 +1724,15 @@ function combatStatsBase(value?: Partial<CombatStats>): CombatStats {
   return {
     critRate:
       typeof value?.critRate === "number"
-        ? Math.min(100, Math.max(0, value.critRate))
+        ? capPlayerCombatStatUpgradeValue("critRate", value.critRate)
         : defaultCombatStats.critRate,
     critDamage:
       typeof value?.critDamage === "number"
-        ? value.critDamage
+        ? capPlayerCombatStatUpgradeValue("critDamage", value.critDamage)
         : defaultCombatStats.critDamage,
     dodgeRate:
       typeof value?.dodgeRate === "number"
-        ? Math.min(100, Math.max(0, value.dodgeRate))
+        ? capPlayerCombatStatUpgradeValue("dodgeRate", value.dodgeRate)
         : defaultCombatStats.dodgeRate,
     castSpeedPercent:
       typeof value?.castSpeedPercent === "number"
@@ -1915,8 +1922,30 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
   return growth;
 }
 
-function formatLevelGrowth(jobClass: JobClass, levelUps: number) {
+function formatLevelGrowth(
+  jobClass: JobClass,
+  levelUps: number,
+  currentCombatStats: CombatStats = defaultCombatStats
+) {
   const growth = getLevelGrowth(jobClass, levelUps);
+  const currentCritRate = capPlayerCombatStatUpgradeValue(
+    "critRate",
+    currentCombatStats.critRate
+  );
+  const currentCritDamage = capPlayerCombatStatUpgradeValue(
+    "critDamage",
+    currentCombatStats.critDamage
+  );
+  const actualCritRateGrowth =
+    capPlayerCombatStatUpgradeValue(
+      "critRate",
+      currentCritRate + (growth.combat.critRate ?? 0)
+    ) - currentCritRate;
+  const actualCritDamageGrowth =
+    capPlayerCombatStatUpgradeValue(
+      "critDamage",
+      currentCritDamage + (growth.combat.critDamage ?? 0)
+    ) - currentCritDamage;
   const parts = [
     growth.abilities.health ? `生命 +${growth.abilities.health}` : "",
     growth.abilities.strength ? `力量 +${growth.abilities.strength}` : "",
@@ -1924,8 +1953,8 @@ function formatLevelGrowth(jobClass: JobClass, levelUps: number) {
     growth.abilities.intelligence
       ? `智力 +${growth.abilities.intelligence}`
       : "",
-    growth.combat.critRate ? `暴擊率 +${growth.combat.critRate}%` : "",
-    growth.combat.critDamage ? `暴擊傷害 +${growth.combat.critDamage}%` : "",
+    actualCritRateGrowth ? `暴擊率 +${actualCritRateGrowth}%` : "",
+    actualCritDamageGrowth ? `暴擊傷害 +${actualCritDamageGrowth}%` : "",
   ].filter(Boolean);
   return parts.join("、");
 }
@@ -1941,9 +1970,14 @@ function getAbilityResetBaseline(jobClass: JobClass, abilityLevel: number) {
     },
     combatStats: {
       ...defaultCombatStats,
-      critRate: defaultCombatStats.critRate + (growth.combat.critRate ?? 0),
-      critDamage:
-        defaultCombatStats.critDamage + (growth.combat.critDamage ?? 0),
+      critRate: capPlayerCombatStatUpgradeValue(
+        "critRate",
+        defaultCombatStats.critRate + (growth.combat.critRate ?? 0)
+      ),
+      critDamage: capPlayerCombatStatUpgradeValue(
+        "critDamage",
+        defaultCombatStats.critDamage + (growth.combat.critDamage ?? 0)
+      ),
       dodgeRate: defaultCombatStats.dodgeRate,
       castSpeedPercent: defaultCombatStats.castSpeedPercent ?? 0,
     },
@@ -2087,12 +2121,14 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
     },
     combatStats: {
       ...state.combatStats,
-      critRate: Math.min(
-        100,
+      critRate: capPlayerCombatStatUpgradeValue(
+        "critRate",
         state.combatStats.critRate + (growth.combat.critRate ?? 0)
       ),
-      critDamage:
-        state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
+      critDamage: capPlayerCombatStatUpgradeValue(
+        "critDamage",
+        state.combatStats.critDamage + (growth.combat.critDamage ?? 0)
+      ),
     },
     currentHealth: state.currentHealth + growth.abilities.health,
     weeklyStats,
@@ -2429,15 +2465,24 @@ function loadState(): AppState {
       combatStats: {
         critRate:
           typeof parsed.combatStats?.critRate === "number"
-            ? Math.min(100, Math.max(0, parsed.combatStats.critRate))
+            ? capPlayerCombatStatUpgradeValue(
+                "critRate",
+                parsed.combatStats.critRate
+              )
             : defaultCombatStats.critRate,
         critDamage:
           typeof parsed.combatStats?.critDamage === "number"
-            ? parsed.combatStats.critDamage
+            ? capPlayerCombatStatUpgradeValue(
+                "critDamage",
+                parsed.combatStats.critDamage
+              )
             : defaultCombatStats.critDamage,
         dodgeRate:
           typeof parsed.combatStats?.dodgeRate === "number"
-            ? Math.min(100, Math.max(0, parsed.combatStats.dodgeRate))
+            ? capPlayerCombatStatUpgradeValue(
+                "dodgeRate",
+                parsed.combatStats.dodgeRate
+              )
             : defaultCombatStats.dodgeRate,
       },
       archerDodgeFailStacks: normalizeArcherDodgeFailStacks(
@@ -3779,12 +3824,16 @@ export default function Home() {
       }),
       { critRate: 0, critDamage: 0, dodgeRate: 0 }
     );
-  const normalDodgeRate =
-    combatStatsBase(state.combatStats).dodgeRate +
-    (classDefinition.combat.dodgeRate ?? 0) +
-    (equipmentBonuses.combat.dodgeRate ?? 0) +
-    (activeLegendarySetBonuses.night ? 10 : 0) +
-    specializationPassiveBonuses.dodgeRate;
+  const normalDodgeRate = getEffectiveCombatStatWithBonuses(
+    "dodgeRate",
+    state.combatStats.dodgeRate,
+    [
+      classDefinition.combat.dodgeRate ?? 0,
+      equipmentBonuses.combat.dodgeRate ?? 0,
+      activeLegendarySetBonuses.night ? 10 : 0,
+      specializationPassiveBonuses.dodgeRate,
+    ]
+  );
   const archerSkillCritDamageBonus =
     isArcher && state.abilities.intelligence >= 5
       ? 30 + (skillUpgradeLevels["archer-5"] ?? 0) * 5
@@ -3794,17 +3843,26 @@ export default function Home() {
       ? 0
       : Math.min(
           100,
-          combatStatsBase(state.combatStats).critRate +
-            (classDefinition.combat.critRate ?? 0) +
-            (equipmentBonuses.combat.critRate ?? 0) +
-            specializationPassiveBonuses.critRate
+          getEffectiveCombatStatWithBonuses(
+            "critRate",
+            state.combatStats.critRate,
+            [
+              classDefinition.combat.critRate ?? 0,
+              equipmentBonuses.combat.critRate ?? 0,
+              specializationPassiveBonuses.critRate,
+            ]
+          )
         ),
-    critDamage:
-      combatStatsBase(state.combatStats).critDamage +
-      (classDefinition.combat.critDamage ?? 0) +
-      (equipmentBonuses.combat.critDamage ?? 0) +
-      archerSkillCritDamageBonus +
-      specializationPassiveBonuses.critDamage,
+    critDamage: getEffectiveCombatStatWithBonuses(
+      "critDamage",
+      state.combatStats.critDamage,
+      [
+        classDefinition.combat.critDamage ?? 0,
+        equipmentBonuses.combat.critDamage ?? 0,
+        archerSkillCritDamageBonus,
+        specializationPassiveBonuses.critDamage,
+      ]
+    ),
     dodgeRate: isArcher
       ? getArcherEffectiveDodgeRate(
           normalDodgeRate,
@@ -5281,18 +5339,22 @@ export default function Home() {
       return;
     }
     const increment = getAbilityPointCombatGain(key);
-    const nextValue =
-      key === "critDamage"
-        ? currentValue + increment
-        : Math.min(100, currentValue + increment);
+    const nextValue = getNextPlayerCombatStatUpgradeValue(
+      key,
+      currentValue,
+      increment
+    );
+    if (nextValue === currentValue) {
+      showToast(
+        `${label} 已達升級上限 ${PLAYER_COMBAT_STAT_UPGRADE_CAPS[key]}%`
+      );
+      return;
+    }
     if (state.abilityPoints <= 0) {
       showToast("目前沒有可用的能力點數，繼續升級來獲得更多點數");
       return;
     }
-    if (nextValue === currentValue) {
-      showToast(`${label} 已達到 100% 上限`);
-      return;
-    }
+    const actualIncrease = Number((nextValue - currentValue).toFixed(1));
     setState(previous => ({
       ...previous,
       abilityPoints: previous.abilityPoints - 1,
@@ -5301,7 +5363,9 @@ export default function Home() {
         [key]: nextValue,
       },
     }));
-    showToast(`${label} +${increment}%（50%戰鬥效益），能力點數已使用`);
+    showToast(
+      `${label} +${actualIncrease}%（50%戰鬥效益），能力點數已使用`
+    );
   };
 
   const toggleEquipItem = (item: EquipmentItem) => {
@@ -8378,7 +8442,7 @@ export default function Home() {
         };
       });
       showToast(
-        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrops.length ? ` · 掉落${lootDrops.map(item => item.name).join("、")}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${levelUps * GAME_RULES.progression.abilityPointsPerLevel} 點能力點與 ${levelUps} 點技能升級點數` : ""}`
+        `擊倒${monster.name}！+${xpReward} XP、+${monster.reward} 金幣${lootDrops.length ? ` · 掉落${lootDrops.map(item => item.name).join("、")}` : ""}${levelUps > 0 ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps, state.combatStats)} · 獲得 ${levelUps * GAME_RULES.progression.abilityPointsPerLevel} 點能力點與 ${levelUps} 點技能升級點數` : ""}`
       );
       return;
     }
@@ -10712,7 +10776,7 @@ export default function Home() {
           : "";
       const levelUpMessage =
         levelUps > 0
-          ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps)} · 獲得 ${earnedAbilityPoints} 點能力點與 ${levelUps} 點技能升級點數`
+          ? ` · 升級：${formatLevelGrowth(state.jobClass, levelUps, state.combatStats)} · 獲得 ${earnedAbilityPoints} 點能力點與 ${levelUps} 點技能升級點數`
           : "";
       showToast(
         newLines > bingoLines.length
@@ -12394,13 +12458,18 @@ export default function Home() {
                         ? "不可暴擊"
                         : `${effectiveCombatStats.critRate.toFixed(1)}%`}
                     </strong>
-                    <small>{isMage ? "法師固定無法暴擊" : "+0.5%／點"}</small>
+                    <small>
+                      {isMage
+                        ? "法師固定無法暴擊"
+                        : `升級值 ${combatStats.critRate.toFixed(1)}% / ${PLAYER_COMBAT_STAT_UPGRADE_CAPS.critRate}% · +0.5%／點`}
+                    </small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={
                         isMage ||
                         state.abilityPoints <= 0 ||
-                        combatStats.critRate >= 100
+                        combatStats.critRate >=
+                          PLAYER_COMBAT_STAT_UPGRADE_CAPS.critRate
                       }
                       onClick={() => upgradeCombatStat("critRate", "暴擊率")}
                       aria-label="升級暴擊率"
@@ -12411,10 +12480,16 @@ export default function Home() {
                   <div className="combat-stat">
                     <span>暴擊傷害</span>
                     <strong>{effectiveCombatStats.critDamage}%</strong>
-                    <small>+1.25%／點</small>
+                    <small>
+                      升級值 {combatStats.critDamage}% / {PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage}% · +1.25%／點
+                    </small>
                     <button
                       className="combat-stat-upgrade"
-                      disabled={state.abilityPoints <= 0}
+                      disabled={
+                        state.abilityPoints <= 0 ||
+                        combatStats.critDamage >=
+                          PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage
+                      }
                       onClick={() =>
                         upgradeCombatStat("critDamage", "暴擊傷害")
                       }
@@ -12433,11 +12508,15 @@ export default function Home() {
                   <div className="combat-stat">
                     <span>閃避率</span>
                     <strong>{effectiveCombatStats.dodgeRate}%</strong>
-                    <small>+0.5%／點</small>
+                    <small>
+                      升級值 {combatStats.dodgeRate}% / {PLAYER_COMBAT_STAT_UPGRADE_CAPS.dodgeRate}% · +0.5%／點
+                    </small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={
-                        state.abilityPoints <= 0 || combatStats.dodgeRate >= 100
+                        state.abilityPoints <= 0 ||
+                        combatStats.dodgeRate >=
+                          PLAYER_COMBAT_STAT_UPGRADE_CAPS.dodgeRate
                       }
                       onClick={() => upgradeCombatStat("dodgeRate", "閃避率")}
                       aria-label="升級閃避率"
