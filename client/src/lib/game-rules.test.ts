@@ -4,6 +4,8 @@ import { GAME_RULES } from "./game-rules";
 describe("centralized game rules", () => {
   it("keeps the current progression and recovery rules", () => {
     expect(GAME_RULES.progression.xpPerLevel).toBe(250);
+    expect(GAME_RULES.progression.abilityPointsPerLevel).toBe(3);
+    expect(GAME_RULES.abilityPoints.combatEffectivenessPercent).toBe(50);
     expect(GAME_RULES.intelligence.xpBonusPerPointPercent).toBe(0.5);
     expect(GAME_RULES.intelligence.maxXpBonusPercent).toBe(50);
     expect(GAME_RULES.health.recoveryPercent).toBe(0.015);

@@ -42,6 +42,21 @@ describe("weekly stats", () => {
     });
   });
 
+  it("preserves half-point ability changes when normalizing and subtracting", () => {
+    const date = new Date(2026, 9, 21);
+    const current = addWeeklyStats(createWeeklyStats(date), {
+      abilitiesGained: { strength: 0.5, intelligence: 0.5 },
+    }, date);
+    expect(normalizeWeeklyStats(current, date).abilitiesGained).toMatchObject({
+      strength: 0.5,
+      intelligence: 0.5,
+    });
+    const reversed = subtractWeeklyStats(current, {
+      abilitiesGained: { strength: 0.5 },
+    }, date);
+    expect(reversed.abilitiesGained.strength).toBe(0);
+  });
+
   it("reverses only recorded contributions without going below zero", () => {
     const date = new Date(2026, 9, 21);
     const current = addWeeklyStats(createWeeklyStats(date), {
@@ -90,7 +105,7 @@ describe("weekly stats", () => {
       monstersDefeated: 3,
       levelsGained: 0,
       coinsEarned: 80,
-      abilitiesGained: { health: 10, strength: 0 },
+      abilitiesGained: { health: 10.4, strength: 0 },
       reportShownWeekKey: getWeeklyStatsKey(date),
     });
   });
