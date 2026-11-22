@@ -169,13 +169,16 @@ describe("QuestBoard loot", () => {
     }
   });
 
-  it("assigns unique five-point ordinary and fifteen-point excellent equipment packages", () => {
+  it("assigns unique five-point ordinary, ten-point excellent, and twenty-point rare equipment packages", () => {
     const ordinary = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "普通");
     const excellent = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "精良");
+    const rare = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "稀有");
     expect(ordinary).toHaveLength(90);
     expect(excellent).toHaveLength(90);
+    expect(rare).toHaveLength(90);
     expect(new Set(ordinary.map(item => item.bonus)).size).toBe(90);
     expect(new Set(excellent.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(rare.map(item => item.bonus)).size).toBe(90);
     const pointCost = (bonus: string) =>
       bonus.split(" · ").reduce((total, part) => {
         const [, stat, raw] = part.match(/^(生命|力量|防禦|智力|暴擊率|暴擊傷害|閃避率|施法速度) \+(\d+(?:\.\d+)?)%?$/) ?? [];
@@ -189,12 +192,13 @@ describe("QuestBoard loot", () => {
       }, 0);
     expect(ordinary.every(item => pointCost(item.bonus) === 5)).toBe(true);
     expect(excellent.every(item => pointCost(item.bonus) === 10)).toBe(true);
+    expect(rare.every(item => pointCost(item.bonus) === 20)).toBe(true);
     expect(
-      [...ordinary, ...excellent].filter(item => item.slot === "武器" && item.weaponType === "法杖")
+      [...ordinary, ...excellent, ...rare].filter(item => item.slot === "武器" && item.weaponType === "法杖")
         .every(item => item.bonus.includes("施法速度") && !item.bonus.includes("暴擊率") && !item.bonus.includes("暴擊傷害"))
     ).toBe(true);
     expect(
-      [...ordinary, ...excellent].filter(item => item.slot === "武器" && item.weaponType !== "法杖")
+      [...ordinary, ...excellent, ...rare].filter(item => item.slot === "武器" && item.weaponType !== "法杖")
         .every(item => item.bonus.includes("暴擊率") && item.bonus.includes("暴擊傷害"))
     ).toBe(true);
   });
@@ -212,7 +216,7 @@ describe("QuestBoard loot", () => {
     expect(
       setCopies.every(
         (item, index) =>
-          item.rarity === "普通" || item.rarity === "精良" || item.bonus === originals[index].bonus
+          item.rarity === "普通" || item.rarity === "精良" || item.rarity === "稀有" || item.bonus === originals[index].bonus
       )
     ).toBe(true);
     expect(setCopies.filter(item => item.rarity === "普通")).toHaveLength(45);
