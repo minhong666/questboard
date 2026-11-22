@@ -188,7 +188,7 @@ describe("QuestBoard loot", () => {
         return total + value / divisor[stat];
       }, 0);
     expect(ordinary.every(item => pointCost(item.bonus) === 5)).toBe(true);
-    expect(excellent.every(item => pointCost(item.bonus) === 15)).toBe(true);
+    expect(excellent.every(item => pointCost(item.bonus) === 10)).toBe(true);
     expect(
       [...ordinary, ...excellent].filter(item => item.slot === "武器" && item.weaponType === "法杖")
         .every(item => item.bonus.includes("施法速度") && !item.bonus.includes("暴擊率") && !item.bonus.includes("暴擊傷害"))
@@ -358,7 +358,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("生命 +50 · 力量 +4 · 防禦 +6");
+    expect(item.bonus).toBe("生命 +30 · 力量 +3 · 防禦 +4");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");
