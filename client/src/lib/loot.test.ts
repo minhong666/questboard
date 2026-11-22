@@ -169,10 +169,13 @@ describe("QuestBoard loot", () => {
     }
   });
 
-  it("assigns five unique ability-point packages to all ordinary equipment", () => {
+  it("assigns unique five-point ordinary and fifteen-point excellent equipment packages", () => {
     const ordinary = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "普通");
+    const excellent = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "精良");
     expect(ordinary).toHaveLength(90);
+    expect(excellent).toHaveLength(90);
     expect(new Set(ordinary.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(excellent.map(item => item.bonus)).size).toBe(90);
     const pointCost = (bonus: string) =>
       bonus.split(" · ").reduce((total, part) => {
         const [, stat, raw] = part.match(/^(生命|力量|防禦|智力|暴擊率|暴擊傷害|閃避率|施法速度) \+(\d+(?:\.\d+)?)%?$/) ?? [];
@@ -185,12 +188,13 @@ describe("QuestBoard loot", () => {
         return total + value / divisor[stat];
       }, 0);
     expect(ordinary.every(item => pointCost(item.bonus) === 5)).toBe(true);
+    expect(excellent.every(item => pointCost(item.bonus) === 15)).toBe(true);
     expect(
-      ordinary.filter(item => item.slot === "武器" && item.weaponType === "法杖")
+      [...ordinary, ...excellent].filter(item => item.slot === "武器" && item.weaponType === "法杖")
         .every(item => item.bonus.includes("施法速度") && !item.bonus.includes("暴擊率") && !item.bonus.includes("暴擊傷害"))
     ).toBe(true);
     expect(
-      ordinary.filter(item => item.slot === "武器" && item.weaponType !== "法杖")
+      [...ordinary, ...excellent].filter(item => item.slot === "武器" && item.weaponType !== "法杖")
         .every(item => item.bonus.includes("暴擊率") && item.bonus.includes("暴擊傷害"))
     ).toBe(true);
   });
@@ -208,10 +212,11 @@ describe("QuestBoard loot", () => {
     expect(
       setCopies.every(
         (item, index) =>
-          item.rarity === "普通" || item.bonus === originals[index].bonus
+          item.rarity === "普通" || item.rarity === "精良" || item.bonus === originals[index].bonus
       )
     ).toBe(true);
     expect(setCopies.filter(item => item.rarity === "普通")).toHaveLength(45);
+    expect(setCopies.filter(item => item.rarity === "精良")).toHaveLength(45);
   });
 
   it("does not duplicate equipment names within the same rarity and slot", async () => {
@@ -353,7 +358,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("生命 +65 · 防禦 +7 · 力量 +6");
+    expect(item.bonus).toBe("生命 +50 · 力量 +4 · 防禦 +6");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");
