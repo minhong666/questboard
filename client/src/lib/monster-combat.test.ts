@@ -19,7 +19,7 @@ describe("monster group combat", () => {
     );
   });
 
-  it("sets each swarm member to half of the monster card values", () => {
+  it("halves swarm stats but preserves the full critical damage multiplier", () => {
     const members = createMonsterGroupMembers("swarm", 100, 3, {
       damage: 21,
       defense: 11,
@@ -39,7 +39,7 @@ describe("monster group combat", () => {
       damage: 11,
       defense: 6,
       critRate: 5,
-      critDamage: 75,
+      critDamage: 150,
       dodgeRate: 4,
       physicalResistancePercent: 13,
       magicResistancePercent: 10,
@@ -47,6 +47,18 @@ describe("monster group combat", () => {
       reflectDamage: 4,
       explosionDamage: 10,
     });
+  });
+
+  it("preserves both configured critical damage endpoints for swarm members", () => {
+    for (const critDamage of [120, 180]) {
+      const members = createMonsterGroupMembers("swarm", 100, 3, {
+        critDamage,
+      });
+
+      expect(members.every(member => member.critDamage === critDamage)).toBe(
+        true
+      );
+    }
   });
 
   it("applies one attack to only one living member", () => {
