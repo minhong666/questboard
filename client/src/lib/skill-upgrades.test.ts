@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { getAllSpecialSkills, getUnlockedSpecialSkills } from "./class-skills";
+import {
+  getAllSpecialSkills,
+  getUnlockedSpecialSkills,
+} from "./class-skills";
+import {
+  getAllSpecializationSkills,
+  getAllSpecializations,
+} from "./class-specializations";
 import {
   applySkillUpgrade,
   getSkillUpgradePointsForLevelUps,
   getNextSkillUpgradePreview,
+  isSkillUpgradeable,
   MAX_SKILL_UPGRADE_LEVEL,
   normalizeSkillUpgradeLevels,
   normalizeSkillUpgradeState,
@@ -32,61 +40,102 @@ describe("skill upgrades", () => {
     });
   });
 
-  it("increases damage skill power without changing its unlock requirement", () => {
+  it("increases damage skill power by 2.5% per upgrade level", () => {
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     const upgraded = applySkillUpgrade(skill, 2);
     expect(upgraded.requiredValue).toBe(skill.requiredValue);
-    expect(upgraded.damageMultiplier).toBeCloseTo(skill.damageMultiplier * 1.1);
+    expect(upgraded.damageMultiplier).toBeCloseTo(skill.damageMultiplier * 1.05);
     expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent);
     expect(upgraded.description).toContain("技能升級 Lv.2");
   });
 
-  it("only increases defense penetration when the effect description declares it", () => {
+  it("keeps defense penetration fixed at every skill upgrade level", () => {
     const skill = getUnlockedSpecialSkills("warrior", 50, 0)[1];
     const declaredPierceSkill = {
       ...skill,
-      description: `${skill.description} 防禦穿透 ${skill.defensePiercePercent}%。`,
+      defensePiercePercent: 42,
+      description: `${skill.description} 防禦穿透 42%。`,
     };
-    const upgraded = applySkillUpgrade(declaredPierceSkill, 2);
-    expect(upgraded.defensePiercePercent).toBe(skill.defensePiercePercent + 4);
+    const upgraded = applySkillUpgrade(
+      declaredPierceSkill,
+      MAX_SKILL_UPGRADE_LEVEL
+    );
+    expect(upgraded.defensePiercePercent).toBe(42);
   });
 
-  it("adds one percent to each buff effect per upgrade level", () => {
+  it("adds 0.5 percentage points to each buff effect per upgrade level", () => {
     const skill = getUnlockedSpecialSkills("warrior", 25, 0)[0];
     const upgraded = applySkillUpgrade(skill, 3);
-    expect(upgraded.damageBonusPercent).toBe(23);
-    expect(upgraded.damageReductionPercent).toBe(23);
+    expect(upgraded.damageBonusPercent).toBe(21.5);
+    expect(upgraded.damageReductionPercent).toBe(21.5);
   });
 
-  it("caps upgraded defense penetration at 60%", () => {
-    const skill = getUnlockedSpecialSkills("rogue", 0, 0, 0, 225)[2];
-    const upgraded = applySkillUpgrade(skill, MAX_SKILL_UPGRADE_LEVEL);
-    expect(skill.defensePiercePercent).toBe(60);
-    expect(upgraded.defensePiercePercent).toBe(60);
+  it("scales reduction on damage skills by 0.5 percentage points per level", () => {
+    const guardian = getAllSpecializations().find(
+      specialization => specialization.id === "warrior-guardian"
+    )!;
+    const judgment = getAllSpecializationSkills(guardian)[1];
+    const upgraded = applySkillUpgrade(judgment, 3);
+
+    expect(judgment.effectType).toBe("damage");
+    expect(judgment.damageReductionPercent).toBe(20);
+    expect(upgraded.damageReductionPercent).toBe(21.5);
+    const judgmentWithDamageBonus = {
+      ...judgment,
+      damageBonusPercent: 8,
+    };
+    expect(
+      applySkillUpgrade(judgmentWithDamageBonus, 3).damageBonusPercent
+    ).toBe(9.5);
+    expect(upgraded.damageMultiplier).toBeCloseTo(
+      judgment.damageMultiplier * 1.075
+    );
   });
 
   it("previews the next damage level from the base skill, not the upgraded value", () => {
     const baseSkill = getUnlockedSpecialSkills("archer", 0, 0, 10)[1];
     const currentSkill = applySkillUpgrade(baseSkill, 4);
     const nextSkill = getNextSkillUpgradePreview(baseSkill, 4);
-
-    expect(currentSkill.damageMultiplier).toBeCloseTo(1.92);
-    expect(nextSkill?.damageMultiplier).toBeCloseTo(2);
+    expect(currentSkill.damageMultiplier).toBeCloseTo(1.76);
+    expect(nextSkill?.damageMultiplier).toBeCloseTo(1.8);
     expect(nextSkill?.damageMultiplier).not.toBeCloseTo(2.4);
-    expect(nextSkill?.defensePiercePercent).toBe(40);
+    expect(nextSkill?.defensePiercePercent).toBe(baseSkill.defensePiercePercent);
   });
 
-  it("previews buff and passive values using their actual next-level formulas", () => {
-    const warriorBuff = getUnlockedSpecialSkills("warrior", 25, 0)[0];
-    const nextBuff = getNextSkillUpgradePreview(warriorBuff, 4);
-    expect(applySkillUpgrade(warriorBuff, 4).damageBonusPercent).toBe(24);
-    expect(nextBuff?.damageBonusPercent).toBe(25);
-    expect(nextBuff?.damageReductionPercent).toBe(25);
-
+  it("keeps critical-damage passives fixed and prevents their upgrade preview", () => {
     const archerPassive = getUnlockedSpecialSkills("archer", 0, 0, 5)[0];
-    const nextPassive = getNextSkillUpgradePreview(archerPassive, 4);
-    expect(applySkillUpgrade(archerPassive, 4).critDamageBonusPercent).toBe(50);
-    expect(nextPassive?.critDamageBonusPercent).toBe(55);
+    expect(isSkillUpgradeable(archerPassive)).toBe(false);
+    expect(applySkillUpgrade(archerPassive, 4)).toEqual(archerPassive);
+    expect(applySkillUpgrade(archerPassive, MAX_SKILL_UPGRADE_LEVEL)).toEqual(
+      archerPassive
+    );
+    expect(getNextSkillUpgradePreview(archerPassive, 0)).toBeNull();
+    expect(getNextSkillUpgradePreview(archerPassive, 4)).toBeNull();
+  });
+
+  it("refunds legacy upgrade points spent on every passive skill", () => {
+    const passiveSkillIds = [
+      ...getAllSpecialSkills("archer"),
+      ...getAllSpecializations().flatMap(specialization =>
+        getAllSpecializationSkills(specialization)
+      ),
+    ]
+      .filter(skill => skill.effectType === "passive")
+      .map(skill => skill.id);
+    const legacyPassiveLevels = Object.fromEntries(
+      passiveSkillIds.map(skillId => [skillId, 2])
+    );
+    const normalized = normalizeSkillUpgradeState({
+      ...legacyPassiveLevels,
+      "warrior-50": 3,
+    });
+
+    expect(passiveSkillIds).toContain("archer-5");
+    expect(normalized.refundedPoints).toBe(passiveSkillIds.length * 2);
+    expect(normalized.levels).toEqual({ "warrior-50": 3 });
+  });
+
+  it("returns no next-level preview at the upgrade cap", () => {
     expect(
       getNextSkillUpgradePreview(getAllSpecialSkills("warrior")[0], MAX_SKILL_UPGRADE_LEVEL)
     ).toBeNull();

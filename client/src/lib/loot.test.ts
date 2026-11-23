@@ -169,6 +169,52 @@ describe("QuestBoard loot", () => {
     }
   });
 
+  it("assigns unique point-budget packages for all six equipment rarities", () => {
+    const ordinary = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "普通");
+    const excellent = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "精良");
+    const rare = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "稀有");
+    const epic = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "史詩");
+    const legendary = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "傳說");
+    const mythic = RPG_EQUIPMENT_TEMPLATES.filter(item => item.rarity === "神話");
+    expect(ordinary).toHaveLength(90);
+    expect(excellent).toHaveLength(90);
+    expect(rare).toHaveLength(90);
+    expect(epic).toHaveLength(90);
+    expect(legendary).toHaveLength(90);
+    expect(mythic).toHaveLength(90);
+    expect(new Set(ordinary.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(excellent.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(rare.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(epic.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(legendary.map(item => item.bonus)).size).toBe(90);
+    expect(new Set(mythic.map(item => item.bonus)).size).toBe(90);
+    const pointCost = (bonus: string) =>
+      bonus.split(" · ").reduce((total, part) => {
+        const [, stat, raw] = part.match(/^(生命|力量|防禦|智力|暴擊率|暴擊傷害|閃避率|施法速度) \+(\d+(?:\.\d+)?)%?$/) ?? [];
+        if (!stat || !raw) throw new Error(`Unrecognized equipment bonus: ${part}`);
+        const value = Number(raw);
+        const divisor: Record<string, number> = {
+          生命: 10, 力量: 1, 防禦: 1, 智力: 1,
+          暴擊率: 0.5, 暴擊傷害: 1, 閃避率: 0.5, 施法速度: 2,
+        };
+        return total + value / divisor[stat];
+      }, 0);
+    expect(ordinary.every(item => pointCost(item.bonus) === 10)).toBe(true);
+    expect(excellent.every(item => pointCost(item.bonus) === 15)).toBe(true);
+    expect(rare.every(item => pointCost(item.bonus) === 30)).toBe(true);
+    expect(epic.every(item => pointCost(item.bonus) === 40)).toBe(true);
+    expect(legendary.every(item => pointCost(item.bonus) === 55)).toBe(true);
+    expect(mythic.every(item => pointCost(item.bonus) === 65)).toBe(true);
+    expect(
+      [...ordinary, ...excellent, ...rare, ...epic, ...legendary, ...mythic].filter(item => item.slot === "武器" && item.weaponType === "法杖")
+        .every(item => item.bonus.includes("施法速度") && !item.bonus.includes("暴擊率") && !item.bonus.includes("暴擊傷害"))
+    ).toBe(true);
+    expect(
+      [...ordinary, ...excellent, ...rare, ...epic, ...legendary, ...mythic].filter(item => item.slot === "武器" && item.weaponType !== "法杖")
+        .every(item => item.bonus.includes("暴擊率") && item.bonus.includes("暴擊傷害"))
+    ).toBe(true);
+  });
+
   it("keeps the original database equipment and adds six named set copies", async () => {
     const module = await import("./equipment-database");
     const originals = module.RPG_EQUIPMENT_TEMPLATES.slice(0, 270);
@@ -180,8 +226,13 @@ describe("QuestBoard loot", () => {
     ).toBe(true);
     expect(new Set(setCopies.map(item => item.setId)).size).toBe(36);
     expect(
-      setCopies.every((item, index) => item.bonus === originals[index].bonus)
+      setCopies.every(
+        (item, index) =>
+          item.rarity === "普通" || item.rarity === "精良" || item.rarity === "稀有" || item.rarity === "史詩" || item.rarity === "傳說" || item.rarity === "神話" || item.bonus === originals[index].bonus
+      )
     ).toBe(true);
+    expect(setCopies.filter(item => item.rarity === "普通")).toHaveLength(45);
+    expect(setCopies.filter(item => item.rarity === "精良")).toHaveLength(45);
   });
 
   it("does not duplicate equipment names within the same rarity and slot", async () => {
@@ -323,7 +374,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("生命 +65 · 防禦 +7 · 力量 +6");
+    expect(item.bonus).toBe("生命 +50 · 力量 +4 · 防禦 +6");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");

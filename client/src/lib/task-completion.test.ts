@@ -40,12 +40,12 @@ describe("task completion rollback", () => {
     expect(getTaskCompletionRollback(resources, receipt)).toEqual({
       totalXp: 340,
       coins: 40,
-      abilityPoints: 2,
+      abilityPoints: 4,
       skillUpgradePoints: 1,
       lootIdsToRemove: ["loot-1"],
       totalXpToRemove: 160,
       coinsToRemove: 160,
-      abilityPointsToRemove: 10,
+      abilityPointsToRemove: 8,
       skillUpgradePointsToRemove: 1,
     });
   });
@@ -53,7 +53,7 @@ describe("task completion rollback", () => {
   it.each([
     ["XP", { ...resources, totalXp: 159 }],
     ["金幣", { ...resources, coins: 159 }],
-    ["能力點", { ...resources, abilityPoints: 9 }],
+    ["能力點", { ...resources, abilityPoints: 7 }],
     ["技能點", { ...resources, skillUpgradePoints: 0 }],
     ["已不在背包的寶箱物品", { ...resources, inventoryIds: ["other-loot"] }],
     ["已裝備的寶箱物品", { ...resources, equippedItemIds: ["loot-1"] }],

@@ -36,6 +36,12 @@ function safeInteger(value: unknown) {
     : 0;
 }
 
+function safeNonNegativeNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
 export function getWeeklyStatsKey(date: Date) {
   const monday = new Date(date);
   const day = monday.getDay();
@@ -71,10 +77,10 @@ export function normalizeWeeklyStats(value: unknown, date: Date) {
     levelsGained: safeInteger(entry.levelsGained),
     coinsEarned: safeInteger(entry.coinsEarned),
     abilitiesGained: {
-      health: safeInteger(abilities.health),
-      strength: safeInteger(abilities.strength),
-      defense: safeInteger(abilities.defense),
-      intelligence: safeInteger(abilities.intelligence),
+      health: safeNonNegativeNumber(abilities.health),
+      strength: safeNonNegativeNumber(abilities.strength),
+      defense: safeNonNegativeNumber(abilities.defense),
+      intelligence: safeNonNegativeNumber(abilities.intelligence),
     },
     reportShownWeekKey:
       entry.reportShownWeekKey === fallback.weekKey
@@ -98,11 +104,16 @@ export function addWeeklyStats(
     levelsGained: base.levelsGained + safeInteger(changes.levelsGained),
     coinsEarned: base.coinsEarned + safeInteger(changes.coinsEarned),
     abilitiesGained: {
-      health: base.abilitiesGained.health + safeInteger(abilities.health),
-      strength: base.abilitiesGained.strength + safeInteger(abilities.strength),
-      defense: base.abilitiesGained.defense + safeInteger(abilities.defense),
+      health:
+        base.abilitiesGained.health + safeNonNegativeNumber(abilities.health),
+      strength:
+        base.abilitiesGained.strength +
+        safeNonNegativeNumber(abilities.strength),
+      defense:
+        base.abilitiesGained.defense + safeNonNegativeNumber(abilities.defense),
       intelligence:
-        base.abilitiesGained.intelligence + safeInteger(abilities.intelligence),
+        base.abilitiesGained.intelligence +
+        safeNonNegativeNumber(abilities.intelligence),
     },
   } satisfies WeeklyStats;
 }
@@ -135,19 +146,21 @@ export function subtractWeeklyStats(
     abilitiesGained: {
       health: Math.max(
         0,
-        base.abilitiesGained.health - safeInteger(abilities.health)
+        base.abilitiesGained.health - safeNonNegativeNumber(abilities.health)
       ),
       strength: Math.max(
         0,
-        base.abilitiesGained.strength - safeInteger(abilities.strength)
+        base.abilitiesGained.strength -
+          safeNonNegativeNumber(abilities.strength)
       ),
       defense: Math.max(
         0,
-        base.abilitiesGained.defense - safeInteger(abilities.defense)
+        base.abilitiesGained.defense - safeNonNegativeNumber(abilities.defense)
       ),
       intelligence: Math.max(
         0,
-        base.abilitiesGained.intelligence - safeInteger(abilities.intelligence)
+        base.abilitiesGained.intelligence -
+          safeNonNegativeNumber(abilities.intelligence)
       ),
     },
   } satisfies WeeklyStats;

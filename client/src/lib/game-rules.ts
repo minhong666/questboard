@@ -5,6 +5,10 @@
 export const GAME_RULES = {
   progression: {
     xpPerLevel: 300,
+    abilityPointsPerLevel: 3,
+  },
+  abilityPoints: {
+    combatEffectivenessPercent: 50,
   },
   intelligence: {
     xpBonusPerPointPercent: 0.5,

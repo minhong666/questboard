@@ -93,6 +93,13 @@ export function getSpecializations(jobClass: JobClass) {
   return SPECIALIZATIONS.filter(item => item.jobClass === jobClass);
 }
 
+export function getAllSpecializations(): ClassSpecialization[] {
+  return SPECIALIZATIONS.map(specialization => ({
+    ...specialization,
+    skillNames: [...specialization.skillNames],
+  }));
+}
+
 export function getDefaultSpecialization(jobClass: JobClass): SpecializationId {
   return getSpecializations(jobClass)[0]?.id ?? "warrior-guardian";
 }

@@ -4422,6 +4422,19 @@ h2 {
   justify-content: center;
   margin-top: 17px;
 }
+.battle-escape-button {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+.battle-escape-note {
+  display: block;
+  margin-top: 6px;
+  color: #8491ac;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
 .battle-report-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
