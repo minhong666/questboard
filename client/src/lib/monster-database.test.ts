@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADDITIONAL_MINOR_MONSTER_CATALOG,
   DAILY_MONSTER_CATALOG,
-  getSmallMonsterCritRateMultiplier,
+  getDailyMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
@@ -66,11 +66,18 @@ describe("daily monster catalog", () => {
     expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
   });
 
-  it("uses a separate crit-rate multiplier and never scales dodge rate", () => {
-    expect(getSmallMonsterCritRateMultiplier(1)).toBe(1);
-    expect(getSmallMonsterCritRateMultiplier(10)).toBe(1.2);
-    expect(getSmallMonsterCritRateMultiplier(20)).toBe(1.3);
-    expect(getSmallMonsterCritRateMultiplier(100)).toBe(2.1);
-    expect(getSmallMonsterCritRateMultiplier(150)).toBe(2.1);
+  it("assigns each daily monster stable, varied crit stats within the configured ranges", () => {
+    const stats = DAILY_MONSTER_CATALOG.map((_, catalogIndex) =>
+      getDailyMonsterCritStats("small-2026-10-21", catalogIndex)
+    );
+    const sameMonster = getDailyMonsterCritStats("small-2026-10-21", 0);
+    const nextDayMonster = getDailyMonsterCritStats("small-2026-10-22", 0);
+
+    expect(stats.every(({ critRate }) => critRate >= 10 && critRate <= 50)).toBe(true);
+    expect(stats.every(({ critDamage }) => critDamage >= 120 && critDamage <= 180)).toBe(true);
+    expect(new Set(stats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
+    expect(new Set(stats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
+    expect(getDailyMonsterCritStats("small-2026-10-21", 0)).toEqual(sameMonster);
+    expect(nextDayMonster).not.toEqual(sameMonster);
   });
 });

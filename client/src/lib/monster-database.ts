@@ -21,13 +21,6 @@ export function getSmallMonsterStatMultiplier(level: number): number {
   return Math.min(3.75, 1.5 + Math.floor((safeLevel - 10) / 10) * 0.25);
 }
 
-/** 小怪暴擊率倍率每 10 級增加 0.1，Lv.100 以上固定使用 Lv.100 倍率。 */
-export function getSmallMonsterCritRateMultiplier(level: number): number {
-  const safeLevel = Math.max(1, Math.floor(level));
-  if (safeLevel < 10) return 1;
-  return Math.min(2.1, 1.2 + Math.floor((safeLevel - 10) / 10) * 0.1);
-}
-
 export function getMonsterMechanicLabels(
   monster: Pick<MonsterMechanicDefinition, "physicalResistancePercent" | "magicResistancePercent" | "dodgeIgnorePercent" | "lifestealPercent" | "explosionDamage" | "reflectDamage">
 ): string[] {
@@ -184,6 +177,15 @@ function stableHash(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+/** 每隻每日小怪各自取得固定於當日的暴擊數值，避免重整時變動。 */
+export function getDailyMonsterCritStats(refreshKey: string, catalogIndex: number) {
+  const seed = `${refreshKey}:${catalogIndex}`;
+  return {
+    critRate: 10 + (stableHash(`${seed}:crit-rate`) % 41),
+    critDamage: 120 + (stableHash(`${seed}:crit-damage`) % 61),
+  };
 }
 
 export function selectDailyMonsterDefinitions(
