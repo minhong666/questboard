@@ -90,13 +90,20 @@ import {
   ABILITY_POINT_SYSTEM_VERSION,
   LEGACY_ABILITY_POINTS_PER_LEVEL,
   getAbilityPointAttributeGain,
+  getAbilityPointBudgetAfterMigration,
   getAbilityPointCombatGain,
   getLegacyAbilityPointAttributeGain,
   getLegacyAbilityPointCombatGain,
-  getRebalancedAbilityPointBudget,
+  getVersion1AbilityPointAttributeGain,
   type AbilityPointAttribute,
   type AbilityPointCombatStat,
 } from "../lib/ability-point-rules";
+import {
+  getAttackDamage as calculateAttributeAttackDamage,
+  getDefenseReduction as calculateDefenseReduction,
+  getMagicAttackDamage as calculateMagicAttackDamage,
+  getPhysicalAttackDamage as calculatePhysicalAttackDamage,
+} from "../lib/character-combat-stats";
 import {
   capCombinedDamageModifierPercent,
   getCappedDamageBonusMultiplier,
@@ -1842,28 +1849,16 @@ function getAttackDamage(
   abilities: CharacterAbilities,
   jobClass: JobClass = "warrior"
 ) {
-  const primaryStat =
-    jobClass === "mage" ? abilities.intelligence : abilities.strength;
-  return Math.max(
-    1,
-    Math.round(
-      jobClass === "mage"
-        ? primaryStat * 1.5
-        : primaryStat * 1.5 + abilities.intelligence * 0.25
-    )
-  );
+  return calculateAttributeAttackDamage(abilities, jobClass);
 }
 function getPhysicalAttackDamage(abilities: CharacterAbilities) {
-  return Math.max(
-    1,
-    Math.round(abilities.strength * 1.5 + abilities.intelligence * 0.25)
-  );
+  return calculatePhysicalAttackDamage(abilities);
 }
 function getMagicAttackDamage(abilities: CharacterAbilities) {
-  return Math.max(1, Math.round(abilities.intelligence * 1.5));
+  return calculateMagicAttackDamage(abilities);
 }
 function getDefenseReduction(defense: number) {
-  return Math.floor(defense * 0.5);
+  return calculateDefenseReduction(defense);
 }
 const abilityLabels: Record<AbilityKey, string> = {
   health: "生命",
@@ -1988,26 +1983,20 @@ function getAbilityResetBaseline(jobClass: JobClass, abilityLevel: number) {
 
 function getUsedAbilityPointCount(
   state: AppState,
-  rules: "current" | "legacy" = "current"
+  rules: "current" | "version1" | "legacy" = "current"
 ) {
   const baseline = getAbilityResetBaseline(state.jobClass, state.abilityLevel);
+  const getAttributeGain = (key: AbilityPointAttribute) =>
+    rules === "legacy"
+      ? getLegacyAbilityPointAttributeGain(key)
+      : rules === "version1"
+        ? getVersion1AbilityPointAttributeGain(key)
+        : getAbilityPointAttributeGain(key);
   const abilityPointGains: Record<AbilityPointAttribute, number> = {
-    health:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("health")
-        : getAbilityPointAttributeGain("health"),
-    strength:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("strength")
-        : getAbilityPointAttributeGain("strength"),
-    defense:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("defense")
-        : getAbilityPointAttributeGain("defense"),
-    intelligence:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("intelligence")
-        : getAbilityPointAttributeGain("intelligence"),
+    health: getAttributeGain("health"),
+    strength: getAttributeGain("strength"),
+    defense: getAttributeGain("defense"),
+    intelligence: getAttributeGain("intelligence"),
   };
   const countInvestedPoints = (value: number, base: number, gain: number) =>
     Math.max(0, Math.ceil((value - base) / gain - 1e-8));
@@ -2063,13 +2052,18 @@ function migrateAbilityPointSystem(state: AppState): AppState {
   );
   const stateAtCurrentLevel = { ...state, abilityLevel };
   const baseline = getAbilityResetBaseline(state.jobClass, abilityLevel);
-  const legacySpentPoints = getUsedAbilityPointCount(
-    stateAtCurrentLevel,
-    "legacy"
+  const previousRulesVersion = Math.max(
+    0,
+    Math.floor(state.abilityPointRulesVersion)
   );
-  const abilityPoints = getRebalancedAbilityPointBudget({
+  const spentPointsBeforeMigration = getUsedAbilityPointCount(
+    stateAtCurrentLevel,
+    previousRulesVersion >= 1 ? "version1" : "legacy"
+  );
+  const abilityPoints = getAbilityPointBudgetAfterMigration({
+    previousRulesVersion,
     level: abilityLevel,
-    legacySpentPoints,
+    spentPoints: spentPointsBeforeMigration,
     availablePoints: state.abilityPoints,
   });
   const maxHealth = getEffectiveHealthCap(
@@ -2305,7 +2299,7 @@ function loadState(): AppState {
         ? Math.max(0, Math.floor(parsed.abilityPointRulesVersion))
         : 0;
     const pointsPerLevelForSave =
-      storedAbilityPointRulesVersion >= ABILITY_POINT_SYSTEM_VERSION
+      storedAbilityPointRulesVersion >= 1
         ? GAME_RULES.progression.abilityPointsPerLevel
         : LEGACY_ABILITY_POINTS_PER_LEVEL;
     const legacyGrowth = parsed.abilityAutoGrowthApplied
@@ -3999,8 +3993,8 @@ export default function Home() {
       tone: "orange",
       icon: Sword,
       description: isMage
-        ? `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 法術傷害`
-        : `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 物理傷害`,
+        ? "法師攻擊以智力計算；每點力量 +0.5 物理傷害"
+        : `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 物理傷害 · 每點力量 +0.5`,
     },
     {
       key: "defense" as const,
@@ -4008,7 +4002,7 @@ export default function Home() {
       value: effectiveAbilities.defense,
       tone: "blue",
       icon: ShieldCheck,
-      description: `減免 ${getDefenseReduction(effectiveAbilities.defense)} 傷害`,
+      description: `減免 ${getDefenseReduction(effectiveAbilities.defense)} 傷害 · 每點防禦 −0.5`,
     },
     {
       key: "intelligence" as const,
@@ -4016,7 +4010,9 @@ export default function Home() {
       value: effectiveAbilities.intelligence,
       tone: "violet",
       icon: Brain,
-      description: "每級自動 +1",
+      description: isMage
+        ? "每點智力 +0.5 魔法傷害 · 每級自動 +1"
+        : "每級自動 +1 · 僅法師以智力計算魔法傷害",
     },
   ];
   const classAbilities: CharacterAbilities = {
@@ -5327,7 +5323,7 @@ export default function Home() {
       ),
     }));
     showToast(
-      `${label} +${increment}${key === "health" ? " HP" : "（50%戰鬥效益）"}，能力點數已使用`
+      `${label} +${increment}${key === "health" ? " HP" : ""}，能力點數已使用`
     );
   };
 

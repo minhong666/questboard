@@ -22,6 +22,9 @@ export const GAME_RULES = {
     dailySmallMonsterCount: 6,
   },
   combat: {
+    physicalDamagePerStrengthPoint: 0.5,
+    magicDamagePerIntelligencePoint: 0.5,
+    damageReductionPerDefensePoint: 0.5,
     cooldownMinutes: 30,
     deathGoldLossPercent: 50,
   },
