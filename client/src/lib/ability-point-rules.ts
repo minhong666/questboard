@@ -26,7 +26,7 @@ const LEGACY_ATTRIBUTE_GAIN: Record<AbilityPointAttribute, number> = {
 
 const LEGACY_COMBAT_GAIN: Record<AbilityPointCombatStat, number> = {
   critRate: 1,
-  critDamage: 2.5,
+  critDamage: 2,
   dodgeRate: 1,
   castSpeedPercent: 1,
 };

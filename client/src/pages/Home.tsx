@@ -12487,7 +12487,7 @@ export default function Home() {
                     <span>暴擊傷害</span>
                     <strong>{effectiveCombatStats.critDamage}%</strong>
                     <small>
-                      升級值 {combatStats.critDamage}% / {PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage}% · +1.25%／點
+                      升級值 {combatStats.critDamage}% / {PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage}% · +1%／點
                     </small>
                     <button
                       className="combat-stat-upgrade"
@@ -12499,9 +12499,9 @@ export default function Home() {
                       onClick={() =>
                         upgradeCombatStat("critDamage", "暴擊傷害")
                       }
-                      aria-label="升級暴擊傷害，增加1.25%"
+                      aria-label="升級暴擊傷害，增加1%"
                     >
-                      ＋1.25
+                      ＋1
                     </button>
                   </div>
                   <div className="combat-stat">
