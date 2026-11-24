@@ -6754,11 +6754,8 @@ export default function Home() {
               (battleCombatStats.magicPenetrationPercent ?? 0) -
               (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           )
-        : Math.max(
-            0,
-            targetPhysicalResistance -
-              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
-          );
+        : targetPhysicalResistance -
+          (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
     const astralSageSwordArcaneDamage = astralSageSwordBurstTriggered
       ? Math.max(
           1,
@@ -6851,11 +6848,9 @@ export default function Home() {
         ? 0
         : (weaponAbility?.id === "dawn-warden-bow"
             ? dawnBowDamageAgainst(targetGroupMember)
-            : Math.max(
-                1,
-                Math.round(
-                  rawDamageWithMoonStalkerBonus * (1 - resistancePercent / 100)
-                )
+            : applyMonsterResistanceToDamage(
+                rawDamageWithMoonStalkerBonus,
+                resistancePercent
               )) +
           astralSageSwordArcaneDamage +
           astralSageBowArcaneDamage +
@@ -7619,11 +7614,8 @@ export default function Home() {
               (battleCombatStats.magicPenetrationPercent ?? 0) -
               (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           )
-        : Math.max(
-            0,
-            targetPhysicalResistance -
-              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
-          );
+        : targetPhysicalResistance -
+          (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
     const weaponAreaDamagePerTarget =
       weaponAreaRawDamage > 0
         ? Math.max(
@@ -7832,13 +7824,13 @@ export default function Home() {
     if (starCreationRawDamage > 0 && nextGroupMembers) {
       const starfieldResult = applyMonsterGroupMappedAreaDamage(nextGroupMembers, member => {
         const defense = member.defense ?? monster.defense;
-        const resistance = Math.max(0, member.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0);
+        const resistance = member.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0;
         return Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(defense)) * (1 - resistance / 100)));
       });
       nextGroupMembers = starfieldResult.members;
       starCreationDamageApplied = starfieldResult.totalDamageApplied;
     } else if (starCreationRawDamage > 0 && !battle.groupMembers) {
-      const resistance = Math.max(0, targetPhysicalResistance);
+      const resistance = targetPhysicalResistance;
       const fieldDamage = Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(targetDefenseAfterDebuff)) * (1 - resistance / 100)));
       starCreationDamageApplied = Math.min(fieldDamage, Math.max(0, battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied));
     }
