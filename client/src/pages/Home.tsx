@@ -1680,7 +1680,7 @@ const bosses: Monster[] = [
     critRate: 30,
     critDamage: 180,
     dodgeRate: 35,
-    lifestealPercent: 50,
+    lifestealPercent: 35,
     magicResistancePercent: 25,
     physicalResistancePercent: -10,
     risk: "極高風險",
