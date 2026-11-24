@@ -11,11 +11,10 @@ export type MonsterMechanicDefinition = {
   encounterType?: "individual" | "swarm";
 };
 
-/** 每日小怪的戰鬥數值倍率：Lv.1–9 為 ×1，從 Lv.10 起每 10 級增加 0.25，Lv.100 以上封頂 ×3.75。 */
+/** 每日小怪的戰鬥數值倍率：每 10 級增加 0.25，Lv.81 起封頂 ×3。 */
 export function getSmallMonsterStatMultiplier(level: number): number {
   const safeLevel = Math.max(1, Math.floor(level));
-  if (safeLevel < 10) return 1;
-  return Math.min(3.75, 1.5 + Math.floor((safeLevel - 10) / 10) * 0.25);
+  return Math.min(3, 1 + Math.floor((safeLevel - 1) / 10) * 0.25);
 }
 
 /** 防禦力：round((4 + round(1.5 × 等級)) × 每日小怪等級倍率)。 */
