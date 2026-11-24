@@ -179,9 +179,12 @@ function stableHash(value: string) {
   return hash >>> 0;
 }
 
-/** 每隻每日小怪各自取得固定於當日的暴擊數值，避免重整時變動。 */
-export function getDailyMonsterCritStats(refreshKey: string, catalogIndex: number) {
-  const seed = `${refreshKey}:${catalogIndex}`;
+/** 每隻小怪各自取得固定於該次刷新週期的暴擊數值。 */
+export function getSmallMonsterCritStats(
+  refreshKey: string,
+  monsterIndex: number
+) {
+  const seed = `${refreshKey}:${monsterIndex}`;
   return {
     critRate: 10 + (stableHash(`${seed}:crit-rate`) % 41),
     critDamage: 120 + (stableHash(`${seed}:crit-damage`) % 61),

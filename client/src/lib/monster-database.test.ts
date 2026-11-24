@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADDITIONAL_MINOR_MONSTER_CATALOG,
   DAILY_MONSTER_CATALOG,
-  getDailyMonsterCritStats,
+  getSmallMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
@@ -66,18 +66,32 @@ describe("daily monster catalog", () => {
     expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
   });
 
-  it("assigns each daily monster stable, varied crit stats within the configured ranges", () => {
-    const stats = DAILY_MONSTER_CATALOG.map((_, catalogIndex) =>
-      getDailyMonsterCritStats("small-2026-10-21", catalogIndex)
+  it("assigns daily and soul-trial small monsters stable crit stats in shared ranges", () => {
+    const dailyStats = DAILY_MONSTER_CATALOG.map((_, catalogIndex) =>
+      getSmallMonsterCritStats("small-2026-10-21", catalogIndex)
     );
-    const sameMonster = getDailyMonsterCritStats("small-2026-10-21", 0);
-    const nextDayMonster = getDailyMonsterCritStats("small-2026-10-22", 0);
+    const soulTrialStats = Array.from({ length: 9 }, (_, index) =>
+      getSmallMonsterCritStats("soul-trial:small-2026-10-21", index)
+    );
+    const sameDailyMonster = getSmallMonsterCritStats("small-2026-10-21", 0);
+    const nextDayMonster = getSmallMonsterCritStats("small-2026-10-22", 0);
+    const sameSoulTrialMonster = getSmallMonsterCritStats(
+      "soul-trial:small-2026-10-21",
+      0
+    );
+    const allStats = [...dailyStats, ...soulTrialStats];
 
-    expect(stats.every(({ critRate }) => critRate >= 10 && critRate <= 50)).toBe(true);
-    expect(stats.every(({ critDamage }) => critDamage >= 120 && critDamage <= 180)).toBe(true);
-    expect(new Set(stats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
-    expect(new Set(stats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
-    expect(getDailyMonsterCritStats("small-2026-10-21", 0)).toEqual(sameMonster);
-    expect(nextDayMonster).not.toEqual(sameMonster);
+    expect(allStats.every(({ critRate }) => critRate >= 10 && critRate <= 50)).toBe(true);
+    expect(allStats.every(({ critDamage }) => critDamage >= 120 && critDamage <= 180)).toBe(true);
+    expect(new Set(dailyStats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
+    expect(new Set(dailyStats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
+    expect(new Set(soulTrialStats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
+    expect(new Set(soulTrialStats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
+    expect(getSmallMonsterCritStats("small-2026-10-21", 0)).toEqual(sameDailyMonster);
+    expect(nextDayMonster).not.toEqual(sameDailyMonster);
+    expect(getSmallMonsterCritStats("soul-trial:small-2026-10-21", 0)).toEqual(
+      sameSoulTrialMonster
+    );
+    expect(sameSoulTrialMonster).not.toEqual(sameDailyMonster);
   });
 });

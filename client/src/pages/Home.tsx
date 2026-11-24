@@ -243,7 +243,7 @@ import {
 } from "../lib/soul-trial";
 import {
   DAILY_MONSTER_CATALOG,
-  getDailyMonsterCritStats,
+  getSmallMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
   selectDailyMonsterDefinitions,
@@ -1436,7 +1436,7 @@ function generateDailyMonsters(
       const offset = dailyMonsterOffsets[index] ?? 0;
       const level = Math.max(1, playerLevel + offset);
       const statMultiplier = getSmallMonsterStatMultiplier(level);
-      const { critRate, critDamage } = getDailyMonsterCritStats(
+      const { critRate, critDamage } = getSmallMonsterCritStats(
         dateKey,
         catalogIndex
       );
@@ -1507,6 +1507,10 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
   return soulTrialMonsterOffsets.map((offset, index): Monster => {
     const level = Math.max(1, soulLevel + offset);
     const [name, description] = soulTrialMonsterNames[index];
+    const { critRate, critDamage } = getSmallMonsterCritStats(
+      `soul-trial:${refreshKey}`,
+      index
+    );
     return {
       id: `soul-trial-${refreshKey}-${index}`,
       name,
@@ -1516,8 +1520,8 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
       reward: Math.min(180, Math.max(30, 30 + Math.round(level * 4))),
       damage: 14 + level * 3,
       defense: 6 + Math.round(level * 0.9),
-      critRate: Math.min(35, 5 + level * 0.4),
-      critDamage: 150 + Math.min(80, Math.round(level * 0.8)),
+      critRate,
+      critDamage,
       dodgeRate: Math.min(32, 6 + level * 0.35),
       risk:
         level <= soulLevel - 5
@@ -9106,7 +9110,8 @@ export default function Home() {
                       monster.elementalAttack.damageReductionPercent,
                   },
                 ]
-              : []
+              : [],
+            finalIncomingDamageTaken
           );
     const calibratedPlayerStatuses = mythicCalibrationTriggered
       ? nextPlayerStatuses.filter((_, index) => index > 0)
