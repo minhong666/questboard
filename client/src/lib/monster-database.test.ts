@@ -4,7 +4,7 @@ import {
   DAILY_MONSTER_CATALOG,
   getSmallMonsterCritStats,
   getMonsterMechanicLabels,
-  getSmallMonsterStatMultiplier,
+  getSmallMonsterDefense,
   selectDailyMonsterDefinitions,
 } from "./monster-database";
 
@@ -57,13 +57,10 @@ describe("daily monster catalog", () => {
     );
   });
 
-  it("scales small monster stats by level and caps the multiplier at level 100", () => {
-    expect(getSmallMonsterStatMultiplier(1)).toBe(1);
-    expect(getSmallMonsterStatMultiplier(10)).toBe(1.5);
-    expect(getSmallMonsterStatMultiplier(20)).toBe(1.75);
-    expect(getSmallMonsterStatMultiplier(50)).toBe(2.5);
-    expect(getSmallMonsterStatMultiplier(100)).toBe(3.75);
-    expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
+  it("calculates small monster defense without a level multiplier", () => {
+    expect(getSmallMonsterDefense(1)).toBe(6);
+    expect(getSmallMonsterDefense(10)).toBe(19);
+    expect(getSmallMonsterDefense(100)).toBe(154);
   });
 
   it("assigns daily and soul-trial small monsters stable crit stats in shared ranges", () => {
