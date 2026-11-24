@@ -258,6 +258,7 @@ import {
   applyMonsterGroupMappedAreaDamage,
   applyMonsterGroupDamage,
   applyMonsterGroupSkillDamage,
+  applyMonsterResistanceToDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
   type MonsterGroupMember,
@@ -6594,10 +6595,7 @@ export default function Home() {
           ? (battleCombatStats.magicPenetrationPercent ?? 0)
           : 0) -
         (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
-      return Math.max(
-        1,
-        Math.round(rawDamage * (1 - Math.max(0, targetResistance) / 100))
-      );
+      return applyMonsterResistanceToDamage(rawDamage, targetResistance);
     };
     const baseRawDamageDealt = instantExecute
       ? targetMonsterHealth

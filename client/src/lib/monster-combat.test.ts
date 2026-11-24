@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyMonsterResistanceToDamage,
   applyMonsterGroupAreaDamage,
   applyMonsterGroupDamage,
   applyMonsterGroupSkillDamage,
@@ -8,6 +9,11 @@ import {
 } from "./monster-combat";
 
 describe("monster group combat", () => {
+  it("amplifies damage against negative resistance and mitigates positive resistance", () => {
+    expect(applyMonsterResistanceToDamage(100, -10)).toBe(110);
+    expect(applyMonsterResistanceToDamage(100, 30)).toBe(70);
+  });
+
   it("creates three living members with the full shared health pool", () => {
     const members = createMonsterGroupMembers("swarm", 100);
     expect(members).toHaveLength(3);
