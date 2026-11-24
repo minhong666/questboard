@@ -246,6 +246,7 @@ import {
   DAILY_MONSTER_CATALOG,
   getSmallMonsterCritStats,
   getMonsterMechanicLabels,
+  getSmallMonsterStatMultiplier,
   getSmallMonsterDefense,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
@@ -1437,10 +1438,12 @@ function generateDailyMonsters(
     ({ definition, catalogIndex }, index) => {
       const offset = dailyMonsterOffsets[index] ?? 0;
       const level = Math.max(1, playerLevel + offset);
+      const statMultiplier = getSmallMonsterStatMultiplier(level);
       const { critRate, critDamage } = getSmallMonsterCritStats(
         dateKey,
         catalogIndex
       );
+      const scaleStat = (value: number) => Math.round(value * statMultiplier);
       const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
       const monsterDefinition: MonsterMechanicDefinition = definition;
       const baseDodgeRate = Math.min(28, 5 + level * 0.35);
@@ -1448,18 +1451,18 @@ function generateDailyMonsters(
         id: getDailyMonsterId(dateKey, catalogIndex),
         ...monsterDefinition,
         level,
-        health: 60 + level * 30,
+        health: scaleStat(60 + level * 30),
         reward,
-        damage: 10 + level * 3,
+        damage: scaleStat(10 + level * 3),
         defense: getSmallMonsterDefense(level),
         critRate,
         critDamage,
         dodgeRate: baseDodgeRate,
         ...(monsterDefinition.explosionDamage !== undefined
-          ? { explosionDamage: monsterDefinition.explosionDamage }
+          ? { explosionDamage: scaleStat(monsterDefinition.explosionDamage) }
           : {}),
         ...(monsterDefinition.reflectDamage !== undefined
-          ? { reflectDamage: monsterDefinition.reflectDamage }
+          ? { reflectDamage: scaleStat(monsterDefinition.reflectDamage) }
           : {}),
         risk:
           level <= playerLevel - 5
@@ -1468,9 +1471,9 @@ function generateDailyMonsters(
               ? "中風險"
               : "高風險",
         requirements: {
-          health: 100 + level * 8,
-          strength: Math.max(5, Math.round(level * 1.2)),
-          defense: Math.max(5, Math.round(level * 1.05)),
+          health: scaleStat(100 + level * 8),
+          strength: scaleStat(Math.max(5, Math.round(level * 1.2))),
+          defense: scaleStat(Math.max(5, Math.round(level * 1.05))),
         },
         icon: Skull,
         tone: dailyMonsterTones[index % dailyMonsterTones.length],
