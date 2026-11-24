@@ -1695,34 +1695,6 @@ const bosses: Monster[] = [
   },
 ];
 
-function tripleRegionalBossStats(boss: Monster): Monster {
-  return {
-    ...boss,
-    health: boss.health * 3,
-    reward: boss.reward,
-    damage: boss.damage * 3,
-    defense: boss.defense * 3,
-    intelligence:
-      boss.intelligence === undefined ? undefined : boss.intelligence * 3,
-    critRate: boss.critRate,
-    critDamage: boss.critDamage,
-    dodgeRate: boss.dodgeRate,
-    requirements: Object.fromEntries(
-      Object.entries(boss.requirements).map(([key, value]) => [
-        key,
-        (value ?? 0) * 3,
-      ])
-    ) as MonsterRequirements,
-    physicalResistancePercent: boss.physicalResistancePercent,
-    magicResistancePercent: boss.magicResistancePercent,
-    dodgeIgnorePercent: boss.dodgeIgnorePercent,
-    lifestealPercent: boss.lifestealPercent,
-    explosionDamage: boss.explosionDamage,
-    reflectDamage: boss.reflectDamage,
-    elementalAttack: boss.elementalAttack,
-  };
-}
-
 const defaultAbilities: CharacterAbilities = {
   health: 100,
   strength: 5,
@@ -3289,7 +3261,7 @@ export default function Home() {
     () =>
       bosses
         .map(boss => ({
-          ...tripleRegionalBossStats(boss),
+          ...boss,
           id: `${boss.id}-${weeklyBossRefreshKey}`,
         }))
         .sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
