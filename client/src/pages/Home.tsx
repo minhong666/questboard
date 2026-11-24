@@ -110,6 +110,7 @@ import {
   getCappedDamageReductionMultiplier,
 } from "../lib/combat-damage-modifiers";
 import {
+  capEffectiveDodgeRate,
   capPlayerCombatStatUpgradeValue,
   getEffectiveCombatStatWithBonuses,
   getNextPlayerCombatStatUpgradeValue,
@@ -3843,7 +3844,7 @@ export default function Home() {
           normalDodgeRate,
           state.archerDodgeFailStacks
         )
-      : Math.min(100, normalDodgeRate),
+      : capEffectiveDodgeRate(normalDodgeRate),
     castSpeedPercent: Math.min(
       80,
       (combatStatsBase(state.combatStats).castSpeedPercent ?? 0) +
@@ -6337,7 +6338,7 @@ export default function Home() {
             (weaponAbility?.id === "moon-stalker-bow" &&
               (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0)
           ? false
-          : Math.random() < targetMonsterDodgeRate / 100;
+          : Math.random() < capEffectiveDodgeRate(targetMonsterDodgeRate) / 100;
     const dawnWardenSwordTriggered = Boolean(
       weaponAbility?.id === "dawn-warden-sword" &&
         !selectedSkill &&
@@ -6396,8 +6397,7 @@ export default function Home() {
       )
     );
     const nightSetCurrentDodgeRate =
-      Math.min(
-        100,
+      capEffectiveDodgeRate(
         battleCombatStats.dodgeRate +
           (activeBuff?.dodgeRateBonusPercent ?? 0) +
           activeChestEffects.dodgeRateBonusPercent +
@@ -8454,8 +8454,7 @@ export default function Home() {
           15)
         : 0);
     const effectivePlayerDodgeRate =
-      Math.min(
-        100,
+      capEffectiveDodgeRate(
         battleCombatStats.dodgeRate +
           (activeBuff?.dodgeRateBonusPercent ?? 0) +
           activeChestEffects.dodgeRateBonusPercent +
