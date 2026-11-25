@@ -200,7 +200,7 @@ describe("QuestBoard loot", () => {
         return total + value / divisor[stat];
       }, 0);
     expect(ordinary.every(item => pointCost(item.bonus) === 10)).toBe(true);
-    expect(excellent.every(item => pointCost(item.bonus) === 15)).toBe(true);
+    expect(excellent.every(item => pointCost(item.bonus) === 20)).toBe(true);
     expect(rare.every(item => pointCost(item.bonus) === 30)).toBe(true);
     expect(epic.every(item => pointCost(item.bonus) === 40)).toBe(true);
     expect(legendary.every(item => pointCost(item.bonus) === 55)).toBe(true);
@@ -374,7 +374,7 @@ describe("QuestBoard loot", () => {
     expect(item?.kind).toBe("equipment");
     if (item?.kind !== "equipment") throw new Error("Expected equipment");
     expect(item.rarity).toBe("精良");
-    expect(item.bonus).toBe("生命 +50 · 力量 +4 · 防禦 +6");
+    expect(item.bonus).toBe("生命 +50 · 力量 +9 · 防禦 +6");
     expect(item.affixes).toHaveLength(1);
     expect(item.affixes?.[0].bonuses.health).toBe(8);
     expect(item.affixes?.[0].description).toContain("生命 +8");

@@ -3,7 +3,7 @@ import { RPG_EQUIPMENT_TEMPLATES } from "./equipment-database";
 
 const POINT_BUDGET_BY_RARITY: Record<string, number> = {
   普通: 10,
-  精良: 15,
+  精良: 20,
   稀有: 30,
   史詩: 40,
   傳說: 55,
