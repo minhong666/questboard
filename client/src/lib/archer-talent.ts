@@ -1,3 +1,5 @@
+import { capEffectiveDodgeRate } from "./player-combat-stat-upgrades";
+
 export type ArcherTalentBonuses = {
   attackPercent: number;
   dodgePercent: number;
@@ -41,7 +43,7 @@ export function getArcherEffectiveDodgeRate(
     ? Math.max(0, normalDodgeRate)
     : 0;
   const { dodgePercent } = getArcherTalentBonuses(failedDodgeStacks);
-  return Math.min(100, safeNormalRate + 10 + dodgePercent);
+  return capEffectiveDodgeRate(safeNormalRate + 10 + dodgePercent);
 }
 
 export function applyArcherAttackBonus(

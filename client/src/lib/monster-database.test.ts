@@ -5,6 +5,7 @@ import {
   getSmallMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
+  getSmallMonsterDefense,
   selectDailyMonsterDefinitions,
 } from "./monster-database";
 
@@ -57,13 +58,34 @@ describe("daily monster catalog", () => {
     );
   });
 
-  it("scales small monster stats by level and caps the multiplier at level 100", () => {
+  it("keeps the level multiplier and applies the revised defense formula", () => {
     expect(getSmallMonsterStatMultiplier(1)).toBe(1);
-    expect(getSmallMonsterStatMultiplier(10)).toBe(1.5);
-    expect(getSmallMonsterStatMultiplier(20)).toBe(1.75);
-    expect(getSmallMonsterStatMultiplier(50)).toBe(2.5);
-    expect(getSmallMonsterStatMultiplier(100)).toBe(3.75);
-    expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
+    expect(getSmallMonsterStatMultiplier(10)).toBe(1);
+    expect(getSmallMonsterStatMultiplier(11)).toBe(1.25);
+    expect(getSmallMonsterStatMultiplier(20)).toBe(1.25);
+    expect(getSmallMonsterStatMultiplier(21)).toBe(1.5);
+    expect(getSmallMonsterStatMultiplier(30)).toBe(1.5);
+    expect(getSmallMonsterStatMultiplier(31)).toBe(1.75);
+    expect(getSmallMonsterStatMultiplier(40)).toBe(1.75);
+    expect(getSmallMonsterStatMultiplier(41)).toBe(2);
+    expect(getSmallMonsterStatMultiplier(50)).toBe(2);
+    expect(getSmallMonsterStatMultiplier(51)).toBe(2.25);
+    expect(getSmallMonsterStatMultiplier(60)).toBe(2.25);
+    expect(getSmallMonsterStatMultiplier(61)).toBe(2.5);
+    expect(getSmallMonsterStatMultiplier(70)).toBe(2.5);
+    expect(getSmallMonsterStatMultiplier(71)).toBe(2.75);
+    expect(getSmallMonsterStatMultiplier(80)).toBe(2.75);
+    expect(getSmallMonsterStatMultiplier(81)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(90)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(91)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(100)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(150)).toBe(3);
+    expect(getSmallMonsterDefense(1)).toBe(6);
+    expect(getSmallMonsterDefense(10)).toBe(19);
+    expect(getSmallMonsterDefense(11)).toBe(26);
+    expect(getSmallMonsterDefense(20)).toBe(43);
+    expect(getSmallMonsterDefense(21)).toBe(54);
+    expect(getSmallMonsterDefense(100)).toBe(462);
   });
 
   it("assigns daily and soul-trial small monsters stable crit stats in shared ranges", () => {

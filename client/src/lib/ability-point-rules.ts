@@ -44,7 +44,11 @@ export function getVersion1AbilityPointAttributeGain(
     : LEGACY_ATTRIBUTE_GAIN[key] * ABILITY_POINT_EFFECTIVENESS;
 }
 
-export function getAbilityPointCombatGain(key: AbilityPointCombatStat) {
+export function getAbilityPointCombatGain(
+  key: AbilityPointCombatStat,
+  jobClass?: "warrior" | "archer" | "mage" | "rogue"
+) {
+  if (key === "critRate" && jobClass === "rogue") return 1.5;
   return LEGACY_COMBAT_GAIN[key] * ABILITY_POINT_EFFECTIVENESS;
 }
 

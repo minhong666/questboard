@@ -24,6 +24,8 @@ describe("ability point balance rules", () => {
     expect(getVersion1AbilityPointAttributeGain("strength")).toBe(0.5);
     expect(getVersion1AbilityPointAttributeGain("intelligence")).toBe(0.5);
     expect(getAbilityPointCombatGain("critRate")).toBe(0.5);
+    expect(getAbilityPointCombatGain("critRate", "rogue")).toBe(1.5);
+    expect(getAbilityPointCombatGain("critRate", "warrior")).toBe(0.5);
     expect(getAbilityPointCombatGain("critDamage")).toBe(1);
     expect(getAbilityPointCombatGain("dodgeRate")).toBe(0.5);
   });

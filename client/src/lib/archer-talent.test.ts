@@ -8,10 +8,10 @@ import {
 } from "./archer-talent";
 
 describe("archer evasion talent", () => {
-  it("adds a permanent 10% dodge bonus and caps total dodge at 100%", () => {
+  it("adds a permanent 10% dodge bonus and caps total dodge at 50%", () => {
     expect(getArcherEffectiveDodgeRate(5, 0)).toBe(15);
     expect(getArcherEffectiveDodgeRate(5, 2)).toBe(25);
-    expect(getArcherEffectiveDodgeRate(95, 10)).toBe(100);
+    expect(getArcherEffectiveDodgeRate(95, 10)).toBe(50);
   });
 
   it("adds 3% attack and 5% dodge per failed dodge stack", () => {
