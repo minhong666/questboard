@@ -3,19 +3,29 @@ import {
   ABILITY_POINT_EFFECTIVENESS,
   getAbilityPointAttributeGain,
   getAbilityPointCombatGain,
+  getAbilityPointBudgetAfterMigration,
   getRebalancedAbilityPointBudget,
+  getVersion1AbilityPointAttributeGain,
 } from "./ability-point-rules";
 import { GAME_RULES } from "./game-rules";
 
 describe("ability point balance rules", () => {
-  it("awards three points per level, keeps health intact, and halves other effects", () => {
+  it("awards three points per level and increases each non-health attribute by one", () => {
+    expect(GAME_RULES.combat.physicalDamagePerStrengthPoint).toBe(0.5);
+    expect(GAME_RULES.combat.magicDamagePerIntelligencePoint).toBe(0.5);
+    expect(GAME_RULES.combat.damageReductionPerDefensePoint).toBe(0.5);
     expect(GAME_RULES.progression.abilityPointsPerLevel).toBe(3);
     expect(GAME_RULES.abilityPoints.combatEffectivenessPercent).toBe(50);
     expect(ABILITY_POINT_EFFECTIVENESS).toBe(0.5);
     expect(getAbilityPointAttributeGain("health")).toBe(10);
-    expect(getAbilityPointAttributeGain("strength")).toBe(0.5);
-    expect(getAbilityPointAttributeGain("intelligence")).toBe(0.5);
+    expect(getAbilityPointAttributeGain("strength")).toBe(1);
+    expect(getAbilityPointAttributeGain("defense")).toBe(1);
+    expect(getAbilityPointAttributeGain("intelligence")).toBe(1);
+    expect(getVersion1AbilityPointAttributeGain("strength")).toBe(0.5);
+    expect(getVersion1AbilityPointAttributeGain("intelligence")).toBe(0.5);
     expect(getAbilityPointCombatGain("critRate")).toBe(0.5);
+    expect(getAbilityPointCombatGain("critRate", "rogue")).toBe(1.5);
+    expect(getAbilityPointCombatGain("critRate", "warrior")).toBe(0.5);
     expect(getAbilityPointCombatGain("critDamage")).toBe(1);
     expect(getAbilityPointCombatGain("dodgeRate")).toBe(0.5);
   });
@@ -48,5 +58,16 @@ describe("ability point balance rules", () => {
         availablePoints: 2,
       })
     ).toBe(5);
+  });
+
+  it("refunds all spent points when migrating a version-one save", () => {
+    expect(
+      getAbilityPointBudgetAfterMigration({
+        previousRulesVersion: 1,
+        level: 14,
+        spentPoints: 9,
+        availablePoints: 4,
+      })
+    ).toBe(13);
   });
 });

@@ -1116,7 +1116,7 @@ export function parseLootItem(value: unknown): LootItem | null {
         item.element === "雷電"
           ? item.element
           : undefined,
-      bonus: item.bonus,
+      bonus: canonicalTemplate?.bonus ?? item.bonus,
       affixes: parseEquipmentAffixes(item.affixes),
       equipmentLevel:
         typeof item.equipmentLevel === "number" &&

@@ -25,6 +25,17 @@ export type MonsterGroupDamageResult = {
   totalDamageApplied: number;
 };
 
+/** Negative resistance increases damage; e.g. -10% resistance applies 110%. */
+export function applyMonsterResistanceToDamage(
+  rawDamage: number,
+  resistancePercent: number
+): number {
+  return Math.max(
+    1,
+    Math.round(rawDamage * (1 - resistancePercent / 100))
+  );
+}
+
 export function createMonsterGroupMembers(
   monsterId: string,
   totalHealth: number,
@@ -41,7 +52,7 @@ export function createMonsterGroupMembers(
     damage: halve(stats?.damage, 1),
     defense: halve(stats?.defense, 1),
     critRate: halve(stats?.critRate),
-    critDamage: halve(stats?.critDamage, 1),
+    critDamage: stats?.critDamage,
     dodgeRate: halve(stats?.dodgeRate),
     physicalResistancePercent: halve(stats?.physicalResistancePercent),
     magicResistancePercent: halve(stats?.magicResistancePercent),

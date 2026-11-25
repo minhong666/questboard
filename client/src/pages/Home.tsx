@@ -90,22 +90,31 @@ import {
   ABILITY_POINT_SYSTEM_VERSION,
   LEGACY_ABILITY_POINTS_PER_LEVEL,
   getAbilityPointAttributeGain,
+  getAbilityPointBudgetAfterMigration,
   getAbilityPointCombatGain,
   getLegacyAbilityPointAttributeGain,
   getLegacyAbilityPointCombatGain,
-  getRebalancedAbilityPointBudget,
+  getVersion1AbilityPointAttributeGain,
   type AbilityPointAttribute,
   type AbilityPointCombatStat,
 } from "../lib/ability-point-rules";
+import {
+  getAttackDamage as calculateAttributeAttackDamage,
+  getDefenseReduction as calculateDefenseReduction,
+  getMagicAttackDamage as calculateMagicAttackDamage,
+  getPhysicalAttackDamage as calculatePhysicalAttackDamage,
+} from "../lib/character-combat-stats";
 import {
   capCombinedDamageModifierPercent,
   getCappedDamageBonusMultiplier,
   getCappedDamageReductionMultiplier,
 } from "../lib/combat-damage-modifiers";
 import {
+  capEffectiveDodgeRate,
   capPlayerCombatStatUpgradeValue,
   getEffectiveCombatStatWithBonuses,
   getNextPlayerCombatStatUpgradeValue,
+  getPlayerCombatStatUpgradeCap,
   PLAYER_COMBAT_STAT_UPGRADE_CAPS,
   type PlayerCombatStatUpgradeKey,
 } from "../lib/player-combat-stat-upgrades";
@@ -236,9 +245,10 @@ import {
 } from "../lib/soul-trial";
 import {
   DAILY_MONSTER_CATALOG,
-  getSmallMonsterCritRateMultiplier,
+  getSmallMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
+  getSmallMonsterDefense,
   selectDailyMonsterDefinitions,
 } from "../lib/monster-database";
 import type { MonsterMechanicDefinition } from "../lib/monster-database";
@@ -251,6 +261,7 @@ import {
   applyMonsterGroupMappedAreaDamage,
   applyMonsterGroupDamage,
   applyMonsterGroupSkillDamage,
+  applyMonsterResistanceToDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
   type MonsterGroupMember,
@@ -1429,11 +1440,13 @@ function generateDailyMonsters(
       const offset = dailyMonsterOffsets[index] ?? 0;
       const level = Math.max(1, playerLevel + offset);
       const statMultiplier = getSmallMonsterStatMultiplier(level);
-      const critRateMultiplier = getSmallMonsterCritRateMultiplier(level);
+      const { critRate, critDamage } = getSmallMonsterCritStats(
+        dateKey,
+        catalogIndex
+      );
       const scaleStat = (value: number) => Math.round(value * statMultiplier);
       const reward = Math.min(100, Math.max(20, 20 + Math.round(level * 3.2)));
       const monsterDefinition: MonsterMechanicDefinition = definition;
-      const baseCritRate = Math.min(25, 4 + level * 0.35);
       const baseDodgeRate = Math.min(28, 5 + level * 0.35);
       return {
         id: getDailyMonsterId(dateKey, catalogIndex),
@@ -1442,9 +1455,9 @@ function generateDailyMonsters(
         health: scaleStat(60 + level * 30),
         reward,
         damage: scaleStat(10 + level * 3),
-        defense: scaleStat(4 + Math.round(level * 0.8)),
-        critRate: Math.min(100, baseCritRate * critRateMultiplier),
-        critDamage: scaleStat(140 + Math.min(60, level)),
+        defense: getSmallMonsterDefense(level),
+        critRate,
+        critDamage,
         dodgeRate: baseDodgeRate,
         ...(monsterDefinition.explosionDamage !== undefined
           ? { explosionDamage: scaleStat(monsterDefinition.explosionDamage) }
@@ -1498,6 +1511,10 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
   return soulTrialMonsterOffsets.map((offset, index): Monster => {
     const level = Math.max(1, soulLevel + offset);
     const [name, description] = soulTrialMonsterNames[index];
+    const { critRate, critDamage } = getSmallMonsterCritStats(
+      `soul-trial:${refreshKey}`,
+      index
+    );
     return {
       id: `soul-trial-${refreshKey}-${index}`,
       name,
@@ -1507,8 +1524,8 @@ function generateSoulTrialMonsters(soulLevel: number, refreshKey: string) {
       reward: Math.min(180, Math.max(30, 30 + Math.round(level * 4))),
       damage: 14 + level * 3,
       defense: 6 + Math.round(level * 0.9),
-      critRate: Math.min(35, 5 + level * 0.4),
-      critDamage: 150 + Math.min(80, Math.round(level * 0.8)),
+      critRate,
+      critDamage,
       dodgeRate: Math.min(32, 6 + level * 0.35),
       risk:
         level <= soulLevel - 5
@@ -1569,11 +1586,11 @@ const bosses: Monster[] = [
     name: "暗影區域魔王",
     description: "只有準備充分的冒險者，才能撼動牠的王座",
     level: 50,
-    health: 900,
+    health: 4000,
     reward: 1000,
-    damage: 110,
-    defense: 48,
-    critRate: 18,
+    damage: 450,
+    defense: 200,
+    critRate: 35,
     critDamage: 200,
     dodgeRate: 18,
     risk: "致命風險",
@@ -1588,10 +1605,10 @@ const bosses: Monster[] = [
     description:
       "盤踞在高階區域的終極守門者，會交替施展普通攻擊與火焰灼燒技能。",
     level: 75,
-    health: 1600,
+    health: 7000,
     reward: 2000,
-    damage: 180,
-    defense: 70,
+    damage: 860,
+    defense: 210,
     critRate: 22,
     critDamage: 150,
     dodgeRate: 35,
@@ -1614,12 +1631,12 @@ const bosses: Monster[] = [
     name: "時間吞噬者",
     description: "以無盡拖延吞噬整個冒險日誌",
     level: 100,
-    health: 2600,
+    health: 18000,
     reward: 3000,
-    damage: 260,
-    defense: 100,
-    critRate: 28,
-    critDamage: 200,
+    damage: 1550,
+    defense: 800,
+    critRate: 30,
+    critDamage: 225,
     dodgeRate: 26,
     risk: "傳說風險",
     requirements: { health: 800, strength: 100, defense: 90, intelligence: 80 },
@@ -1633,10 +1650,10 @@ const bosses: Monster[] = [
     description:
       "站在所有區域盡頭的終焉支配者，只有完成最後試煉的冒險者才能挑戰。",
     level: 200,
-    health: 3000,
+    health: 50000,
     reward: 6000,
-    damage: 525,
-    defense: 525,
+    damage: 3000,
+    defense: 3000,
     intelligence: 600,
     critRate: 50,
     critDamage: 250,
@@ -1659,14 +1676,14 @@ const bosses: Monster[] = [
     name: "吸血鬼領主",
     description: "以古老血契支配夜幕的區域魔王，能從每次攻擊中奪回生命。",
     level: 125,
-    health: 3500,
+    health: 24500,
     reward: 5000,
-    damage: 200,
-    defense: 120,
+    damage: 1800,
+    defense: 420,
     critRate: 30,
-    critDamage: 150,
+    critDamage: 180,
     dodgeRate: 35,
-    lifestealPercent: 50,
+    lifestealPercent: 35,
     magicResistancePercent: 25,
     physicalResistancePercent: -10,
     risk: "極高風險",
@@ -1682,34 +1699,6 @@ const bosses: Monster[] = [
   },
 ];
 
-function tripleRegionalBossStats(boss: Monster): Monster {
-  return {
-    ...boss,
-    health: boss.health * 3,
-    reward: boss.reward,
-    damage: boss.damage * 3,
-    defense: boss.defense * 3,
-    intelligence:
-      boss.intelligence === undefined ? undefined : boss.intelligence * 3,
-    critRate: boss.critRate,
-    critDamage: boss.critDamage,
-    dodgeRate: boss.dodgeRate,
-    requirements: Object.fromEntries(
-      Object.entries(boss.requirements).map(([key, value]) => [
-        key,
-        (value ?? 0) * 3,
-      ])
-    ) as MonsterRequirements,
-    physicalResistancePercent: boss.physicalResistancePercent,
-    magicResistancePercent: boss.magicResistancePercent,
-    dodgeIgnorePercent: boss.dodgeIgnorePercent,
-    lifestealPercent: boss.lifestealPercent,
-    explosionDamage: boss.explosionDamage,
-    reflectDamage: boss.reflectDamage,
-    elementalAttack: boss.elementalAttack,
-  };
-}
-
 const defaultAbilities: CharacterAbilities = {
   health: 100,
   strength: 5,
@@ -1722,7 +1711,10 @@ const defaultCombatStats: CombatStats = {
   dodgeRate: 3,
   castSpeedPercent: 0,
 };
-function combatStatsBase(value?: Partial<CombatStats>): CombatStats {
+function combatStatsBase(
+  value?: Partial<CombatStats>,
+  jobClass: JobClass = "warrior"
+): CombatStats {
   return {
     critRate:
       typeof value?.critRate === "number"
@@ -1730,7 +1722,11 @@ function combatStatsBase(value?: Partial<CombatStats>): CombatStats {
         : defaultCombatStats.critRate,
     critDamage:
       typeof value?.critDamage === "number"
-        ? capPlayerCombatStatUpgradeValue("critDamage", value.critDamage)
+        ? capPlayerCombatStatUpgradeValue(
+            "critDamage",
+            value.critDamage,
+            jobClass
+          )
         : defaultCombatStats.critDamage,
     dodgeRate:
       typeof value?.dodgeRate === "number"
@@ -1842,28 +1838,16 @@ function getAttackDamage(
   abilities: CharacterAbilities,
   jobClass: JobClass = "warrior"
 ) {
-  const primaryStat =
-    jobClass === "mage" ? abilities.intelligence : abilities.strength;
-  return Math.max(
-    1,
-    Math.round(
-      jobClass === "mage"
-        ? primaryStat * 1.5
-        : primaryStat * 1.5 + abilities.intelligence * 0.25
-    )
-  );
+  return calculateAttributeAttackDamage(abilities, jobClass);
 }
 function getPhysicalAttackDamage(abilities: CharacterAbilities) {
-  return Math.max(
-    1,
-    Math.round(abilities.strength * 1.5 + abilities.intelligence * 0.25)
-  );
+  return calculatePhysicalAttackDamage(abilities);
 }
 function getMagicAttackDamage(abilities: CharacterAbilities) {
-  return Math.max(1, Math.round(abilities.intelligence * 1.5));
+  return calculateMagicAttackDamage(abilities);
 }
 function getDefenseReduction(defense: number) {
-  return Math.floor(defense * 0.5);
+  return calculateDefenseReduction(defense);
 }
 const abilityLabels: Record<AbilityKey, string> = {
   health: "生命",
@@ -1936,7 +1920,8 @@ function formatLevelGrowth(
   );
   const currentCritDamage = capPlayerCombatStatUpgradeValue(
     "critDamage",
-    currentCombatStats.critDamage
+    currentCombatStats.critDamage,
+    jobClass
   );
   const actualCritRateGrowth =
     capPlayerCombatStatUpgradeValue(
@@ -1946,7 +1931,8 @@ function formatLevelGrowth(
   const actualCritDamageGrowth =
     capPlayerCombatStatUpgradeValue(
       "critDamage",
-      currentCritDamage + (growth.combat.critDamage ?? 0)
+      currentCritDamage + (growth.combat.critDamage ?? 0),
+      jobClass
     ) - currentCritDamage;
   const parts = [
     growth.abilities.health ? `生命 +${growth.abilities.health}` : "",
@@ -1978,7 +1964,8 @@ function getAbilityResetBaseline(jobClass: JobClass, abilityLevel: number) {
       ),
       critDamage: capPlayerCombatStatUpgradeValue(
         "critDamage",
-        defaultCombatStats.critDamage + (growth.combat.critDamage ?? 0)
+        defaultCombatStats.critDamage + (growth.combat.critDamage ?? 0),
+        jobClass
       ),
       dodgeRate: defaultCombatStats.dodgeRate,
       castSpeedPercent: defaultCombatStats.castSpeedPercent ?? 0,
@@ -1988,26 +1975,20 @@ function getAbilityResetBaseline(jobClass: JobClass, abilityLevel: number) {
 
 function getUsedAbilityPointCount(
   state: AppState,
-  rules: "current" | "legacy" = "current"
+  rules: "current" | "version1" | "legacy" = "current"
 ) {
   const baseline = getAbilityResetBaseline(state.jobClass, state.abilityLevel);
+  const getAttributeGain = (key: AbilityPointAttribute) =>
+    rules === "legacy"
+      ? getLegacyAbilityPointAttributeGain(key)
+      : rules === "version1"
+        ? getVersion1AbilityPointAttributeGain(key)
+        : getAbilityPointAttributeGain(key);
   const abilityPointGains: Record<AbilityPointAttribute, number> = {
-    health:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("health")
-        : getAbilityPointAttributeGain("health"),
-    strength:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("strength")
-        : getAbilityPointAttributeGain("strength"),
-    defense:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("defense")
-        : getAbilityPointAttributeGain("defense"),
-    intelligence:
-      rules === "legacy"
-        ? getLegacyAbilityPointAttributeGain("intelligence")
-        : getAbilityPointAttributeGain("intelligence"),
+    health: getAttributeGain("health"),
+    strength: getAttributeGain("strength"),
+    defense: getAttributeGain("defense"),
+    intelligence: getAttributeGain("intelligence"),
   };
   const countInvestedPoints = (value: number, base: number, gain: number) =>
     Math.max(0, Math.ceil((value - base) / gain - 1e-8));
@@ -2034,7 +2015,7 @@ function getUsedAbilityPointCount(
       const gain =
         rules === "legacy"
           ? getLegacyAbilityPointCombatGain(key)
-          : getAbilityPointCombatGain(key);
+          : getAbilityPointCombatGain(key, state.jobClass);
       return (
         total +
         countInvestedPoints(
@@ -2063,13 +2044,18 @@ function migrateAbilityPointSystem(state: AppState): AppState {
   );
   const stateAtCurrentLevel = { ...state, abilityLevel };
   const baseline = getAbilityResetBaseline(state.jobClass, abilityLevel);
-  const legacySpentPoints = getUsedAbilityPointCount(
-    stateAtCurrentLevel,
-    "legacy"
+  const previousRulesVersion = Math.max(
+    0,
+    Math.floor(state.abilityPointRulesVersion)
   );
-  const abilityPoints = getRebalancedAbilityPointBudget({
+  const spentPointsBeforeMigration = getUsedAbilityPointCount(
+    stateAtCurrentLevel,
+    previousRulesVersion >= 1 ? "version1" : "legacy"
+  );
+  const abilityPoints = getAbilityPointBudgetAfterMigration({
+    previousRulesVersion,
     level: abilityLevel,
-    legacySpentPoints,
+    spentPoints: spentPointsBeforeMigration,
     availablePoints: state.abilityPoints,
   });
   const maxHealth = getEffectiveHealthCap(
@@ -2129,7 +2115,8 @@ function applyExperienceToState(state: AppState, xpDelta: number): AppState {
       ),
       critDamage: capPlayerCombatStatUpgradeValue(
         "critDamage",
-        state.combatStats.critDamage + (growth.combat.critDamage ?? 0)
+        state.combatStats.critDamage + (growth.combat.critDamage ?? 0),
+        state.jobClass
       ),
     },
     currentHealth: state.currentHealth + growth.abilities.health,
@@ -2305,7 +2292,7 @@ function loadState(): AppState {
         ? Math.max(0, Math.floor(parsed.abilityPointRulesVersion))
         : 0;
     const pointsPerLevelForSave =
-      storedAbilityPointRulesVersion >= ABILITY_POINT_SYSTEM_VERSION
+      storedAbilityPointRulesVersion >= 1
         ? GAME_RULES.progression.abilityPointsPerLevel
         : LEGACY_ABILITY_POINTS_PER_LEVEL;
     const legacyGrowth = parsed.abilityAutoGrowthApplied
@@ -2476,7 +2463,8 @@ function loadState(): AppState {
           typeof parsed.combatStats?.critDamage === "number"
             ? capPlayerCombatStatUpgradeValue(
                 "critDamage",
-                parsed.combatStats.critDamage
+                parsed.combatStats.critDamage,
+                jobClass
               )
             : defaultCombatStats.critDamage,
         dodgeRate:
@@ -3289,7 +3277,7 @@ export default function Home() {
     () =>
       bosses
         .map(boss => ({
-          ...tripleRegionalBossStats(boss),
+          ...boss,
           id: `${boss.id}-${weeklyBossRefreshKey}`,
         }))
         .sort((firstBoss, secondBoss) => firstBoss.level - secondBoss.level),
@@ -3863,17 +3851,18 @@ export default function Home() {
         equipmentBonuses.combat.critDamage ?? 0,
         archerSkillCritDamageBonus,
         specializationPassiveBonuses.critDamage,
-      ]
+      ],
+      state.jobClass
     ),
     dodgeRate: isArcher
       ? getArcherEffectiveDodgeRate(
           normalDodgeRate,
           state.archerDodgeFailStacks
         )
-      : Math.min(100, normalDodgeRate),
+      : capEffectiveDodgeRate(normalDodgeRate),
     castSpeedPercent: Math.min(
       80,
-      (combatStatsBase(state.combatStats).castSpeedPercent ?? 0) +
+      (combatStatsBase(state.combatStats, state.jobClass).castSpeedPercent ?? 0) +
         (equipmentBonuses.combat.castSpeedPercent ?? 0)
     ),
     damageReductionPercent: Math.min(
@@ -3982,7 +3971,7 @@ export default function Home() {
       : state.jobClass === "warrior"
         ? state.abilities.strength
         : state.abilities.intelligence;
-  const combatStats = combatStatsBase(state.combatStats);
+  const combatStats = combatStatsBase(state.combatStats, state.jobClass);
   const abilityStats = [
     {
       key: "health" as const,
@@ -3999,8 +3988,8 @@ export default function Home() {
       tone: "orange",
       icon: Sword,
       description: isMage
-        ? `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 法術傷害`
-        : `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 物理傷害`,
+        ? "法師攻擊以智力計算；每點力量 +0.5 物理傷害"
+        : `造成 ${getAttackDamage(effectiveAbilities, state.jobClass)} 物理傷害 · 每點力量 +0.5`,
     },
     {
       key: "defense" as const,
@@ -4008,7 +3997,7 @@ export default function Home() {
       value: effectiveAbilities.defense,
       tone: "blue",
       icon: ShieldCheck,
-      description: `減免 ${getDefenseReduction(effectiveAbilities.defense)} 傷害`,
+      description: `減免 ${getDefenseReduction(effectiveAbilities.defense)} 傷害 · 每點防禦 −0.5`,
     },
     {
       key: "intelligence" as const,
@@ -4016,7 +4005,9 @@ export default function Home() {
       value: effectiveAbilities.intelligence,
       tone: "violet",
       icon: Brain,
-      description: "每級自動 +1",
+      description: isMage
+        ? "每點智力 +0.5 魔法傷害 · 每級自動 +1"
+        : "每級自動 +1 · 僅法師以智力計算魔法傷害",
     },
   ];
   const classAbilities: CharacterAbilities = {
@@ -4127,7 +4118,7 @@ export default function Home() {
       unit: "%",
       icon: Target,
       tone: "mint",
-      base: combatStatsBase(state.combatStats).critRate,
+      base: combatStatsBase(state.combatStats, state.jobClass).critRate,
       classBonus: classDefinition.combat.critRate ?? 0,
       equipmentBonus: equipmentBonuses.combat.critRate ?? 0,
       specializationBonus: specializationPassiveBonuses.critRate,
@@ -4140,7 +4131,7 @@ export default function Home() {
       unit: "%",
       icon: Flame,
       tone: "orange",
-      base: combatStatsBase(state.combatStats).critDamage,
+      base: combatStatsBase(state.combatStats, state.jobClass).critDamage,
       classBonus: classDefinition.combat.critDamage ?? 0,
       equipmentBonus: equipmentBonuses.combat.critDamage ?? 0,
       specializationBonus:
@@ -4154,7 +4145,7 @@ export default function Home() {
       unit: "%",
       icon: Shuffle,
       tone: "mint",
-      base: combatStatsBase(state.combatStats).dodgeRate,
+      base: combatStatsBase(state.combatStats, state.jobClass).dodgeRate,
       classBonus: classDefinition.combat.dodgeRate ?? 0,
       equipmentBonus: equipmentBonuses.combat.dodgeRate ?? 0,
       specializationBonus: specializationPassiveBonuses.dodgeRate,
@@ -5327,7 +5318,7 @@ export default function Home() {
       ),
     }));
     showToast(
-      `${label} +${increment}${key === "health" ? " HP" : "（50%戰鬥效益）"}，能力點數已使用`
+      `${label} +${increment}${key === "health" ? " HP" : ""}，能力點數已使用`
     );
   };
 
@@ -5340,15 +5331,16 @@ export default function Home() {
       showToast("法師的法術無法暴擊，暴擊率不可升級");
       return;
     }
-    const increment = getAbilityPointCombatGain(key);
+    const increment = getAbilityPointCombatGain(key, state.jobClass);
     const nextValue = getNextPlayerCombatStatUpgradeValue(
       key,
       currentValue,
-      increment
+      increment,
+      state.jobClass
     );
     if (nextValue === currentValue) {
       showToast(
-        `${label} 已達升級上限 ${PLAYER_COMBAT_STAT_UPGRADE_CAPS[key]}%`
+        `${label} 已達升級上限 ${getPlayerCombatStatUpgradeCap(key, state.jobClass)}%`
       );
       return;
     }
@@ -5366,7 +5358,7 @@ export default function Home() {
       },
     }));
     showToast(
-      `${label} +${actualIncrease}%（50%戰鬥效益），能力點數已使用`
+      `${label} +${actualIncrease}%（每點提升），能力點數已使用`
     );
   };
 
@@ -6362,7 +6354,7 @@ export default function Home() {
             (weaponAbility?.id === "moon-stalker-bow" &&
               (battle.moonStalkerGuaranteedHitsRemaining ?? 0) > 0)
           ? false
-          : Math.random() < targetMonsterDodgeRate / 100;
+          : Math.random() < capEffectiveDodgeRate(targetMonsterDodgeRate) / 100;
     const dawnWardenSwordTriggered = Boolean(
       weaponAbility?.id === "dawn-warden-sword" &&
         !selectedSkill &&
@@ -6421,8 +6413,7 @@ export default function Home() {
       )
     );
     const nightSetCurrentDodgeRate =
-      Math.min(
-        100,
+      capEffectiveDodgeRate(
         battleCombatStats.dodgeRate +
           (activeBuff?.dodgeRateBonusPercent ?? 0) +
           activeChestEffects.dodgeRateBonusPercent +
@@ -6620,10 +6611,7 @@ export default function Home() {
           ? (battleCombatStats.magicPenetrationPercent ?? 0)
           : 0) -
         (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
-      return Math.max(
-        1,
-        Math.round(rawDamage * (1 - Math.max(0, targetResistance) / 100))
-      );
+      return applyMonsterResistanceToDamage(rawDamage, targetResistance);
     };
     const baseRawDamageDealt = instantExecute
       ? targetMonsterHealth
@@ -6782,11 +6770,8 @@ export default function Home() {
               (battleCombatStats.magicPenetrationPercent ?? 0) -
               (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           )
-        : Math.max(
-            0,
-            targetPhysicalResistance -
-              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
-          );
+        : targetPhysicalResistance -
+          (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
     const astralSageSwordArcaneDamage = astralSageSwordBurstTriggered
       ? Math.max(
           1,
@@ -6879,11 +6864,9 @@ export default function Home() {
         ? 0
         : (weaponAbility?.id === "dawn-warden-bow"
             ? dawnBowDamageAgainst(targetGroupMember)
-            : Math.max(
-                1,
-                Math.round(
-                  rawDamageWithMoonStalkerBonus * (1 - resistancePercent / 100)
-                )
+            : applyMonsterResistanceToDamage(
+                rawDamageWithMoonStalkerBonus,
+                resistancePercent
               )) +
           astralSageSwordArcaneDamage +
           astralSageBowArcaneDamage +
@@ -7647,11 +7630,8 @@ export default function Home() {
               (battleCombatStats.magicPenetrationPercent ?? 0) -
               (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
           )
-        : Math.max(
-            0,
-            targetPhysicalResistance -
-              (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0)
-          );
+        : targetPhysicalResistance -
+          (helmetAbility?.effects.dawnGuardianResistancePiercePercent ?? 0);
     const weaponAreaDamagePerTarget =
       weaponAreaRawDamage > 0
         ? Math.max(
@@ -7860,13 +7840,13 @@ export default function Home() {
     if (starCreationRawDamage > 0 && nextGroupMembers) {
       const starfieldResult = applyMonsterGroupMappedAreaDamage(nextGroupMembers, member => {
         const defense = member.defense ?? monster.defense;
-        const resistance = Math.max(0, member.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0);
+        const resistance = member.physicalResistancePercent ?? monster.physicalResistancePercent ?? 0;
         return Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(defense)) * (1 - resistance / 100)));
       });
       nextGroupMembers = starfieldResult.members;
       starCreationDamageApplied = starfieldResult.totalDamageApplied;
     } else if (starCreationRawDamage > 0 && !battle.groupMembers) {
-      const resistance = Math.max(0, targetPhysicalResistance);
+      const resistance = targetPhysicalResistance;
       const fieldDamage = Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(targetDefenseAfterDebuff)) * (1 - resistance / 100)));
       starCreationDamageApplied = Math.min(fieldDamage, Math.max(0, battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied));
     }
@@ -8490,8 +8470,7 @@ export default function Home() {
           15)
         : 0);
     const effectivePlayerDodgeRate =
-      Math.min(
-        100,
+      capEffectiveDodgeRate(
         battleCombatStats.dodgeRate +
           (activeBuff?.dodgeRateBonusPercent ?? 0) +
           activeChestEffects.dodgeRateBonusPercent +
@@ -9108,7 +9087,8 @@ export default function Home() {
                       monster.elementalAttack.damageReductionPercent,
                   },
                 ]
-              : []
+              : [],
+            finalIncomingDamageTaken
           );
     const calibratedPlayerStatuses = mythicCalibrationTriggered
       ? nextPlayerStatuses.filter((_, index) => index > 0)
@@ -12476,7 +12456,7 @@ export default function Home() {
                 <div className="combat-stats-row">
                   <div className="combat-stats-label">
                     <span>戰鬥屬性</span>
-                    <small>每點能力點升級效果折半</small>
+                    <small>一般升級效果依 50% 效益計算；刺客暴擊率每點 +1.5%</small>
                   </div>
                   <div className="combat-stat">
                     <span>暴擊率</span>
@@ -12488,7 +12468,7 @@ export default function Home() {
                     <small>
                       {isMage
                         ? "法師固定無法暴擊"
-                        : `升級值 ${combatStats.critRate.toFixed(1)}% / ${PLAYER_COMBAT_STAT_UPGRADE_CAPS.critRate}% · +0.5%／點`}
+                        : `升級值 ${combatStats.critRate.toFixed(1)}% / ${PLAYER_COMBAT_STAT_UPGRADE_CAPS.critRate}% · +${getAbilityPointCombatGain("critRate", state.jobClass)}%／點`}
                     </small>
                     <button
                       className="combat-stat-upgrade"
@@ -12501,21 +12481,21 @@ export default function Home() {
                       onClick={() => upgradeCombatStat("critRate", "暴擊率")}
                       aria-label="升級暴擊率"
                     >
-                      ＋0.5
+                      ＋{getAbilityPointCombatGain("critRate", state.jobClass)}
                     </button>
                   </div>
                   <div className="combat-stat">
                     <span>暴擊傷害</span>
                     <strong>{effectiveCombatStats.critDamage}%</strong>
                     <small>
-                      升級值 {combatStats.critDamage}% / {PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage}% · +1%／點
+                      升級值 {combatStats.critDamage}% / {getPlayerCombatStatUpgradeCap("critDamage", state.jobClass)}% · +1%／點
                     </small>
                     <button
                       className="combat-stat-upgrade"
                       disabled={
                         state.abilityPoints <= 0 ||
                         combatStats.critDamage >=
-                          PLAYER_COMBAT_STAT_UPGRADE_CAPS.critDamage
+                          getPlayerCombatStatUpgradeCap("critDamage", state.jobClass)
                       }
                       onClick={() =>
                         upgradeCombatStat("critDamage", "暴擊傷害")

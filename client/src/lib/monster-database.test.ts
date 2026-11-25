@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ADDITIONAL_MINOR_MONSTER_CATALOG,
   DAILY_MONSTER_CATALOG,
-  getSmallMonsterCritRateMultiplier,
+  getSmallMonsterCritStats,
   getMonsterMechanicLabels,
   getSmallMonsterStatMultiplier,
+  getSmallMonsterDefense,
   selectDailyMonsterDefinitions,
 } from "./monster-database";
 
@@ -57,20 +58,62 @@ describe("daily monster catalog", () => {
     );
   });
 
-  it("scales small monster stats by level and caps the multiplier at level 100", () => {
+  it("keeps the level multiplier and applies the revised defense formula", () => {
     expect(getSmallMonsterStatMultiplier(1)).toBe(1);
-    expect(getSmallMonsterStatMultiplier(10)).toBe(1.5);
-    expect(getSmallMonsterStatMultiplier(20)).toBe(1.75);
-    expect(getSmallMonsterStatMultiplier(50)).toBe(2.5);
-    expect(getSmallMonsterStatMultiplier(100)).toBe(3.75);
-    expect(getSmallMonsterStatMultiplier(150)).toBe(3.75);
+    expect(getSmallMonsterStatMultiplier(10)).toBe(1);
+    expect(getSmallMonsterStatMultiplier(11)).toBe(1.25);
+    expect(getSmallMonsterStatMultiplier(20)).toBe(1.25);
+    expect(getSmallMonsterStatMultiplier(21)).toBe(1.5);
+    expect(getSmallMonsterStatMultiplier(30)).toBe(1.5);
+    expect(getSmallMonsterStatMultiplier(31)).toBe(1.75);
+    expect(getSmallMonsterStatMultiplier(40)).toBe(1.75);
+    expect(getSmallMonsterStatMultiplier(41)).toBe(2);
+    expect(getSmallMonsterStatMultiplier(50)).toBe(2);
+    expect(getSmallMonsterStatMultiplier(51)).toBe(2.25);
+    expect(getSmallMonsterStatMultiplier(60)).toBe(2.25);
+    expect(getSmallMonsterStatMultiplier(61)).toBe(2.5);
+    expect(getSmallMonsterStatMultiplier(70)).toBe(2.5);
+    expect(getSmallMonsterStatMultiplier(71)).toBe(2.75);
+    expect(getSmallMonsterStatMultiplier(80)).toBe(2.75);
+    expect(getSmallMonsterStatMultiplier(81)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(90)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(91)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(100)).toBe(3);
+    expect(getSmallMonsterStatMultiplier(150)).toBe(3);
+    expect(getSmallMonsterDefense(1)).toBe(6);
+    expect(getSmallMonsterDefense(10)).toBe(19);
+    expect(getSmallMonsterDefense(11)).toBe(26);
+    expect(getSmallMonsterDefense(20)).toBe(43);
+    expect(getSmallMonsterDefense(21)).toBe(54);
+    expect(getSmallMonsterDefense(100)).toBe(462);
   });
 
-  it("uses a separate crit-rate multiplier and never scales dodge rate", () => {
-    expect(getSmallMonsterCritRateMultiplier(1)).toBe(1);
-    expect(getSmallMonsterCritRateMultiplier(10)).toBe(1.2);
-    expect(getSmallMonsterCritRateMultiplier(20)).toBe(1.3);
-    expect(getSmallMonsterCritRateMultiplier(100)).toBe(2.1);
-    expect(getSmallMonsterCritRateMultiplier(150)).toBe(2.1);
+  it("assigns daily and soul-trial small monsters stable crit stats in shared ranges", () => {
+    const dailyStats = DAILY_MONSTER_CATALOG.map((_, catalogIndex) =>
+      getSmallMonsterCritStats("small-2026-10-21", catalogIndex)
+    );
+    const soulTrialStats = Array.from({ length: 9 }, (_, index) =>
+      getSmallMonsterCritStats("soul-trial:small-2026-10-21", index)
+    );
+    const sameDailyMonster = getSmallMonsterCritStats("small-2026-10-21", 0);
+    const nextDayMonster = getSmallMonsterCritStats("small-2026-10-22", 0);
+    const sameSoulTrialMonster = getSmallMonsterCritStats(
+      "soul-trial:small-2026-10-21",
+      0
+    );
+    const allStats = [...dailyStats, ...soulTrialStats];
+
+    expect(allStats.every(({ critRate }) => critRate >= 10 && critRate <= 50)).toBe(true);
+    expect(allStats.every(({ critDamage }) => critDamage >= 120 && critDamage <= 180)).toBe(true);
+    expect(new Set(dailyStats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
+    expect(new Set(dailyStats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
+    expect(new Set(soulTrialStats.map(({ critRate }) => critRate)).size).toBeGreaterThan(1);
+    expect(new Set(soulTrialStats.map(({ critDamage }) => critDamage)).size).toBeGreaterThan(1);
+    expect(getSmallMonsterCritStats("small-2026-10-21", 0)).toEqual(sameDailyMonster);
+    expect(nextDayMonster).not.toEqual(sameDailyMonster);
+    expect(getSmallMonsterCritStats("soul-trial:small-2026-10-21", 0)).toEqual(
+      sameSoulTrialMonster
+    );
+    expect(sameSoulTrialMonster).not.toEqual(sameDailyMonster);
   });
 });

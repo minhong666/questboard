@@ -11,21 +11,17 @@ export type MonsterMechanicDefinition = {
   encounterType?: "individual" | "swarm";
 };
 
-/**
- * 小怪的戰鬥數值倍率：Lv.1–9 維持原值，從 Lv.10 起每 10 級增加 0.25，
- * Lv.100 以上固定使用 Lv.100 的倍率。
- */
+/** 每日小怪的戰鬥數值倍率：每 10 級增加 0.25，Lv.81 起封頂 ×3。 */
 export function getSmallMonsterStatMultiplier(level: number): number {
   const safeLevel = Math.max(1, Math.floor(level));
-  if (safeLevel < 10) return 1;
-  return Math.min(3.75, 1.5 + Math.floor((safeLevel - 10) / 10) * 0.25);
+  return Math.min(3, 1 + Math.floor((safeLevel - 1) / 10) * 0.25);
 }
 
-/** 小怪暴擊率倍率每 10 級增加 0.1，Lv.100 以上固定使用 Lv.100 倍率。 */
-export function getSmallMonsterCritRateMultiplier(level: number): number {
+/** 防禦力：round((4 + round(1.5 × 等級)) × 每日小怪等級倍率)。 */
+export function getSmallMonsterDefense(level: number): number {
   const safeLevel = Math.max(1, Math.floor(level));
-  if (safeLevel < 10) return 1;
-  return Math.min(2.1, 1.2 + Math.floor((safeLevel - 10) / 10) * 0.1);
+  const statMultiplier = getSmallMonsterStatMultiplier(safeLevel);
+  return Math.round((4 + Math.round(1.5 * safeLevel)) * statMultiplier);
 }
 
 export function getMonsterMechanicLabels(
@@ -184,6 +180,18 @@ function stableHash(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+/** 每隻小怪各自取得固定於該次刷新週期的暴擊數值。 */
+export function getSmallMonsterCritStats(
+  refreshKey: string,
+  monsterIndex: number
+) {
+  const seed = `${refreshKey}:${monsterIndex}`;
+  return {
+    critRate: 10 + (stableHash(`${seed}:crit-rate`) % 41),
+    critDamage: 120 + (stableHash(`${seed}:crit-damage`) % 61),
+  };
 }
 
 export function selectDailyMonsterDefinitions(

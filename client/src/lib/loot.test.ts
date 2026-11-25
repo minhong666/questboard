@@ -710,6 +710,49 @@ describe("QuestBoard loot", () => {
     expect(oldTreasure.affixes).toEqual([]);
   });
 
+  it("updates saved equipment bonuses from current templates while preserving item data", () => {
+    const template = RPG_EQUIPMENT_TEMPLATES.find(
+      item =>
+        item.name === "皮質兜帽" &&
+        item.rarity === "普通" &&
+        item.slot === "頭盔"
+    );
+    if (!template) throw new Error("Expected current helmet template");
+
+    const [item] = parseLootInventory([
+      {
+        id: "old-template-helmet",
+        kind: "equipment",
+        name: template.name,
+        slot: template.slot,
+        rarity: template.rarity,
+        description: "舊版描述",
+        bonus: "生命 +1",
+        icon: template.icon,
+        equipmentLevel: template.equipmentLevel,
+        affixes: [
+          {
+            name: "精準",
+            description: "暴擊率 +4%",
+            bonuses: { critRate: 4 },
+          },
+        ],
+      },
+    ]);
+
+    expect(item?.kind).toBe("equipment");
+    if (item?.kind !== "equipment") throw new Error("Expected saved gear");
+    expect(item.bonus).toBe(template.bonus);
+    expect(item.id).toBe("old-template-helmet");
+    expect(item.affixes).toEqual([
+      {
+        name: "精準",
+        description: "暴擊率 +4%",
+        bonuses: { critRate: 4 },
+      },
+    ]);
+  });
+
   it("drops equipment removed from the game when loading an old save", () => {
     expect(
       parseLootInventory([
