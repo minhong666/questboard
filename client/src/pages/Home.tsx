@@ -4248,6 +4248,59 @@ export default function Home() {
   const battleEquippedAmuletAbility = isSoulTrialBattle
     ? undefined
     : equippedAmuletAbility;
+  const currentBattle = battle?.outcome === "fighting" ? battle : null;
+  const battlePassiveEquipmentBuffs = currentBattle
+    ? [
+        { slot: "頭盔" as const, ability: battleEquippedHelmetAbility },
+        { slot: "胸甲" as const, ability: battleEquippedChestAbility },
+        { slot: "護腿" as const, ability: battleEquippedLeggingsAbility },
+      ].flatMap(({ slot, ability }) => {
+        if (!ability) return [];
+        const activeEffects = getActiveEquipmentSpecialEffects(
+          ability,
+          currentBattle.playerHealth,
+          battleAbilities.health,
+          currentBattle.turn,
+          slot === "胸甲" ? (currentBattle.galeStacks ?? 0) : 0,
+          slot === "護腿"
+            ? (currentBattle.leggingsPassiveState?.asuraCritStackTurns.length ?? 0)
+            : 0
+        );
+        const details = [
+          {
+            value: activeEffects.attackDamageBonusPercent,
+            label: "攻擊傷害",
+          },
+          { value: activeEffects.defenseBonusPercent, label: "防禦" },
+          { value: activeEffects.lifestealPercent, label: "吸血" },
+          { value: activeEffects.physicalResistancePercent, label: "物理抗性" },
+          { value: activeEffects.magicResistancePercent, label: "魔法抗性" },
+          {
+            value: activeEffects.enemyDamageReductionPercent,
+            label: "敵方傷害減少",
+          },
+          { value: activeEffects.dodgeRateBonusPercent, label: "閃避率" },
+          {
+            value: activeEffects.physicalDamageBonusPercent,
+            label: "物理傷害",
+          },
+        ]
+          .filter(effect => effect.value > 0)
+          .map(effect => {
+            const percent = Number.isInteger(effect.value)
+              ? String(effect.value)
+              : effect.value.toFixed(1);
+            return `${effect.label} +${percent}%`;
+          });
+        return details.length > 0
+          ? [{ id: `${slot}-${ability.id}`, name: ability.name, details }]
+          : [];
+      })
+    : [];
+  const battleRecentEquipmentTriggers = (battle?.logs ?? [])
+    .slice(-3)
+    .flatMap(log => log.match(/【[^】]+】[^；]*/g) ?? [])
+    .slice(-6);
   const soulSpecializationSkills = getUnlockedSpecializationSkills(
     SOUL_TRIAL_SPECIALIZATION,
     battleLevel
@@ -15633,6 +15686,18 @@ export default function Home() {
                 aria-label="角色目前戰鬥效果"
               >
                 <span className="battle-effects-label">你的目前效果</span>
+                {battlePassiveEquipmentBuffs.map(buff => (
+                  <span
+                    className="battle-effect battle-effect-equipment-passive"
+                    key={buff.id}
+                  >
+                    <strong>{buff.name}</strong>
+                    <small>目前生效</small>
+                    {buff.details.map(detail => (
+                      <small key={detail}>{detail}</small>
+                    ))}
+                  </span>
+                ))}
                 {temporaryBattleBuff && (
                   <span className="battle-effect battle-effect-buff">
                     <strong>
@@ -15990,7 +16055,27 @@ export default function Home() {
                     <small>閃避 +{battleArcherTalentBonuses.dodgePercent}%</small>
                   </span>
                 )}
+                {battleRecentEquipmentTriggers.length > 0 && (
+                  <div
+                    className="battle-equipment-trigger-list"
+                    aria-label="最近觸發的裝備效果"
+                  >
+                    <span className="battle-effects-label">
+                      最近觸發的裝備效果
+                    </span>
+                    {battleRecentEquipmentTriggers.map((effect, index) => (
+                      <span
+                        className="battle-effect battle-effect-equipment-trigger"
+                        key={`${effect}-${index}`}
+                      >
+                        <small>{effect}</small>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {!temporaryBattleBuff &&
+                  !battlePassiveEquipmentBuffs.length &&
+                  !battleRecentEquipmentTriggers.length &&
                   !(battle.astralSageShield ?? 0) &&
                   !(battle.dawnWardenShield ?? 0) &&
                   !(battle.azureDragonShield ?? 0) &&
