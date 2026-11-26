@@ -127,12 +127,14 @@ export type EquipmentSpecialAbilityEffects = {
   damageBonusBelowHalfHealthPercent?: number;
   lifestealBelowHalfHealthPercent?: number;
   cooldownReductionOnSkill?: number;
+  cooldownReductionOnSkillChancePercent?: number;
   physicalResistanceBelowHalfHealthPercent?: number;
   magicResistanceBelowHalfHealthPercent?: number;
   preventLethalDamageOnce?: boolean;
   nextAttackLifestealPercent?: number;
   attackBonusAboveHalfHealthPercent?: number;
   defenseBonusAboveHalfHealthPercent?: number;
+  damageReductionAboveHalfHealthPercent?: number;
   attackBonusAbove70HealthPercent?: number;
   defenseBonusAbove70HealthPercent?: number;
   enemyDamageReductionAbove70HealthPercent?: number;
@@ -154,9 +156,9 @@ export type EquipmentSpecialAbilityEffects = {
   starfireArmorReductionPercent?: number;
   dawnProcChancePercent?: number;
   dawnBonusDamagePercentAttack?: number;
-  dawnHighHealthThresholdPercent?: number;
-  dawnHighHealthDamageMultiplier?: number;
+  ironGuardProcChancePercent?: number;
   ironGuardDamageReductionPercentPerStack?: number;
+  ironGuardDurationTurns?: number;
   ironGuardMaxStacks?: number;
   moonshadowProcChancePercent?: number;
   moonshadowDodgeRateBonusPercent?: number;
@@ -165,6 +167,8 @@ export type EquipmentSpecialAbilityEffects = {
   kingsSwordCritDamageBonusPercent?: number;
   starrealmMaxStacks?: number;
   starrealmAoeAttackPercent?: number;
+  hunterCritProcChancePercent?: number;
+  hunterCritMaxStacks?: number;
   hunterCritRateBonusPerCriticalPercent?: number;
   hunterCritDamageBonusPerCriticalPercent?: number;
   swiftfangAttackBonusPercent?: number;
@@ -186,6 +190,7 @@ export type EquipmentSpecialAbilityEffects = {
   moonstringChargeIntervalTurns?: number;
   moonstringDefensePiercePercent?: number;
   moonstringNextEnemyAccuracyReductionPercent?: number;
+  firmamentProcChancePercent?: number;
   firmamentBonusDamagePercentStrength?: number;
   sunwheelProcChancePercent?: number;
   sunwheelBurnPercentAttack?: number;
@@ -216,6 +221,9 @@ export type EquipmentSpecialAbilityEffects = {
   mountainDefenseBelowHalfHealthPercent?: number;
   mountainPhysicalResistanceBelowHalfHealthPercent?: number;
   mountainMagicResistanceBelowHalfHealthPercent?: number;
+  mountainDefenseAboveHalfHealthPercent?: number;
+  mountainPhysicalResistanceAboveHalfHealthPercent?: number;
+  mountainMagicResistanceAboveHalfHealthPercent?: number;
   galeNextAttackBonusPercentStrength?: number;
   shadowmoonDodgeRateBonusAtBattleStartPercent?: number;
   shadowmoonLethalEvasionChancePercent?: number;
@@ -235,7 +243,9 @@ export type EquipmentSpecialAbilityEffects = {
   hunterFangDefensePiercePercent?: number;
   hunterFangCooldownReductionOnKill?: number;
   spacetimeReversalChancePercent?: number;
+  spacetimeReversalHealPercent?: number;
   starCoreShieldPercentIntelligence?: number;
+  starCoreShieldDurationTurns?: number;
   starCoreMagicDamageBonusPercent?: number;
   dawnGuardianDefensePiercePercent?: number;
   dawnGuardianResistancePiercePercent?: number;
@@ -529,9 +539,9 @@ const legendaryAbilities: Partial<
     id: "asura-leggings",
     name: "阿修羅戰意",
     description:
-      "每次造成暴擊時，物理傷害提高 8%，最多 3 層；每層持續 3 回合。",
+      "每次造成暴擊時，物理傷害提高 10%，最多 3 層；每層持續 3 回合。",
     effects: {
-      asuraPhysicalDamageBonusPerCritPercent: 8,
+      asuraPhysicalDamageBonusPerCritPercent: 10,
       asuraMaxCritStacks: 3,
       asuraCritStackDurationTurns: 3,
     },
@@ -539,10 +549,10 @@ const legendaryAbilities: Partial<
   "night-leggings": {
     id: "night-leggings",
     name: "夜魔幻步",
-    description: "生命值低於 50% 時，閃避率提高 12%，防禦提高 15%。",
+    description: "生命值低於 50% 時，閃避率提高 12%，防禦提高 8%。",
     effects: {
       nightDodgeBelowHalfHealthPercent: 12,
-      nightDefenseBelowHalfHealthPercent: 15,
+      nightDefenseBelowHalfHealthPercent: 8,
     },
   },
   "astral-leggings": {
@@ -560,18 +570,18 @@ const legendaryAbilities: Partial<
     id: "mountain-leggings",
     name: "山脈壁壘",
     description:
-      "生命值低於 50% 時，防禦提高 20%，物理與魔法傷害抗性各提高 10%。",
+      "生命值高於 50% 時，防禦提高 10%，物理與魔法傷害抗性各提高 10%。",
     effects: {
-      mountainDefenseBelowHalfHealthPercent: 20,
-      mountainPhysicalResistanceBelowHalfHealthPercent: 10,
-      mountainMagicResistanceBelowHalfHealthPercent: 10,
+      mountainDefenseAboveHalfHealthPercent: 10,
+      mountainPhysicalResistanceAboveHalfHealthPercent: 10,
+      mountainMagicResistanceAboveHalfHealthPercent: 10,
     },
   },
   "gale-leggings": {
     id: "gale-leggings",
     name: "疾風追擊",
     description: "成功閃避後，下一次物理攻擊附加相當於自身力量 120% 的傷害。",
-    effects: { galeNextAttackBonusPercentStrength: 120 },
+    effects: { galeNextAttackBonusPercentStrength: 30 },
   },
   "shadowmoon-leggings": {
     id: "shadowmoon-leggings",
@@ -587,10 +597,10 @@ const legendaryAbilities: Partial<
     id: "solar-eye",
     name: "太陽神裁決",
     description:
-      "造成傷害時有 25% 機率觸發雙修爆發，額外造成力量與智力總和 50% 的傷害，並使目標命中率降低 15%，持續 2 回合。",
+      "造成傷害時有 25% 機率觸發雙修爆發，額外造成力量與智力總和 35% 的傷害，並使目標命中率降低 15%，持續 2 回合。",
     effects: {
       solarEyeProcChancePercent: 25,
-      solarEyeHybridDamagePercent: 50,
+      solarEyeHybridDamagePercent: 35,
       solarEyeAccuracyReductionPercent: 15,
       solarEyeAccuracyReductionDurationTurns: 2,
     },
@@ -599,34 +609,34 @@ const legendaryAbilities: Partial<
     id: "medusa-eye",
     name: "美杜莎凝視",
     description:
-      "攻擊命中或成功閃避時有 20% 機率使目標石化 1 回合；攻擊已石化目標時傷害提高 25%。",
+      "攻擊命中或成功閃避時有 20% 機率使目標石化 1 回合；攻擊已石化目標時傷害提高 20%。",
     effects: {
       medusaEyeProcChancePercent: 20,
-      medusaEyeDamageBonusVsPetrifiedPercent: 25,
+      medusaEyeDamageBonusVsPetrifiedPercent: 20,
     },
   },
   "leviathan-heart": {
     id: "leviathan-heart",
     name: "利維坦回生",
     description:
-      "每 3 回合恢復最大生命值 4%；生命低於 30% 時恢復量翻倍，並獲得 20% 物理與魔法抗性。",
+      "每 3 回合恢復最大生命值 4%；生命低於 30% 時恢復量翻倍，並獲得 10% 物理與魔法抗性。",
     effects: {
       leviathanHealIntervalTurns: 3,
       leviathanHealMaxHealthPercent: 4,
       leviathanLowHealthThresholdPercent: 30,
       leviathanLowHealthHealMultiplier: 2,
-      leviathanLowHealthResistancePercent: 20,
+      leviathanLowHealthResistancePercent: 10,
     },
   },
   "hunter-king-fang": {
     id: "hunter-king-fang",
     name: "獵王追擊",
     description:
-      "攻擊生命高於 70% 的目標時，暴擊率提高 15%、護甲穿透提高 20%；擊殺目標後所有傷害技能冷卻減少 1 回合。",
+      "攻擊生命高於 70% 的目標時，暴擊率提高 10%、護甲穿透提高 15%；擊殺目標後所有傷害技能冷卻減少 1 回合。",
     effects: {
       hunterFangHighHealthThresholdPercent: 70,
-      hunterFangCritRateBonusPercent: 15,
-      hunterFangDefensePiercePercent: 20,
+      hunterFangCritRateBonusPercent: 10,
+      hunterFangDefensePiercePercent: 15,
       hunterFangCooldownReductionOnKill: 1,
     },
   },
@@ -634,16 +644,17 @@ const legendaryAbilities: Partial<
     id: "spacetime-crystal",
     name: "時空逆轉",
     description:
-      "每場戰鬥首次受到致命傷害時有 30% 機率免疫該次傷害，並將戰鬥狀態回溯至本回合開始前。",
-    effects: { spacetimeReversalChancePercent: 30 },
+      "每場戰鬥首次受到致命傷害時必定免疫該次傷害並清除所有附加效果；之後每次受到致命傷害時有 30% 機率免疫該次傷害並恢復最大生命值 5%。",
+    effects: { spacetimeReversalChancePercent: 30, spacetimeReversalHealPercent: 5 },
   },
   "eternal-star-core": {
     id: "eternal-star-core",
     name: "星核共鳴",
     description:
-      "施放技能時獲得相當於智力 50% 的護盾；護盾存在時魔法傷害提高 15%。",
+      "施放技能時獲得相當於智力 10% 的護盾；護盾存在時魔法傷害提高 15%，持續 1 回合。",
     effects: {
-      starCoreShieldPercentIntelligence: 50,
+      starCoreShieldPercentIntelligence: 10,
+      starCoreShieldDurationTurns: 1,
       starCoreMagicDamageBonusPercent: 15,
     },
   },
@@ -672,20 +683,20 @@ const legendaryAbilities: Partial<
     id: "dawn-guardian-step",
     name: "聖衛步伐",
     description:
-      "閃避率提高 10%；受到近戰傷害時有 25% 機率使攻擊者繳械 1 回合。",
+      "閃避率提高 10%；受到傷害時有 15% 機率使攻擊者繳械 1 回合。",
     effects: {
       dawnStepDodgeRateBonusPercent: 10,
-      dawnStepDisarmChancePercent: 25,
+      dawnStepDisarmChancePercent: 15,
     },
   },
   "dawn-guardian-sunmark": {
     id: "dawn-guardian-sunmark",
     name: "太陽印記",
     description:
-      "命中時為目標施加太陽印記；攻擊帶有印記的目標時傷害提高 12%，並將造成傷害的 10% 轉化為生命。",
+      "命中時為目標施加太陽印記；攻擊帶有印記的目標時傷害提高 12%，並將造成傷害的 8% 轉化為生命。",
     effects: {
       dawnMarkDamageBonusPercent: 12,
-      dawnMarkLifestealPercent: 10,
+      dawnMarkLifestealPercent: 8,
     },
   },
   "moon-stalker-vision": {
@@ -825,61 +836,61 @@ const legendaryAbilities: Partial<
   "low-health-lifesteal": {
     id: "low-health-lifesteal",
     name: "夜魔噬魂",
-    description: "生命值低於 50% 時，攻擊獲得 35% 吸血。",
-    effects: { lifestealBelowHalfHealthPercent: 35 },
+    description: "生命值低於 50% 時，攻擊獲得 25% 吸血。",
+    effects: { lifestealBelowHalfHealthPercent: 25 },
   },
   "skill-cooldown": {
     id: "skill-cooldown",
     name: "星辰回響",
-    description: "施放技能後，該技能的冷卻回合數減少 1 回合。",
-    effects: { cooldownReductionOnSkill: 1 },
+    description: "施放技能後有 60% 機率使該技能冷卻回合數減少 1 回合。",
+    effects: { cooldownReductionOnSkill: 1, cooldownReductionOnSkillChancePercent: 60 },
   },
   "low-health-resistance": {
     id: "low-health-resistance",
     name: "山脈守護",
-    description: "生命值低於 50% 時，物理與魔法傷害抗性各提高 20%。",
+    description: "生命值低於 50% 時，物理與魔法傷害抗性各提高 15%。",
     effects: {
-      physicalResistanceBelowHalfHealthPercent: 20,
-      magicResistanceBelowHalfHealthPercent: 20,
+      physicalResistanceBelowHalfHealthPercent: 15,
+      magicResistanceBelowHalfHealthPercent: 15,
     },
   },
   "phoenix-rebirth": {
     id: "phoenix-rebirth",
     name: "涅槃重生",
     description:
-      "每場戰鬥首次受到致死傷害時免疫該次傷害，並使下一次成功攻擊獲得 20% 吸血。",
+      "每場戰鬥首次受到致死傷害時免疫該次傷害，並使下一次成功攻擊獲得 15% 吸血。",
     effects: {
       preventLethalDamageOnce: true,
-      nextAttackLifestealPercent: 20,
+      nextAttackLifestealPercent: 15,
     },
   },
   "high-health-dominance": {
     id: "high-health-dominance",
     name: "天穹威勢",
-    description: "生命值高於 50% 時，攻擊與防禦提高 20%。",
+    description: "生命值高於 50% 時，攻擊提高 15%，受到的傷害減少 10%。",
     effects: {
-      attackBonusAboveHalfHealthPercent: 20,
-      defenseBonusAboveHalfHealthPercent: 20,
+      attackBonusAboveHalfHealthPercent: 15,
+      damageReductionAboveHalfHealthPercent: 10,
     },
   },
   "imperial-pressure": {
     id: "imperial-pressure",
     name: "帝王威壓",
     description:
-      "生命值高於 70% 時，攻擊與防禦提高 15%，並使敵人造成的傷害降低 15%。",
+      "生命值高於 70% 時，攻擊與防禦提高 10%，並使敵人造成的傷害降低 10%。",
     effects: {
-      attackBonusAbove70HealthPercent: 15,
-      defenseBonusAbove70HealthPercent: 15,
-      enemyDamageReductionAbove70HealthPercent: 15,
+      attackBonusAbove70HealthPercent: 10,
+      defenseBonusAbove70HealthPercent: 10,
+      enemyDamageReductionAbove70HealthPercent: 10,
     },
   },
   "abyssal-counter": {
     id: "abyssal-counter",
     name: "深淵反擊",
-    description: "成功閃避後，下一次成功命中的攻擊必定暴擊，且傷害提高 15%。",
+    description: "成功閃避後，下一次成功命中的攻擊必定暴擊，且傷害提高 10%。",
     effects: {
       guaranteedCritOnNextAttackAfterDodge: true,
-      nextAttackDamageBonusAfterDodgePercent: 15,
+      nextAttackDamageBonusAfterDodgePercent: 10,
     },
   },
   "truth-awakening": {
@@ -892,10 +903,10 @@ const legendaryAbilities: Partial<
     id: "sacred-wall",
     name: "神聖護盾",
     description:
-      "受到傷害會累積護盾能量；生命值低於 30% 時，自動獲得護盾，吸收相當於最大生命值 25% 的傷害，持續 2 回合，每場戰鬥僅觸發一次。",
+      "受到傷害會累積護盾能量；生命值低於 30% 時，自動獲得護盾，吸收相當於最大生命值 15% 的傷害，持續 2 回合，每場戰鬥僅觸發一次。",
     effects: {
       sacredShieldBelowHealthPercent: 30,
-      sacredShieldAbsorbPercentMaxHealth: 25,
+      sacredShieldAbsorbPercentMaxHealth: 15,
       sacredShieldDurationTurns: 2,
     },
   },
@@ -903,7 +914,7 @@ const legendaryAbilities: Partial<
     id: "gale-dancer",
     name: "疾風",
     description:
-      "每次成功閃避或進行普通攻擊時獲得 1 層疾風（最多 5 層）；每層提升攻擊 3% 與閃避率 2%，滿 5 層時額外提高物理傷害 10%。",
+      "每次成功閃避時獲得 1 層疾風（最多 5 層）；每層提升攻擊 3% 與閃避率 2%，滿 5 層時額外提高物理傷害 10%。",
     effects: {
       galeMaxStacks: 5,
       galeAttackPercentPerStack: 3,
@@ -1211,6 +1222,7 @@ export function getActiveEquipmentSpecialEffects(
         : 0) +
       (aboveHalfHealth
         ? (effects?.defenseBonusAboveHalfHealthPercent ?? 0)
+          + (effects?.mountainDefenseAboveHalfHealthPercent ?? 0)
         : 0) +
       (above70Health ? (effects?.defenseBonusAbove70HealthPercent ?? 0) : 0),
     lifestealPercent: belowHalfHealth
@@ -1220,7 +1232,9 @@ export function getActiveEquipmentSpecialEffects(
       (belowHalfHealth
         ? (effects?.physicalResistanceBelowHalfHealthPercent ?? 0) +
           (effects?.mountainPhysicalResistanceBelowHalfHealthPercent ?? 0)
-        : 0) +
+        : aboveHalfHealth
+          ? (effects?.mountainPhysicalResistanceAboveHalfHealthPercent ?? 0)
+          : 0) +
       (oracleProtectionActive
         ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
         : 0),
@@ -1228,13 +1242,19 @@ export function getActiveEquipmentSpecialEffects(
       (belowHalfHealth
         ? (effects?.magicResistanceBelowHalfHealthPercent ?? 0) +
           (effects?.mountainMagicResistanceBelowHalfHealthPercent ?? 0)
-        : 0) +
+        : aboveHalfHealth
+          ? (effects?.mountainMagicResistanceAboveHalfHealthPercent ?? 0)
+          : 0) +
       (oracleProtectionActive
         ? (effects?.oracleFirstTurnsDamageReductionPercent ?? 0)
         : 0),
-    enemyDamageReductionPercent: above70Health
-      ? (effects?.enemyDamageReductionAbove70HealthPercent ?? 0)
-      : 0,
+    enemyDamageReductionPercent:
+      (aboveHalfHealth
+        ? (effects?.damageReductionAboveHalfHealthPercent ?? 0)
+        : 0) +
+      (above70Health
+        ? (effects?.enemyDamageReductionAbove70HealthPercent ?? 0)
+        : 0),
     dodgeRateBonusPercent:
       (belowHalfHealth ? (effects?.nightDodgeBelowHalfHealthPercent ?? 0) : 0) +
       (effects?.shadowmoonDodgeRateBonusAtBattleStartPercent ?? 0) +
@@ -1396,12 +1416,25 @@ export function rollSpacetimeReversal(
   const chance = ability?.effects.spacetimeReversalChancePercent ?? 0;
   return Boolean(
     ability?.id === "spacetime-crystal" &&
-      !alreadyUsed &&
       healthBeforeDamage > 0 &&
       incomingDamage >= healthBeforeDamage &&
-      chance > 0 &&
-      randomValue < chance / 100
+      (!alreadyUsed || (chance > 0 && randomValue < chance / 100))
   );
+}
+export function getSpacetimeReversalHeal(
+  ability: EquipmentSpecialAbility | undefined,
+  maxHealth: number,
+  alreadyUsed: boolean
+): number {
+  return ability?.id === "spacetime-crystal" && alreadyUsed
+    ? Math.max(
+        0,
+        Math.floor(
+          maxHealth *
+            ((ability.effects.spacetimeReversalHealPercent ?? 5) / 100)
+        )
+      )
+    : 0;
 }
 
 export function getStarCoreShieldGain(
@@ -1414,7 +1447,7 @@ export function getStarCoreShieldGain(
         1,
         Math.floor(
           intelligence *
-            ((ability.effects.starCoreShieldPercentIntelligence ?? 50) / 100)
+            ((ability.effects.starCoreShieldPercentIntelligence ?? 10) / 100)
         )
       )
     : 0;
@@ -1425,7 +1458,12 @@ export type StarCoreShieldResolution = {
   damageRemaining: number;
   absorbedDamage: number;
 };
-
+export function expireStarCoreShieldAtTurnEnd(
+  shieldRemaining: number,
+  durationTurns: number
+): number {
+  return durationTurns <= 1 ? 0 : Math.max(0, shieldRemaining);
+}
 export function resolveStarCoreShieldDamage(
   currentShield: number,
   incomingDamage: number
@@ -1471,13 +1509,11 @@ export function resolveDodgeCounterState(
 
 export function resolveGaleStackCount(
   currentStacks: number,
-  normalAttackMade: boolean,
   successfullyDodged: boolean,
   maxStacks = 5
 ): number {
   const stacks = Math.max(0, Math.floor(currentStacks));
-  const gained = Number(normalAttackMade) + Number(successfullyDodged);
-  return Math.min(Math.max(0, maxStacks), stacks + gained);
+  return Math.min(Math.max(0, maxStacks), stacks + Number(successfullyDodged));
 }
 
 export function resolveDivineShieldDamage(
