@@ -1900,7 +1900,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
     growth.abilities.strength += safeLevelUps;
     growth.combat = {
       critRate: safeLevelUps * 0.5,
-      critDamage: safeLevelUps * 0.5,
+      critDamage: safeLevelUps,
     };
   }
   if (jobClass === "mage") {
@@ -1909,7 +1909,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
   }
   if (jobClass === "rogue") {
     growth.combat = {
-      critRate: safeLevelUps * 0.9,
+      critRate: safeLevelUps,
       critDamage: safeLevelUps,
     };
   }
@@ -2237,7 +2237,7 @@ const jobClasses: Record<
     name: "弓箭手",
     icon: "target",
     description: "敏捷的遠程獵手，擅長閃避與暴擊。",
-    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +0.5%",
+    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +1%",
     bonuses: { health: 0, strength: 2, defense: 0, intelligence: 1 },
     combat: { critRate: 3, dodgeRate: 4 },
   },
@@ -2253,7 +2253,7 @@ const jobClasses: Record<
     name: "盜賊",
     icon: "star",
     description: "靈巧的暗影行者，擅長速度與致命一擊。",
-    levelUpSummary: "每次升級額外獲得暴擊率 +0.9%、暴擊傷害 +1%",
+    levelUpSummary: "每次升級額外獲得暴擊率 +1%、暴擊傷害 +1%",
     bonuses: { health: 0, strength: 3, defense: 1, intelligence: 1 },
     combat: { critRate: 5, dodgeRate: 6 },
   },
