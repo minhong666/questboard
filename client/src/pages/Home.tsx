@@ -125,6 +125,7 @@ import {
   parseDiscoveredEquipmentNames,
 } from "../lib/equipment-codex";
 import {
+  getSpacetimeReversalHeal,
   advanceAsuraCritStackTurns,
   getActiveLegendaryEquipmentSetBonuses,
   getActiveEquipmentSpecialEffects,
@@ -132,6 +133,7 @@ import {
   getLeviathanHealing,
   resolveAstralEnergyAction,
   getStarCoreShieldGain,
+  expireStarCoreShieldAtTurnEnd,
   resolveStarCoreShieldDamage,
   resolveDivineShieldDamage,
   resolveDodgeCounterState,
@@ -147,9 +149,14 @@ import {
 } from "../lib/equipment-special-abilities";
 import {
   INITIAL_WEAPON_PASSIVE_BATTLE_STATE,
+  advanceIronGuardStacks,
   advanceWeaponTimedBuffs,
+  getDawnWardenBowSharedDamage,
+  getDawnWardenSanctuaryDamage,
   getWeaponTimedBuffBonuses,
   rollPercentChance,
+  rollHunterCritStack,
+  shouldDawnWardenBowDistributeDamage,
   type WeaponPassiveBattleState,
   type WeaponTimedBuff,
 } from "../lib/equipment-weapon-combat";
@@ -438,6 +445,7 @@ type BattleState = {
   starCreationGlowTurnsRemaining?: number;
   actionLockTurns?: number;
   shopElixirIds?: string[];
+  shopElixirUsedIds?: string[];
   shopShield?: number;
   shopShieldTurnsRemaining?: number;
   monsterStatuses: BattleStatus[];
@@ -1892,7 +1900,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
     growth.abilities.strength += safeLevelUps;
     growth.combat = {
       critRate: safeLevelUps * 0.5,
-      critDamage: safeLevelUps * 0.5,
+      critDamage: safeLevelUps,
     };
   }
   if (jobClass === "mage") {
@@ -1901,7 +1909,7 @@ function getLevelGrowth(jobClass: JobClass, levelUps: number): LevelGrowth {
   }
   if (jobClass === "rogue") {
     growth.combat = {
-      critRate: safeLevelUps * 0.9,
+      critRate: safeLevelUps,
       critDamage: safeLevelUps,
     };
   }
@@ -2229,7 +2237,7 @@ const jobClasses: Record<
     name: "弓箭手",
     icon: "target",
     description: "敏捷的遠程獵手，擅長閃避與暴擊。",
-    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +0.5%",
+    levelUpSummary: "每次升級額外獲得攻擊 +1、暴擊率 +0.5%、暴擊傷害 +1%",
     bonuses: { health: 0, strength: 2, defense: 0, intelligence: 1 },
     combat: { critRate: 3, dodgeRate: 4 },
   },
@@ -2245,7 +2253,7 @@ const jobClasses: Record<
     name: "盜賊",
     icon: "star",
     description: "靈巧的暗影行者，擅長速度與致命一擊。",
-    levelUpSummary: "每次升級額外獲得暴擊率 +0.9%、暴擊傷害 +1%",
+    levelUpSummary: "每次升級額外獲得暴擊率 +1%、暴擊傷害 +1%",
     bonuses: { health: 0, strength: 3, defense: 1, intelligence: 1 },
     combat: { critRate: 5, dodgeRate: 6 },
   },
@@ -4248,6 +4256,59 @@ export default function Home() {
   const battleEquippedAmuletAbility = isSoulTrialBattle
     ? undefined
     : equippedAmuletAbility;
+  const currentBattle = battle?.outcome === "fighting" ? battle : null;
+  const battlePassiveEquipmentBuffs = currentBattle
+    ? [
+        { slot: "頭盔" as const, ability: battleEquippedHelmetAbility },
+        { slot: "胸甲" as const, ability: battleEquippedChestAbility },
+        { slot: "護腿" as const, ability: battleEquippedLeggingsAbility },
+      ].flatMap(({ slot, ability }) => {
+        if (!ability) return [];
+        const activeEffects = getActiveEquipmentSpecialEffects(
+          ability,
+          currentBattle.playerHealth,
+          battleAbilities.health,
+          currentBattle.turn,
+          slot === "胸甲" ? (currentBattle.galeStacks ?? 0) : 0,
+          slot === "護腿"
+            ? (currentBattle.leggingsPassiveState?.asuraCritStackTurns.length ?? 0)
+            : 0
+        );
+        const details = [
+          {
+            value: activeEffects.attackDamageBonusPercent,
+            label: "攻擊傷害",
+          },
+          { value: activeEffects.defenseBonusPercent, label: "防禦" },
+          { value: activeEffects.lifestealPercent, label: "吸血" },
+          { value: activeEffects.physicalResistancePercent, label: "物理抗性" },
+          { value: activeEffects.magicResistancePercent, label: "魔法抗性" },
+          {
+            value: activeEffects.enemyDamageReductionPercent,
+            label: "敵方傷害減少",
+          },
+          { value: activeEffects.dodgeRateBonusPercent, label: "閃避率" },
+          {
+            value: activeEffects.physicalDamageBonusPercent,
+            label: "物理傷害",
+          },
+        ]
+          .filter(effect => effect.value > 0)
+          .map(effect => {
+            const percent = Number.isInteger(effect.value)
+              ? String(effect.value)
+              : effect.value.toFixed(1);
+            return `${effect.label} +${percent}%`;
+          });
+        return details.length > 0
+          ? [{ id: `${slot}-${ability.id}`, name: ability.name, details }]
+          : [];
+      })
+    : [];
+  const battleRecentEquipmentTriggers = (battle?.logs ?? [])
+    .slice(-3)
+    .flatMap(log => log.match(/【[^】]+】[^；]*/g) ?? [])
+    .slice(-6);
   const soulSpecializationSkills = getUnlockedSpecializationSkills(
     SOUL_TRIAL_SPECIALIZATION,
     battleLevel
@@ -5643,6 +5704,8 @@ export default function Home() {
       omniscientChestStacks: 0,
       eternalFortressRockStacks: 0,
       starCreationGlowTurnsRemaining: 0,
+      shopElixirIds: [],
+      shopElixirUsedIds: [],
       moonStalkerSetDodgeStacks: 0,
       moonStalkerSetDodgeTurnsRemaining: 0,
       astralEnergyStacks: 0,
@@ -5656,7 +5719,6 @@ export default function Home() {
       moonStalkerGuaranteedHitsRemaining: 0,
       moonStalkerStaffDamageTurns: 0,
       actionLockTurns: 0,
-      shopElixirIds: [],
       shopShield: 0,
       shopShieldTurnsRemaining: 0,
       monsterStatuses: [],
@@ -5971,9 +6033,18 @@ export default function Home() {
         Math.max(0, turns - 1),
       ])
     );
+    const skillCooldownProcTriggered = Boolean(
+      selectedSkill &&
+        selectedSkill.cooldownTurns > 0 &&
+        helmetAbility?.id === "skill-cooldown" &&
+        rollPercentChance(
+          helmetAbility.effects.cooldownReductionOnSkillChancePercent ?? 60
+        )
+    );
     if (selectedSkill && selectedSkill.cooldownTurns > 0) {
-      const passiveCooldownReduction =
-        helmetAbility?.effects.cooldownReductionOnSkill ?? 0;
+      const passiveCooldownReduction = skillCooldownProcTriggered
+        ? (helmetAbility?.effects.cooldownReductionOnSkill ?? 1)
+        : 0;
       const cooldownReduction =
         (selectedSkill.damageType === "魔法"
           ? Math.floor((battleCombatStats.castSpeedPercent ?? 0) / 10)
@@ -6181,8 +6252,11 @@ export default function Home() {
     const damageType = selectedSkill?.damageType ?? (battleIsMage ? "魔法" : "物理");
     const isDamageAction = Boolean(
       !actionLocked &&
-        selectedSkill?.effectType !== "buff" &&
-        (!selectedSkill || selectedSkill.damageMultiplier > 0)
+      selectedSkill?.effectType !== "buff" &&
+      (!selectedSkill || selectedSkill.damageMultiplier > 0)
+    );
+    const dawnWardenSanctuaryTriggered = Boolean(
+      weaponAbility?.id === "dawn-warden-staff" && selectedSkill && !actionLocked
     );
     const moonstringArrowShot = Boolean(
       moonstringArrowReady && battleIsArcher && isDamageAction
@@ -6527,8 +6601,15 @@ export default function Home() {
         ]) *
         (1 - physicalDamageReductionPercent / 100)
     );
+    const dawnBowGroupSplitActive = shouldDawnWardenBowDistributeDamage(
+      weaponAbility?.id === "dawn-warden-bow",
+      battle.groupMembers
+        ? getLivingMonsterGroupMembers(battle.groupMembers).length
+        : 1
+    );
     const instantExecute = Boolean(
-      selectedSkill?.executeBelowHealthPercent &&
+      !dawnBowGroupSplitActive &&
+        selectedSkill?.executeBelowHealthPercent &&
         targetMonsterHealth <
           targetMonsterMaxHealth *
             (selectedSkill.executeBelowHealthPercent / 100)
@@ -6555,28 +6636,28 @@ export default function Home() {
           ),
         }
       : undefined;
+    const dawnBowLivingTargets = battle.groupMembers
+      ? getLivingMonsterGroupMembers(battle.groupMembers)
+      : [];
+    const dawnBowHitOrder = targetGroupMember
+      ? [
+          targetGroupMember,
+          ...dawnBowLivingTargets.filter(
+            member => member.id !== targetGroupMember.id
+          ),
+        ]
+      : dawnBowLivingTargets;
     const dawnBowTargetCount = Math.max(
       1,
-      battle.groupMembers
-        ? getLivingMonsterGroupMembers(battle.groupMembers).length
-        : 1
+      battle.groupMembers ? dawnBowLivingTargets.length : 1
     );
     const dawnBowDamageAgainst = (member?: MonsterGroupMember) => {
-      const livingMembers = battle.groupMembers
-        ? getLivingMonsterGroupMembers(battle.groupMembers)
-        : [];
       const targetIndex = member
         ? Math.max(
             0,
-            livingMembers.findIndex(candidate => candidate.id === member.id)
+            dawnBowHitOrder.findIndex(candidate => candidate.id === member.id)
           )
         : 0;
-      const progressiveBonusPercent = Math.min(
-        weaponAbility?.effects.dawnWardenBowMaxDamageBonusPercent ?? 30,
-        targetIndex *
-          (weaponAbility?.effects.dawnWardenBowDamageBonusPerTargetPercent ??
-            10)
-      );
       const targetDefense = member
         ? (member.defense ?? targetMonsterDefense) *
           (1 - targetArmorReductionPercent / 100) *
@@ -6584,9 +6665,12 @@ export default function Home() {
             (helmetAbility?.effects.dawnGuardianDefensePiercePercent ?? 0) /
               100)
         : targetDefenseAfterDebuff;
-      const dividedAttack = Math.round(
-        (buffedPlayerDamage / dawnBowTargetCount) *
-          (1 + progressiveBonusPercent / 100)
+      const dividedAttack = getDawnWardenBowSharedDamage(
+        buffedPlayerDamage,
+        dawnBowTargetCount,
+        targetIndex,
+        weaponAbility?.effects.dawnWardenBowDamageBonusPerTargetPercent ?? 10,
+        weaponAbility?.effects.dawnWardenBowMaxDamageBonusPercent ?? 30
       );
       const rawDamage = selectedSkill
         ? calculateSpecialSkillDamage(
@@ -6659,18 +6743,16 @@ export default function Home() {
     const dawnBonusDamage = dawnProcTriggered
       ? Math.round(
           basePlayerDamage *
-            ((weaponAbility?.effects.dawnBonusDamagePercentAttack ?? 20) /
-              100) *
-            (targetMonsterHealth >
-            targetMonsterMaxHealth *
-              ((weaponAbility?.effects.dawnHighHealthThresholdPercent ?? 70) /
-                100)
-              ? (weaponAbility?.effects.dawnHighHealthDamageMultiplier ?? 2)
-              : 1)
+            ((weaponAbility?.effects.dawnBonusDamagePercentAttack ?? 25) / 100)
         )
       : 0;
     const firmamentBonusDamage =
-      criticalHit && isDamageAction && weaponAbility?.id === "firmament-bow"
+      criticalHit &&
+      isDamageAction &&
+      weaponAbility?.id === "firmament-bow" &&
+      rollPercentChance(
+        weaponAbility.effects.firmamentProcChancePercent ?? 50
+      )
         ? Math.round(
             battleAbilities.strength *
               ((weaponAbility.effects.firmamentBonusDamagePercentStrength ??
@@ -7040,7 +7122,12 @@ export default function Home() {
       weaponAbility?.id === "swiftfang-dagger" && criticalHit && weaponHitLanded
     );
     const hunterCriticalTriggered = Boolean(
-      weaponAbility?.id === "hunter-dagger" && criticalHit && weaponHitLanded
+      weaponAbility?.id === "hunter-dagger" &&
+        weaponHitLanded &&
+        rollHunterCritStack(
+          weaponAbility.effects.hunterCritProcChancePercent ?? 50,
+          criticalHit
+        )
     );
     const starrealmCritStacks =
       weaponAbility?.id === "starrealm-sword" && criticalHit && weaponHitLanded
@@ -7119,6 +7206,18 @@ export default function Home() {
       });
     }
     const weaponStatusEffects: SkillStatusEffect[] = [];
+    if (dawnWardenSanctuaryTriggered) {
+      weaponStatusEffects.push({
+        kind: "聖光陣界",
+        element: "光系",
+        chance: 1,
+        durationTurns:
+          weaponAbility?.effects.dawnWardenStaffDotDurationTurns ?? 3,
+        damagePerTurn: 0,
+        outgoingDamageReductionPercent:
+          weaponAbility?.effects.dawnWardenStaffDamageReductionPercent ?? 20,
+      });
+    }
     if (
       weaponAbility?.id === "astral-sage-dagger" &&
       criticalHit &&
@@ -7459,7 +7558,10 @@ export default function Home() {
             : moonstringArrowReady
           : weaponPassiveState.moonstringArrowReady,
       hunterCritStacks:
-        weaponPassiveState.hunterCritStacks + (hunterCriticalTriggered ? 1 : 0),
+        Math.min(
+          weaponAbility?.effects.hunterCritMaxStacks ?? 2,
+          weaponPassiveState.hunterCritStacks + Number(hunterCriticalTriggered)
+        ),
       starrealmCritStacks,
       arcaneSkillCastsSinceEcho:
         weaponAbility?.id === "starlight-staff" ||
@@ -7533,6 +7635,9 @@ export default function Home() {
     const statusesBeforeTick = petrifyBroken
       ? nextMonsterStatuses.filter(status => status.kind !== "石化")
       : nextMonsterStatuses;
+    const dawnWardenSanctuaryActiveThisTurn = statusesBeforeTick.some(
+      status => status.kind === "聖光陣界"
+    );
     const statusTick = tickBattleStatuses(statusesBeforeTick);
     const petrifyBreakDamage = petrifyBroken ? 25 : 0;
     const statusDamage = Math.min(
@@ -7543,7 +7648,10 @@ export default function Home() {
       ? applyMonsterGroupSkillDamage(
           battle.groupMembers,
           damageDealt + statusDamage,
-          selectedSkill?.targetMode === "all" ? "all" : "single",
+          selectedSkill?.targetMode === "all" &&
+            weaponAbility?.id !== "dawn-warden-bow"
+            ? "all"
+            : "single",
           battle.targetMonsterMemberId
         )
       : undefined;
@@ -7654,6 +7762,7 @@ export default function Home() {
         ? 1 + (weaponAbility?.effects.genesisStaffMaxAdditionalTargets ?? 3)
         : Number.POSITIVE_INFINITY;
     let weaponAreaDamageApplied = 0;
+    let dawnBowAreaTargetsHit = 0;
     if (astralMeteorTriggered && nextGroupMembers) {
       const meteorResult = applyMonsterGroupMappedAreaDamage(
         nextGroupMembers,
@@ -7818,6 +7927,7 @@ export default function Home() {
       );
       nextGroupMembers = bowAreaResult.members;
       weaponAreaDamageApplied += bowAreaResult.totalDamageApplied;
+      dawnBowAreaTargetsHit = Object.keys(bowAreaResult.damageByMember).length;
     }
     if (
       moonStalkerEchoSplashDamage > 0 &&
@@ -7850,7 +7960,44 @@ export default function Home() {
       const fieldDamage = Math.max(1, Math.round(Math.max(1, starCreationRawDamage - getDefenseReduction(targetDefenseAfterDebuff)) * (1 - resistance / 100)));
       starCreationDamageApplied = Math.min(fieldDamage, Math.max(0, battle.monsterHealth - primaryAppliedDamage - weaponAreaDamageApplied));
     }
-    const appliedDamage = primaryAppliedDamage + weaponAreaDamageApplied + starCreationDamageApplied;
+    let dawnWardenSanctuaryDamageApplied = 0;
+    let dawnWardenSanctuaryTargetsHit = 0;
+    if (dawnWardenSanctuaryActiveThisTurn && nextGroupMembers) {
+      const sanctuaryResult = applyMonsterGroupMappedAreaDamage(
+        nextGroupMembers,
+        member =>
+          getDawnWardenSanctuaryDamage(
+            member.maxHealth,
+            weaponAbility?.effects.dawnWardenStaffDotMaxHealthPercent ?? 3
+          )
+      );
+      nextGroupMembers = sanctuaryResult.members;
+      dawnWardenSanctuaryDamageApplied = sanctuaryResult.totalDamageApplied;
+      dawnWardenSanctuaryTargetsHit = Object.keys(
+        sanctuaryResult.damageByMember
+      ).length;
+    } else if (dawnWardenSanctuaryActiveThisTurn && !battle.groupMembers) {
+      const sanctuaryDamage = getDawnWardenSanctuaryDamage(
+        targetMonsterMaxHealth,
+        weaponAbility?.effects.dawnWardenStaffDotMaxHealthPercent ?? 3
+      );
+      dawnWardenSanctuaryDamageApplied = Math.min(
+        sanctuaryDamage,
+        Math.max(
+          0,
+          battle.monsterHealth -
+            primaryAppliedDamage -
+            weaponAreaDamageApplied -
+            starCreationDamageApplied
+        )
+      );
+      dawnWardenSanctuaryTargetsHit = dawnWardenSanctuaryDamageApplied > 0 ? 1 : 0;
+    }
+    const appliedDamage =
+      primaryAppliedDamage +
+      weaponAreaDamageApplied +
+      starCreationDamageApplied +
+      dawnWardenSanctuaryDamageApplied;
     const hunterFangKillTriggered = Boolean(
       amuletAbility?.id === "hunter-king-fang" &&
         (nextGroupMembers
@@ -7889,7 +8036,9 @@ export default function Home() {
           ) + 1
         : 0;
     const groupDamageLog = nextGroupMembers
-      ? selectedSkill?.targetMode === "all"
+      ? weaponAbility?.id === "dawn-warden-bow"
+        ? `；追光箭矢命中 ${Object.keys(groupDamageResult?.damageByMember ?? {}).length + dawnBowAreaTargetsHit} 隻群聚魔物，${remainingGroupCount} 隻仍在戰鬥`
+        : selectedSkill?.targetMode === "all"
         ? `；全體技能命中 ${Object.keys(groupDamageResult?.damageByMember ?? {}).length} 隻群聚魔物，${remainingGroupCount} 隻仍在戰鬥`
         : `；集中攻擊群聚成員 ${targetMemberNumber || "目標"}，${remainingGroupCount} 隻仍在戰鬥`
       : "";
@@ -7972,7 +8121,7 @@ export default function Home() {
       actualDamageDealt > 0
         ? Math.floor(
             actualDamageDealt *
-              ((amuletAbility.effects.dawnMarkLifestealPercent ?? 10) / 100)
+              ((amuletAbility.effects.dawnMarkLifestealPercent ?? 8) / 100)
           )
         : 0;
     const azureDragonAmuletTriggered = Boolean(
@@ -8084,8 +8233,7 @@ export default function Home() {
         ? `【${helmetAbility?.name}】吸血回復 ${helmetLifestealHealing} 生命`
         : "",
       selectedSkill &&
-      selectedSkill.cooldownTurns > 0 &&
-      (helmetAbility?.effects.cooldownReductionOnSkill ?? 0) > 0
+      skillCooldownProcTriggered
         ? `【${helmetAbility?.name}】技能冷卻額外減少 ${helmetAbility?.effects.cooldownReductionOnSkill} 回合`
         : "",
       selectedSkill && battleAstralSageTwoPieceActive
@@ -8146,7 +8294,7 @@ export default function Home() {
         ? `【${weaponAbility.name}】星毒已施加：每回合造成目標最大生命 5% 傷害，魔法抗性 -15%`
         : "",
       leggingsAbility?.id === "asura-leggings" && criticalHit && weaponHitLanded
-        ? `【${leggingsAbility.name}】阿修羅戰意堆疊 ${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length}/3，物理傷害 +${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length * (leggingsAbility.effects.asuraPhysicalDamageBonusPerCritPercent ?? 8)}%`
+        ? `【${leggingsAbility.name}】阿修羅戰意堆疊 ${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length}/3，物理傷害 +${leggingsPassiveStateAfterPlayerAction.asuraCritStackTurns.length * (leggingsAbility.effects.asuraPhysicalDamageBonusPerCritPercent ?? 10)}%`
         : "",
       mountainSetHealing > 0
         ? `【永恆山脈套裝】回復 ${mountainSetHealing} 生命`
@@ -8193,9 +8341,11 @@ export default function Home() {
         ? `【${weaponAbility.name}】追光箭矢必定命中所有敵人（${dawnBowTargetCount} 個目標）`
         : "",
       weaponAbility?.id === "dawn-warden-staff" &&
-      selectedSkill &&
-      weaponHitLanded
-        ? `【${weaponAbility.name}】聖光陣界已展開：每回合造成敵人最大生命 5% 傷害，敵方傷害 -20%`
+      dawnWardenSanctuaryTriggered
+        ? `【${weaponAbility.name}】聖光陣界已展開：每回合造成敵人最大生命 3% 傷害，敵方傷害 -20%`
+        : "",
+      dawnWardenSanctuaryDamageApplied > 0
+        ? `【聖光陣界】本回合對 ${dawnWardenSanctuaryTargetsHit} 個敵人造成 ${dawnWardenSanctuaryDamageApplied} 點光系傷害`
         : "",
     ].filter(Boolean);
     const specialAbilityActionLog =
@@ -8290,7 +8440,10 @@ export default function Home() {
         weaponTimedBuffs: weaponTimedBuffsAfterPlayerAction,
         leggingsPassiveState: leggingsPassiveStateAfterPlayerAction,
         divineShield: statusShieldResolution.state,
-        starCoreShield: starCoreShieldAfterSkillCast,
+        starCoreShield: expireStarCoreShieldAtTurnEnd(
+          starCoreShieldAfterSkillCast,
+          amuletAbility?.effects.starCoreShieldDurationTurns ?? 1
+        ),
         astralSageShield: astralSageShieldAfterStatus,
         dawnWardenShield: battle.dawnWardenShield ?? 0,
         dawnWardenShieldTurnsRemaining:
@@ -8723,6 +8876,10 @@ export default function Home() {
     const starCoreIncomingShieldResolution = resolveStarCoreShieldDamage(
       starCoreShieldAfterSkillCast,
       titanStaffIncomingShieldResolution.damageRemaining
+    );
+    const starCoreShieldAfterTurn = expireStarCoreShieldAtTurnEnd(
+      starCoreIncomingShieldResolution.shieldRemaining,
+      amuletAbility?.effects.starCoreShieldDurationTurns ?? 1
     );
     const astralIncomingShieldResolution = resolveStarCoreShieldDamage(
       astralSageShieldAfterStatus + deepSeaStarCoreShieldGain,
@@ -9164,7 +9321,6 @@ export default function Home() {
       chestAbility?.id === "gale-dancer"
         ? resolveGaleStackCount(
             battle.galeStacks ?? 0,
-            !selectedSkill && !actionLocked,
             playerEvaded,
             chestAbility.effects.galeMaxStacks
           )
@@ -9180,18 +9336,23 @@ export default function Home() {
           (selectedSkill.effectType === "damage" &&
             selectedSkill.damageType === "物理"))
     );
-    const ironGuardStacksAfterHit =
-      !monsterUsesSkill && finalIncomingDamageTaken > 0
-        ? 0
-        : weaponPassiveState.ironGuardStacks;
+    const ironGuardProcTriggered = Boolean(
+      ironGuardActionUsed &&
+        rollPercentChance(
+          weaponAbility?.effects.ironGuardProcChancePercent ?? 50
+        )
+    );
+    const ironGuardStackTurns = advanceIronGuardStacks(
+      weaponPassiveState.ironGuardStackTurns ??
+        Array.from({ length: weaponPassiveState.ironGuardStacks }, () => 3),
+      ironGuardProcTriggered,
+      weaponAbility?.effects.ironGuardMaxStacks ?? 2,
+      weaponAbility?.effects.ironGuardDurationTurns ?? 3
+    );
     const nextWeaponPassiveState: WeaponPassiveBattleState = {
       ...weaponPassiveStateAfterPlayerAction,
-      ironGuardStacks: ironGuardActionUsed
-        ? Math.min(
-            weaponAbility?.effects.ironGuardMaxStacks ?? 2,
-            ironGuardStacksAfterHit + 1
-          )
-        : ironGuardStacksAfterHit,
+      ironGuardStacks: ironGuardStackTurns.length,
+      ironGuardStackTurns,
       enemyAccuracyReductionNextPercent: enemyAttackResolved
         ? 0
         : weaponPassiveState.enemyAccuracyReductionNextPercent +
@@ -9247,10 +9408,9 @@ export default function Home() {
     );
     const dawnStepDisarmTriggered = Boolean(
       leggingsAbility?.id === "dawn-guardian-step" &&
-        !monsterUsesSkill &&
         finalIncomingDamageTaken > 0 &&
         rollPercentChance(
-          leggingsAbility.effects.dawnStepDisarmChancePercent ?? 25
+          leggingsAbility.effects.dawnStepDisarmChancePercent ?? 15
         )
     );
     const titanSetCrushTriggered = Boolean(
@@ -9330,35 +9490,10 @@ export default function Home() {
                 Math.floor(
                   basePlayerDamage *
                     ((weaponAbility?.effects
-                      .dawnWardenDaggerEchoDamagePercentAttack ?? 50) /
+                      .dawnWardenDaggerEchoDamagePercentAttack ?? 30) /
                       100)
                 )
               ),
-            },
-          ]
-        : []),
-      ...(weaponAbility?.id === "dawn-warden-staff" &&
-      selectedSkill &&
-      weaponHitLanded
-        ? [
-            {
-              kind: "聖光陣界" as const,
-              element: "火焰" as const,
-              chance: 1,
-              durationTurns:
-                weaponAbility.effects.dawnWardenStaffDotDurationTurns ?? 3,
-              damagePerTurn: Math.max(
-                1,
-                Math.floor(
-                  targetMonsterMaxHealth *
-                    ((weaponAbility.effects
-                      .dawnWardenStaffDotMaxHealthPercent ?? 5) /
-                      100)
-                )
-              ),
-              outgoingDamageReductionPercent:
-                weaponAbility.effects.dawnWardenStaffDamageReductionPercent ??
-                20,
             },
           ]
         : []),
@@ -9472,6 +9607,13 @@ export default function Home() {
           Boolean(battle.timeReversalUsed)
         )
     );
+    const spacetimeReversalHealing = timeReversalTriggered
+      ? getSpacetimeReversalHeal(
+          amuletAbility,
+          battleAbilities.health,
+          Boolean(battle.timeReversalUsed)
+        )
+      : 0;
     const totalDamageTaken =
       statusDamageActuallyTaken + slayingSelfDamage +
       (lethalProtectionTriggered || timeReversalTriggered || genesisChestReviveTriggered ? 0 : damageTaken);
@@ -9479,7 +9621,9 @@ export default function Home() {
       ? Math.floor(battleAbilities.health * ((chestAbility?.effects.genesisBodyHealPercent ?? 20) / 100))
       : Math.min(
           battleAbilities.health,
-          (timeReversalTriggered ? healedPlayerHealth : lethalProtection.health) + shadowmoonDodgeHealing
+          (timeReversalTriggered
+            ? healedPlayerHealth + spacetimeReversalHealing
+            : lethalProtection.health) + shadowmoonDodgeHealing
         );
     const nextAttackLifestealPercent = lethalProtectionTriggered
       ? lethalProtection.nextAttackLifestealPercent
@@ -9614,7 +9758,9 @@ export default function Home() {
         : []),
       ...(timeReversalTriggered
         ? [
-            `【${amuletAbility?.name}】時空逆轉觸發，免疫致命傷害並保留 ${playerHealth} 生命（本場戰鬥僅一次）。`,
+            battle.timeReversalUsed
+              ? `【${amuletAbility?.name}】時空逆轉觸發，免疫致命傷害並恢復 ${spacetimeReversalHealing} 生命。`
+              : `【${amuletAbility?.name}】時空逆轉首次觸發，必定免疫致命傷害並清除身上狀態、增益與限時效果。`,
           ]
         : []),
       ...(shadowmoonEvasion.triggered
@@ -9716,7 +9862,7 @@ export default function Home() {
           weaponPassiveState: nextWeaponPassiveState,
           weaponTimedBuffs: nextWeaponTimedBuffs,
           leggingsPassiveState: nextLeggingsPassiveState,
-          starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+          starCoreShield: starCoreShieldAfterTurn,
           astralSageShield: astralSageShieldAfterTurn,
           dawnWardenShield: dawnWardenShieldAfterTurn,
           dawnWardenShieldTurnsRemaining:
@@ -9833,7 +9979,7 @@ export default function Home() {
         weaponPassiveState: nextWeaponPassiveState,
         weaponTimedBuffs: nextWeaponTimedBuffs,
         leggingsPassiveState: nextLeggingsPassiveState,
-        starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
+        starCoreShield: starCoreShieldAfterTurn,
         astralSageShield: astralSageShieldAfterTurn,
         dawnWardenShield: dawnWardenShieldAfterTurn,
         dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
@@ -9932,7 +10078,7 @@ export default function Home() {
     setBattle({
       ...battle,
       playerHealth,
-      archerDodgeFailStacks: nextArcherDodgeFailStacks,
+      archerDodgeFailStacks: timeReversalTriggered ? 0 : nextArcherDodgeFailStacks,
       monsterHealth: monsterHealthAfterLifesteal,
       groupMembers: groupMembersAfterLifesteal,
       targetMonsterMemberId: nextTargetMonsterMemberId,
@@ -9941,53 +10087,90 @@ export default function Home() {
       lethalProtectionUsed: Boolean(
         battle.lethalProtectionUsed || lethalProtectionTriggered
       ),
-      nextAttackLifestealPercent,
-      nextAttackGuaranteedCrit: nextDodgeCounterState.guaranteedCrit,
-      nextAttackDamageBonusPercent,
-      nextAttackCritRateBonusPercent,
-      nextAttackDefensePiercePercent,
-      nextSkillCritRateBonusPercent: nextSkillCritRateBonusAfterAction,
-      weaponPassiveState: nextWeaponPassiveState,
-      weaponTimedBuffs: nextWeaponTimedBuffs,
-      leggingsPassiveState: nextLeggingsPassiveState,
-      starCoreShield: starCoreIncomingShieldResolution.shieldRemaining,
-      astralSageShield: astralSageShieldAfterTurn,
-      shopShield: shopShieldAfterTurn,
-      shopShieldTurnsRemaining: shopShieldTurnsRemainingAfterTurn,
-      dawnWardenShield: dawnWardenShieldAfterTurn,
-      dawnWardenShieldTurnsRemaining: dawnWardenShieldTurnsRemainingAfterTurn,
-      azureDragonShield: azureDragonShieldAfterTurn,
-      azureDragonShieldTurnsRemaining: azureDragonShieldTurnsRemainingAfterTurn,
+      nextAttackLifestealPercent: timeReversalTriggered ? 0 : nextAttackLifestealPercent,
+      nextAttackGuaranteedCrit: timeReversalTriggered
+        ? false
+        : nextDodgeCounterState.guaranteedCrit,
+      nextAttackDamageBonusPercent: timeReversalTriggered
+        ? 0
+        : nextAttackDamageBonusPercent,
+      nextAttackCritRateBonusPercent: timeReversalTriggered
+        ? 0
+        : nextAttackCritRateBonusPercent,
+      nextAttackDefensePiercePercent: timeReversalTriggered
+        ? 0
+        : nextAttackDefensePiercePercent,
+      nextSkillCritRateBonusPercent: timeReversalTriggered
+        ? 0
+        : nextSkillCritRateBonusAfterAction,
+      weaponPassiveState: timeReversalTriggered
+        ? INITIAL_WEAPON_PASSIVE_BATTLE_STATE
+        : nextWeaponPassiveState,
+      weaponTimedBuffs: timeReversalTriggered ? [] : nextWeaponTimedBuffs,
+      leggingsPassiveState: timeReversalTriggered
+        ? {
+            asuraCritStackTurns: [],
+            nextGaleAttackBonusDamage: 0,
+            stormNextAttackBonusDamage: 0,
+            azureDragonNextAttackBonusDamage: 0,
+          }
+        : nextLeggingsPassiveState,
+      starCoreShield: timeReversalTriggered ? 0 : starCoreShieldAfterTurn,
+      astralSageShield: timeReversalTriggered ? 0 : astralSageShieldAfterTurn,
+      shopShield: timeReversalTriggered ? 0 : shopShieldAfterTurn,
+      shopShieldTurnsRemaining: timeReversalTriggered
+        ? 0
+        : shopShieldTurnsRemainingAfterTurn,
+      dawnWardenShield: timeReversalTriggered ? 0 : dawnWardenShieldAfterTurn,
+      dawnWardenShieldTurnsRemaining: timeReversalTriggered
+        ? 0
+        : dawnWardenShieldTurnsRemainingAfterTurn,
+      azureDragonShield: timeReversalTriggered ? 0 : azureDragonShieldAfterTurn,
+      azureDragonShieldTurnsRemaining: timeReversalTriggered
+        ? 0
+        : azureDragonShieldTurnsRemainingAfterTurn,
       azureDragonShieldLastTriggeredTurn: azureDragonShieldTriggeredAtStart
         ? battle.turn
         : (battle.azureDragonShieldLastTriggeredTurn ?? 0),
-      moonStalkerSetDodgeStacks: moonStalkerEchoStacksAfterTurn,
-      moonStalkerSetDodgeTurnsRemaining: moonStalkerEchoTurnsRemainingAfterTurn,
-      astralEnergyStacks: astralEnergyResolution.nextEnergyStacks,
+      moonStalkerSetDodgeStacks: timeReversalTriggered ? 0 : moonStalkerEchoStacksAfterTurn,
+      moonStalkerSetDodgeTurnsRemaining: timeReversalTriggered ? 0 : moonStalkerEchoTurnsRemainingAfterTurn,
+      astralEnergyStacks: timeReversalTriggered ? 0 : astralEnergyResolution.nextEnergyStacks,
       deepSeaStarCoreUsed: Boolean(
         battle.deepSeaStarCoreUsed || deepSeaStarCoreTriggered
       ),
-      dawnArmorStacks: dawnArmorStacksAfterTurn,
-      shadowmoonAttackBonusPercent: shadowmoonAttackBonusAfterAction,
-      shadowmoonAttackBonusTurns: shadowmoonAttackBonusTurnsAfterAction,
-      shadowmoonAfterimageTurns: shadowmoonAfterimageTurnsAfterTurn,
+      dawnArmorStacks: timeReversalTriggered ? 0 : dawnArmorStacksAfterTurn,
+      shadowmoonAttackBonusPercent: timeReversalTriggered ? 0 : shadowmoonAttackBonusAfterAction,
+      shadowmoonAttackBonusTurns: timeReversalTriggered ? 0 : shadowmoonAttackBonusTurnsAfterAction,
+      shadowmoonAfterimageTurns: timeReversalTriggered ? 0 : shadowmoonAfterimageTurnsAfterTurn,
       shadowmoonStealthUsed: Boolean(
         battle.shadowmoonStealthUsed || shadowmoonStealthTriggered
       ),
-      shadowmoonStealthActive,
-      moonStalkerGuaranteedHitsRemaining: moonStalkerGuaranteedHitsAfterAction,
-      moonStalkerStaffDamageTurns: moonStalkerStaffDamageTurnsAfterAction,
-      titanBastionState: titanBastionStateAfterTurn,
-      mythicHelmetShield: mythicHelmetShieldAfterTurn,
-      mythicHelmetCalibrationStacks: mythicCalibrationStacks,
-      mythicHelmetCalibrationLastTurn: mythicCalibrationTriggered ? battle.turn : battle.mythicHelmetCalibrationLastTurn ?? 0,
-      mythicHelmetFrenzyStacks: mythicFrenzyStacks,
-      mythicHelmetAweTurnsRemaining: titanAweTurnsRemaining,
-      stormSwordSoulGuaranteedCritsRemaining:
-        stormPhoenixCritsAfterPlayerAction,
-      stormSwordSoulChestStacks: stormSwordSoulChestStacksAfterAction,
-      stormSwordSoulAmuletStacks: stormSwordSoulAmuletStacksAfterAction,
-      stormSwordSoulSetStacks: stormSwordSoulSetStacksAfterAction,
+      shadowmoonStealthActive: timeReversalTriggered ? false : shadowmoonStealthActive,
+      moonStalkerGuaranteedHitsRemaining: timeReversalTriggered ? 0 : moonStalkerGuaranteedHitsAfterAction,
+      moonStalkerStaffDamageTurns: timeReversalTriggered ? 0 : moonStalkerStaffDamageTurnsAfterAction,
+      titanBastionState: timeReversalTriggered
+        ? {
+            ...titanBastionStateAfterTurn,
+            helmetShield: 0,
+            helmetShieldTurnsRemaining: 0,
+            guardianHitCount: 0,
+            guardianShield: 0,
+            guardianShieldTurnsRemaining: 0,
+            staffShield: 0,
+            staffShieldTurnsRemaining: 0,
+            staffFieldTurnsRemaining: 0,
+            setInvincibilityTurnsRemaining: 0,
+          }
+        : titanBastionStateAfterTurn,
+      mythicHelmetShield: timeReversalTriggered ? 0 : mythicHelmetShieldAfterTurn,
+      mythicHelmetCalibrationStacks: timeReversalTriggered ? 0 : mythicCalibrationStacks,
+      mythicHelmetCalibrationLastTurn: timeReversalTriggered ? 0 : mythicCalibrationTriggered ? battle.turn : battle.mythicHelmetCalibrationLastTurn ?? 0,
+      mythicHelmetFrenzyStacks: timeReversalTriggered ? 0 : mythicFrenzyStacks,
+      mythicHelmetAweTurnsRemaining: timeReversalTriggered ? 0 : titanAweTurnsRemaining,
+      stormSwordSoulGuaranteedCritsRemaining: timeReversalTriggered ? 0 : stormPhoenixCritsAfterPlayerAction,
+      stormSwordSoulChestStacks: timeReversalTriggered ? 0 : stormSwordSoulChestStacksAfterAction,
+      stormSwordSoulAmuletStacks: timeReversalTriggered ? [] : stormSwordSoulAmuletStacksAfterAction,
+      stormSwordSoulSetStacks: timeReversalTriggered ? [] : stormSwordSoulSetStacksAfterAction,
 
       timeReversalUsed: Boolean(
         battle.timeReversalUsed || timeReversalTriggered
@@ -9995,27 +10178,41 @@ export default function Home() {
       galeSetLastEvasionTurn: galeSetEvasionTriggered
         ? battle.turn
         : (battle.galeSetLastEvasionTurn ?? 0),
-      galeStacks: nextGaleStacks,
-      divineShield: divineShieldResolution.state,
+      galeStacks: timeReversalTriggered ? 0 : nextGaleStacks,
+      divineShield: timeReversalTriggered
+        ? {
+            charge: 0,
+            remainingAbsorb: 0,
+            turnsRemaining: 0,
+            used: divineShieldResolution.state.used,
+          }
+        : divineShieldResolution.state,
       monsterStatuses: monsterStatusesAfterTurn,
-      playerStatuses: genesisChestReviveTriggered ? [] : calibratedPlayerStatuses,
+      playerStatuses:
+        genesisChestReviveTriggered || timeReversalTriggered
+          ? []
+          : calibratedPlayerStatuses,
       genesisChestReviveUsed: Boolean(battle.genesisChestReviveUsed || genesisChestReviveTriggered),
-      genesisChestInvulnerabilityTurnsRemaining: genesisChestInvulnerabilityTurnsAfterTurn,
+      genesisChestInvulnerabilityTurnsRemaining: timeReversalTriggered ? 0 : genesisChestInvulnerabilityTurnsAfterTurn,
       voidChestLastCooldownRefreshAt: voidPhaseRefreshTriggered ? voidPhaseRefreshAt : (battle.voidChestLastCooldownRefreshAt ?? 0),
-      omniscientChestStacks: chestAbility?.id === "omniscient-elemental-chest"
+      omniscientChestStacks: timeReversalTriggered ? 0 : chestAbility?.id === "omniscient-elemental-chest"
         ? selectedSkill
           ? (selectedSkill.effectType !== "buff" && omniscientChestStacksAtStart >= (chestAbility.effects.omniscientChestMaxStacks ?? 3) ? 0 : Math.min(chestAbility.effects.omniscientChestMaxStacks ?? 3, omniscientChestStacksAtStart + 1))
           : omniscientChestStacksAtStart
         : 0,
-      eternalFortressRockStacks: chestAbility?.id === "eternal-fortress-chest"
+      eternalFortressRockStacks: timeReversalTriggered ? 0 : chestAbility?.id === "eternal-fortress-chest"
         ? Math.min(chestAbility.effects.eternalFortressMaxStacks ?? 10, eternalFortressRockStacksForTurn + (finalIncomingDamageTaken > 0 ? 1 : 0))
         : 0,
-      starCreationGlowTurnsRemaining: starCreationTriggered ? 1 : Math.max(0, (battle.starCreationGlowTurnsRemaining ?? 0) - 1),
+      starCreationGlowTurnsRemaining: timeReversalTriggered ? 0 : starCreationTriggered ? 1 : Math.max(0, (battle.starCreationGlowTurnsRemaining ?? 0) - 1),
+      shopElixirIds: timeReversalTriggered ? [] : battle.shopElixirIds ?? [],
+      shopElixirUsedIds: battle.shopElixirUsedIds ?? battle.shopElixirIds ?? [],
       monsterSkillCooldown: nextMonsterSkillCooldown,
-      activeBuff: nextActiveBuff,
-      activeBuffs: nextActiveBuffLayers,
+      activeBuff: timeReversalTriggered ? null : nextActiveBuff,
+      activeBuffs: timeReversalTriggered ? [] : nextActiveBuffLayers,
       actionLockTurns:
-        selectedSkill?.name === "終焉狙殺"
+        timeReversalTriggered
+          ? 0
+          : selectedSkill?.name === "終焉狙殺"
           ? 1
           : Math.max(0, (battle.actionLockTurns ?? 0) - 1),
       turn: battle.turn + 1,
@@ -10028,7 +10225,7 @@ export default function Home() {
     });
     setState(previous => ({
       ...previous,
-      archerDodgeFailStacks: isSoulTrialBattle ? previous.archerDodgeFailStacks : nextArcherDodgeFailStacks,
+      archerDodgeFailStacks: isSoulTrialBattle ? previous.archerDodgeFailStacks : timeReversalTriggered ? 0 : nextArcherDodgeFailStacks,
       currentHealth: isSoulTrialBattle ? previous.currentHealth : playerHealth,
       nextHealthRecoveryAt:
         isSoulTrialBattle ? previous.nextHealthRecoveryAt : previous.nextHealthRecoveryAt > 0
@@ -11464,13 +11661,14 @@ export default function Home() {
         showToast("戰鬥藥劑只能在戰鬥中使用");
         return;
       }
-      if ((battle.shopElixirIds ?? []).includes(item.id)) {
+      if ((battle.shopElixirUsedIds ?? battle.shopElixirIds ?? []).includes(item.id)) {
         showToast(`${item.name}效果已生效，同一場戰鬥不會重複疊加`);
         return;
       }
       setBattle(previous => previous ? {
         ...previous,
         shopElixirIds: [...(previous.shopElixirIds ?? []), item.id],
+        shopElixirUsedIds: [...(previous.shopElixirUsedIds ?? previous.shopElixirIds ?? []), item.id],
         logs: [...previous.logs, `你使用${item.name}。`],
       } : previous);
       setState(previous => ({
@@ -15575,14 +15773,16 @@ export default function Home() {
                   >
                     {status.element}·{status.kind} · {status.turnsRemaining}{" "}
                     回合
-                    {status.damagePerTurn > 0
-                      ? ` · 每回合 ${status.damagePerTurn} 傷害`
-                      : status.kind === "冰凍" ||
+                    {status.kind === "聖光陣界"
+                      ? " · 每回合每名敵人最大生命 3% 光系傷害"
+                      : status.damagePerTurn > 0
+                        ? ` · 每回合 ${status.damagePerTurn} 傷害`
+                        : status.kind === "冰凍" ||
                           status.kind === "石化" ||
                           status.kind === "暈眩" ||
                           status.kind === "麻痺"
-                        ? " · 無法行動"
-                        : ""}
+                          ? " · 無法行動"
+                          : ""}
                     {status.armorReductionPercent
                       ? ` · 護甲 -${status.armorReductionPercent}%`
                       : ""}
@@ -15600,6 +15800,7 @@ export default function Home() {
                     !status.outgoingDamageReductionPercent &&
                     !status.healingReceivedReductionPercent &&
                     !status.accuracyReductionPercent &&
+                    status.kind !== "聖光陣界" &&
                     status.kind !== "冰凍" &&
                     status.kind !== "石化" &&
                     status.kind !== "暈眩" &&
@@ -15633,6 +15834,18 @@ export default function Home() {
                 aria-label="角色目前戰鬥效果"
               >
                 <span className="battle-effects-label">你的目前效果</span>
+                {battlePassiveEquipmentBuffs.map(buff => (
+                  <span
+                    className="battle-effect battle-effect-equipment-passive"
+                    key={buff.id}
+                  >
+                    <strong>{buff.name}</strong>
+                    <small>目前生效</small>
+                    {buff.details.map(detail => (
+                      <small key={detail}>{detail}</small>
+                    ))}
+                  </span>
+                ))}
                 {temporaryBattleBuff && (
                   <span className="battle-effect battle-effect-buff">
                     <strong>
@@ -15990,7 +16203,27 @@ export default function Home() {
                     <small>閃避 +{battleArcherTalentBonuses.dodgePercent}%</small>
                   </span>
                 )}
+                {battleRecentEquipmentTriggers.length > 0 && (
+                  <div
+                    className="battle-equipment-trigger-list"
+                    aria-label="最近觸發的裝備效果"
+                  >
+                    <span className="battle-effects-label">
+                      最近觸發的裝備效果
+                    </span>
+                    {battleRecentEquipmentTriggers.map((effect, index) => (
+                      <span
+                        className="battle-effect battle-effect-equipment-trigger"
+                        key={`${effect}-${index}`}
+                      >
+                        <small>{effect}</small>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {!temporaryBattleBuff &&
+                  !battlePassiveEquipmentBuffs.length &&
+                  !battleRecentEquipmentTriggers.length &&
                   !(battle.astralSageShield ?? 0) &&
                   !(battle.dawnWardenShield ?? 0) &&
                   !(battle.azureDragonShield ?? 0) &&
@@ -16056,22 +16289,41 @@ export default function Home() {
             )}
             {battle.outcome === "fighting" ? (
               <>
-                {(SHOP_ITEMS.some(
-                  item =>
+                {SHOP_ITEMS.some(item => {
+                  const hasStock = (state.shopInventory[item.id] ?? 0) > 0;
+                  const trackedElixir =
+                    item.category === "elixir" &&
+                    ((battle.shopElixirIds ?? []).includes(item.id) ||
+                      (battle.shopElixirUsedIds ?? battle.shopElixirIds ?? []).includes(
+                        item.id
+                      ));
+                  return (
                     (item.category === "potion" || item.category === "elixir") &&
-                    (state.shopInventory[item.id] ?? 0) > 0
-                )) && (
+                    (hasStock || trackedElixir)
+                  );
+                }) && (
                   <div className="battle-elixir-panel">
                     <div className="battle-skill-heading">
                       <strong>商城藥水與藥劑</strong>
                       <small>治療藥水可恢復生命；戰鬥藥劑同種效果不會疊加</small>
                     </div>
                     <div className="battle-elixir-list">
-                      {SHOP_ITEMS.filter(
-                        item =>
-                          item.category === "potion" || item.category === "elixir"
-                      ).map(item => {
+                      {SHOP_ITEMS.filter(item => {
+                        const hasStock = (state.shopInventory[item.id] ?? 0) > 0;
+                        const trackedElixir =
+                          item.category === "elixir" &&
+                          ((battle.shopElixirIds ?? []).includes(item.id) ||
+                            (battle.shopElixirUsedIds ?? battle.shopElixirIds ?? []).includes(
+                              item.id
+                            ));
+                        return (
+                          (item.category === "potion" ||
+                            item.category === "elixir") &&
+                          (hasStock || trackedElixir)
+                        );
+                      }).map(item => {
                         const owned = state.shopInventory[item.id] ?? 0;
+                        const alreadyUsed = item.category === "elixir" && (battle.shopElixirUsedIds ?? battle.shopElixirIds ?? []).includes(item.id);
                         const alreadyActive = item.category === "elixir" && (battle.shopElixirIds ?? []).includes(item.id);
                         const shieldActive = item.id === "holy-elixir" && (battle.shopShieldTurnsRemaining ?? 0) > 0;
                         const healthFull =
@@ -16090,6 +16342,8 @@ export default function Home() {
                             <small>
                               {alreadyActive || shieldActive
                                 ? "效果中"
+                                : alreadyUsed
+                                  ? "本場已使用"
                                 : healthFull
                                   ? "生命已滿"
                                   : `持有 ${owned} · 使用`}

@@ -4383,6 +4383,30 @@ h2 {
   color: #9fe1c0;
   font-size: 9px;
 }
+.battle-effect-equipment-passive {
+  border-color: rgba(139, 195, 255, 0.42);
+  background: rgba(62, 123, 190, 0.16);
+}
+.battle-effect-equipment-passive strong,
+.battle-effect-equipment-passive small {
+  color: #c8e4ff;
+}
+.battle-equipment-trigger-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+}
+.battle-effect-equipment-trigger {
+  max-width: 100%;
+  border-color: rgba(226, 185, 111, 0.42);
+  background: rgba(170, 120, 45, 0.14);
+}
+.battle-effect-equipment-trigger small {
+  overflow-wrap: anywhere;
+  color: #f0d29c;
+}
 .battle-effect-debuff {
   border-color: rgba(228, 139, 157, 0.45);
   color: #ffd5de;

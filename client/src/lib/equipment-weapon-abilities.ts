@@ -79,9 +79,9 @@ export const legendaryWeaponAbilities: Partial<
     id: "starfire-bow",
     name: "星火燎原",
     description:
-      "每次暴擊使目標燃燒 3 回合，每回合受到相當於該次暴擊傷害 15% 的火焰傷害，並使目標護甲降低 10%。",
+      "每次暴擊使目標燃燒 3 回合，每回合受到相當於該次暴擊傷害 10% 的火焰傷害，並使目標護甲降低 10%。",
     effects: {
-      starfireBurnPercentOfCriticalDamage: 15,
+      starfireBurnPercentOfCriticalDamage: 10,
       starfireDurationTurns: 3,
       starfireArmorReductionPercent: 10,
     },
@@ -229,10 +229,10 @@ export const legendaryWeaponAbilities: Partial<
     id: "dawn-warden-sword",
     name: "裁決重擊",
     description:
-      "普通攻擊有 20% 機率召喚巨型光劍，對所有敵人造成相當於攻擊力 150% 的範圍傷害並暈眩 1 回合。",
+      "普通攻擊有 20% 機率召喚巨型光劍，對所有敵人造成相當於攻擊力 50% 的範圍傷害並暈眩 1 回合。",
     effects: {
       dawnWardenSwordProcChancePercent: 20,
-      dawnWardenSwordAoeDamagePercentAttack: 150,
+      dawnWardenSwordAoeDamagePercentAttack: 50,
       dawnWardenSwordStunDurationTurns: 1,
     },
   },
@@ -240,10 +240,10 @@ export const legendaryWeaponAbilities: Partial<
     id: "dawn-warden-dagger",
     name: "光束殘影",
     description:
-      "攻擊時有 25% 機率留下光束殘影；殘影於 1 回合後爆炸，造成相當於攻擊力 50% 的真實傷害。",
+      "攻擊時有 25% 機率留下光束殘影；殘影於 1 回合後爆炸，造成相當於攻擊力 30% 的真實傷害。",
     effects: {
       dawnWardenDaggerProcChancePercent: 25,
-      dawnWardenDaggerEchoDamagePercentAttack: 50,
+      dawnWardenDaggerEchoDamagePercentAttack: 30,
     },
   },
   "dawn-warden-bow": {
@@ -260,9 +260,9 @@ export const legendaryWeaponAbilities: Partial<
     id: "dawn-warden-staff",
     name: "聖光陣界",
     description:
-      "施放技能時使敵人每回合受到最大生命值 5% 的光系傷害，並使其造成的傷害降低 20%，持續 3 回合。",
+      "施放技能時使敵人每回合受到最大生命值 3% 的光系傷害，並使其造成的傷害降低 20%，持續 3 回合。",
     effects: {
-      dawnWardenStaffDotMaxHealthPercent: 5,
+      dawnWardenStaffDotMaxHealthPercent: 3,
       dawnWardenStaffDotDurationTurns: 3,
       dawnWardenStaffDamageReductionPercent: 20,
     },
@@ -319,60 +319,62 @@ export const legendaryWeaponAbilities: Partial<
     id: "dawn-sword",
     name: "曙光之破",
     description:
-      "攻擊有 20% 機率額外造成相當於攻擊力 20% 的傷害；目標生命高於 70% 時，此額外傷害翻倍。",
+      "攻擊有 20% 機率額外造成相當於攻擊力 25% 的傷害。",
     effects: {
       dawnProcChancePercent: 20,
-      dawnBonusDamagePercentAttack: 20,
-      dawnHighHealthThresholdPercent: 70,
-      dawnHighHealthDamageMultiplier: 2,
+      dawnBonusDamagePercentAttack: 25,
     },
   },
   "iron-guard-sword": {
     id: "iron-guard-sword",
     name: "鐵壁防禦",
     description:
-      "普通攻擊或施放物理技能後，獲得 1 層鐵壁防禦；每層使下一回合受到的物理傷害降低 10%，最多 2 層。",
+      "普通攻擊或施放物理技能後，有 50% 機率獲得 1 層鐵壁防禦；每層使受到的物理傷害降低 10%，最多 2 層，持續 3 回合。",
     effects: {
+      ironGuardProcChancePercent: 50,
       ironGuardDamageReductionPercentPerStack: 10,
       ironGuardMaxStacks: 2,
+      ironGuardDurationTurns: 3,
     },
   },
   "moonshadow-sword": {
     id: "moonshadow-sword",
     name: "月影隱匿",
     description:
-      "暴擊時有 30% 機率使下一次敵方攻擊前閃避率提高 10%，並使下一次成功命中的攻擊傷害提高 20%。",
+      "暴擊時有 20% 機率使下一次敵方攻擊前閃避率提高 5%，並使下一次成功命中的攻擊傷害提高 15%。",
     effects: {
-      moonshadowProcChancePercent: 30,
-      moonshadowDodgeRateBonusPercent: 10,
-      moonshadowNextAttackDamageBonusPercent: 20,
+      moonshadowProcChancePercent: 20,
+      moonshadowDodgeRateBonusPercent: 5,
+      moonshadowNextAttackDamageBonusPercent: 15,
     },
   },
   "kings-sword": {
     id: "kings-sword",
     name: "王道壓制",
-    description: "攻擊生命值低於 50% 的目標時，暴擊傷害額外提高 25%。",
+    description: "攻擊生命值低於 50% 的目標時，暴擊傷害額外提高 15%。",
     effects: {
       kingsSwordTargetHealthBelowPercent: 50,
-      kingsSwordCritDamageBonusPercent: 25,
+      kingsSwordCritDamageBonusPercent: 15,
     },
   },
   "starrealm-sword": {
     id: "starrealm-sword",
     name: "星界能量",
     description:
-      "每次成功暴擊獲得 1 層星界能量；累積 3 層時消耗全部能量，對所有敵人造成相當於攻擊力 80% 的傷害。",
+      "每次成功暴擊獲得 1 層星界能量；累積 3 層時消耗全部能量，對所有敵人造成相當於攻擊力 60% 的傷害。",
     effects: {
       starrealmMaxStacks: 3,
-      starrealmAoeAttackPercent: 80,
+      starrealmAoeAttackPercent: 60,
     },
   },
   "hunter-dagger": {
     id: "hunter-dagger",
     name: "獵影本能",
     description:
-      "每次成功暴擊後，戰鬥期間暴擊率與暴擊傷害各提高 15%（暴擊率最高 100%）。",
+      "每次成功暴擊後有 50% 機率獲得 1 層獵影本能；每層使戰鬥期間暴擊率與暴擊傷害各提高 15%，最多 2 層。",
     effects: {
+      hunterCritProcChancePercent: 50,
+      hunterCritMaxStacks: 2,
       hunterCritRateBonusPerCriticalPercent: 15,
       hunterCritDamageBonusPerCriticalPercent: 15,
     },
@@ -402,9 +404,9 @@ export const legendaryWeaponAbilities: Partial<
     id: "phantom-step-dagger",
     name: "幻步重擊",
     description:
-      "成功閃避後，下一次攻擊的暴擊率提高 50%，並無視目標 20% 防禦。",
+      "成功閃避後，下一次攻擊的暴擊率提高 30%，並無視目標 20% 防禦。",
     effects: {
-      phantomStepNextAttackCritRateBonusPercent: 50,
+      phantomStepNextAttackCritRateBonusPercent: 30,
       phantomStepDefensePiercePercent: 20,
     },
   },
@@ -451,39 +453,42 @@ export const legendaryWeaponAbilities: Partial<
   "firmament-bow": {
     id: "firmament-bow",
     name: "天穹之箭",
-    description: "暴擊時召喚天穹之箭，額外造成相當於自身力量 50% 的物理傷害。",
-    effects: { firmamentBonusDamagePercentStrength: 50 },
+    description: "暴擊時有 50% 機率召喚天穹之箭，額外造成相當於自身力量 25% 的物理傷害。",
+    effects: {
+      firmamentProcChancePercent: 50,
+      firmamentBonusDamagePercentStrength: 25,
+    },
   },
   "sunwheel-bow": {
     id: "sunwheel-bow",
     name: "日輪灼燒",
     description:
-      "普通攻擊或技能有 30% 機率使目標燃燒 2 回合，每回合受到相當於攻擊力 5% 的火焰傷害；自身暴擊率提高 10%，持續 2 回合。",
+      "普通攻擊或技能有 30% 機率使目標燃燒 2 回合，每回合受到相當於攻擊力 5% 的火焰傷害；自身暴擊率提高 8%，持續 2 回合。",
     effects: {
       sunwheelProcChancePercent: 30,
       sunwheelBurnPercentAttack: 5,
       sunwheelDurationTurns: 2,
-      sunwheelCritRateBonusPercent: 10,
+      sunwheelCritRateBonusPercent: 8,
     },
   },
   "nature-staff": {
     id: "nature-staff",
     name: "自然復甦",
-    description: "施放技能時有 35% 機率恢復相當於自身智力 30% 的生命。",
+    description: "施放技能時有 25% 機率恢復相當於自身智力 15% 的生命。",
     effects: {
-      natureStaffHealChancePercent: 35,
-      natureStaffHealPercentIntelligence: 30,
+      natureStaffHealChancePercent: 25,
+      natureStaffHealPercentIntelligence: 15,
     },
   },
   "sapphire-staff": {
     id: "sapphire-staff",
     name: "霜封",
     description:
-      "造成傷害時有 20% 機率使目標凍結 2 回合；對已凍結目標造成的魔法傷害提高 20%。",
+      "造成傷害時有 20% 機率使目標凍結 2 回合；對已凍結目標造成的魔法傷害提高 10%。",
     effects: {
       sapphireStaffFreezeChancePercent: 20,
       sapphireStaffFreezeDurationTurns: 2,
-      sapphireStaffDamageBonusVsFrozenPercent: 20,
+      sapphireStaffDamageBonusVsFrozenPercent: 10,
     },
   },
   "starlight-staff": {
@@ -499,10 +504,10 @@ export const legendaryWeaponAbilities: Partial<
     id: "fire-vein-staff",
     name: "炎脈印記",
     description:
-      "成功施放造成傷害的技能時累積 1 層灼燒印記；達 5 層時消耗全部印記，對所有敵人造成相當於自身魔法攻擊 100% 的範圍爆發傷害。",
+      "成功施放造成傷害的技能時累積 1 層灼燒印記；達 5 層時消耗全部印記，對所有敵人造成相當於自身魔法攻擊 75% 的範圍爆發傷害。",
     effects: {
       fireVeinMarksToBurst: 5,
-      fireVeinAoeMagicAttackPercent: 100,
+      fireVeinAoeMagicAttackPercent: 75,
     },
   },
   "genesis-staff": {

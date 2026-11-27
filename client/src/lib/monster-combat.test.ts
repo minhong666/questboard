@@ -3,10 +3,15 @@ import {
   applyMonsterResistanceToDamage,
   applyMonsterGroupAreaDamage,
   applyMonsterGroupDamage,
+  applyMonsterGroupMappedAreaDamage,
   applyMonsterGroupSkillDamage,
   createMonsterGroupMembers,
   getLivingMonsterGroupMembers,
 } from "./monster-combat";
+import {
+  getDawnWardenBowSharedDamage,
+  getDawnWardenSanctuaryDamage,
+} from "./equipment-weapon-combat";
 
 describe("monster group combat", () => {
   it("amplifies damage against negative resistance and mitigates positive resistance", () => {
@@ -151,5 +156,48 @@ describe("monster group combat", () => {
     );
     expect(singleTarget.members.map(member => member.health)).toEqual([30, 20, 30]);
     expect(singleTarget.totalDamageApplied).toBe(10);
+  });
+
+  it("applies Dawn Arrow's split and progressive damage to each member in hit order", () => {
+    const members = createMonsterGroupMembers("swarm", 300, 3);
+    const hitOrder = [members[1], members[0], members[2]];
+    const primary = applyMonsterGroupSkillDamage(
+      members,
+      getDawnWardenBowSharedDamage(120, 3, 0),
+      "single",
+      members[1].id
+    );
+    const followUp = applyMonsterGroupMappedAreaDamage(
+      primary.members,
+      member =>
+        getDawnWardenBowSharedDamage(
+          120,
+          3,
+          hitOrder.findIndex(target => target.id === member.id)
+        ),
+      members[1].id
+    );
+
+    expect(followUp.damageByMember).toEqual({
+      "swarm-member-1": 44,
+      "swarm-member-3": 48,
+    });
+    expect(followUp.members.map(member => member.health)).toEqual([56, 60, 52]);
+    expect(followUp.totalDamageApplied + primary.totalDamageApplied).toBe(132);
+  });
+
+  it("ticks Sanctuary damage against each living enemy's maximum health", () => {
+    const members = [
+      { id: "small", health: 100, maxHealth: 100 },
+      { id: "medium", health: 250, maxHealth: 250 },
+      { id: "large", health: 1200, maxHealth: 1200 },
+    ];
+    const result = applyMonsterGroupMappedAreaDamage(members, member =>
+      getDawnWardenSanctuaryDamage(member.maxHealth)
+    );
+
+    expect(result.damageByMember).toEqual({ small: 3, medium: 7, large: 36 });
+    expect(result.members.map(member => member.health)).toEqual([97, 243, 1164]);
+    expect(result.totalDamageApplied).toBe(46);
   });
 });

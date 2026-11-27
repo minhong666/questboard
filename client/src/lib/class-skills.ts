@@ -24,7 +24,7 @@ export type SkillStatusKind =
   | "星光殘留"
   | "星毒"
   | "風雷麻痺";
-export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電";
+export type SkillElement = "自然" | "冰霜" | "奧術" | "火焰" | "雷電" | "光系";
 export type SkillStatusEffect = {
   kind: SkillStatusKind;
   element: SkillElement;

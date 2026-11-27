@@ -3,6 +3,8 @@ import { RPG_EQUIPMENT_TEMPLATES } from "./equipment-database";
 import { parseLootItem } from "./loot";
 import {
   advanceAsuraCritStackTurns,
+  expireStarCoreShieldAtTurnEnd,
+  getSpacetimeReversalHeal,
   getLeviathanHealing,
   getStarCoreShieldGain,
   getActiveLegendaryEquipmentSetBonuses,
@@ -24,8 +26,10 @@ import {
 } from "./equipment-special-abilities";
 import {
   addCappedStack,
+  advanceIronGuardStacks,
   advanceWeaponTimedBuffs,
   getWeaponTimedBuffBonuses,
+  rollHunterCritStack,
   rollPercentChance,
 } from "./equipment-weapon-combat";
 
@@ -36,27 +40,27 @@ describe("legendary helmet abilities", () => {
     ).toMatchObject({ damageBonusBelowHalfHealthPercent: 20 });
     expect(
       getEquipmentSpecialAbility("夜魔主宰面具", "傳說")?.effects
-    ).toMatchObject({ lifestealBelowHalfHealthPercent: 35 });
+    ).toMatchObject({ lifestealBelowHalfHealthPercent: 25 });
     expect(
       getEquipmentSpecialAbility("星辰智者之冠", "傳說")?.effects
     ).toMatchObject({ cooldownReductionOnSkill: 1 });
     expect(
       getEquipmentSpecialAbility("永恆山脈巨盔", "傳說")?.effects
     ).toMatchObject({
-      physicalResistanceBelowHalfHealthPercent: 20,
-      magicResistanceBelowHalfHealthPercent: 20,
+      physicalResistanceBelowHalfHealthPercent: 15,
+      magicResistanceBelowHalfHealthPercent: 15,
     });
     expect(
       getEquipmentSpecialAbility("鳳凰涅槃面具", "傳說")?.effects
     ).toMatchObject({
       preventLethalDamageOnce: true,
-      nextAttackLifestealPercent: 20,
+      nextAttackLifestealPercent: 15,
     });
     expect(
       getEquipmentSpecialAbility("天穹王盔", "傳說")?.effects
     ).toMatchObject({
-      attackBonusAboveHalfHealthPercent: 20,
-      defenseBonusAboveHalfHealthPercent: 20,
+      attackBonusAboveHalfHealthPercent: 15,
+      damageReductionAboveHalfHealthPercent: 10,
     });
   });
 
@@ -141,7 +145,7 @@ describe("legendary helmet abilities", () => {
     expect(resolveLethalProtection(legendaryAbility, 10, 10, false)).toEqual({
       triggered: true,
       health: 10,
-      nextAttackLifestealPercent: 20,
+      nextAttackLifestealPercent: 15,
     });
     expect(resolveLethalProtection(legendaryAbility, 10, 10, true)).toEqual({
       triggered: false,
@@ -182,10 +186,10 @@ describe("legendary helmet abilities", () => {
     const highHealthAbility = getEquipmentSpecialAbility("天穹王盔", "傳說");
     expect(
       getActiveEquipmentSpecialEffects(highHealthAbility, 51, 100)
-    ).toMatchObject({ attackDamageBonusPercent: 20, defenseBonusPercent: 20 });
+    ).toMatchObject({ attackDamageBonusPercent: 15, enemyDamageReductionPercent: 10 });
     expect(
       getActiveEquipmentSpecialEffects(highHealthAbility, 50, 100)
-    ).toMatchObject({ attackDamageBonusPercent: 0, defenseBonusPercent: 0 });
+    ).toMatchObject({ attackDamageBonusPercent: 0, enemyDamageReductionPercent: 0 });
   });
 });
 
@@ -261,7 +265,7 @@ describe("legendary legging abilities", () => {
     expect(
       getEquipmentSpecialAbility("阿修羅戰神護腿", "傳說")?.effects
     ).toMatchObject({
-      asuraPhysicalDamageBonusPerCritPercent: 8,
+      asuraPhysicalDamageBonusPerCritPercent: 10,
       asuraMaxCritStacks: 3,
       asuraCritStackDurationTurns: 3,
     });
@@ -269,7 +273,7 @@ describe("legendary legging abilities", () => {
       getEquipmentSpecialAbility("夜魔主宰護腿", "傳說")?.effects
     ).toMatchObject({
       nightDodgeBelowHalfHealthPercent: 12,
-      nightDefenseBelowHalfHealthPercent: 15,
+      nightDefenseBelowHalfHealthPercent: 8,
     });
     expect(
       getEquipmentSpecialAbility("星辰智者長褲", "傳說")?.effects
@@ -281,14 +285,14 @@ describe("legendary legging abilities", () => {
     expect(
       getEquipmentSpecialAbility("永恆山脈護腿", "傳說")?.effects
     ).toMatchObject({
-      mountainDefenseBelowHalfHealthPercent: 20,
-      mountainPhysicalResistanceBelowHalfHealthPercent: 10,
-      mountainMagicResistanceBelowHalfHealthPercent: 10,
+      mountainDefenseAboveHalfHealthPercent: 10,
+      mountainPhysicalResistanceAboveHalfHealthPercent: 10,
+      mountainMagicResistanceAboveHalfHealthPercent: 10,
     });
     expect(
       getEquipmentSpecialAbility("疾風劍聖護腿", "傳說")?.effects
     ).toMatchObject({
-      galeNextAttackBonusPercentStrength: 120,
+      galeNextAttackBonusPercentStrength: 30,
     });
     expect(
       getEquipmentSpecialAbility("影月護腿", "傳說")?.effects
@@ -301,7 +305,7 @@ describe("legendary legging abilities", () => {
   it("activates low-health defense, resistance, dodge, and physical-damage effects at the correct thresholds", () => {
     const night = getEquipmentSpecialAbility("夜魔主宰護腿", "傳說");
     expect(getActiveEquipmentSpecialEffects(night, 49, 100)).toMatchObject({
-      defenseBonusPercent: 15,
+      defenseBonusPercent: 8,
       dodgeRateBonusPercent: 12,
     });
     expect(getActiveEquipmentSpecialEffects(night, 50, 100)).toMatchObject({
@@ -311,26 +315,26 @@ describe("legendary legging abilities", () => {
 
     const mountain = getEquipmentSpecialAbility("永恆山脈護腿", "傳說");
     expect(getActiveEquipmentSpecialEffects(mountain, 49, 100)).toMatchObject({
-      defenseBonusPercent: 20,
-      physicalResistancePercent: 10,
-      magicResistancePercent: 10,
-    });
-    expect(getActiveEquipmentSpecialEffects(mountain, 50, 100)).toMatchObject({
       defenseBonusPercent: 0,
       physicalResistancePercent: 0,
       magicResistancePercent: 0,
+    });
+    expect(getActiveEquipmentSpecialEffects(mountain, 51, 100)).toMatchObject({
+      defenseBonusPercent: 10,
+      physicalResistancePercent: 10,
+      magicResistancePercent: 10,
     });
 
     const asura = getEquipmentSpecialAbility("阿修羅戰神護腿", "傳說");
     expect(
       getActiveEquipmentSpecialEffects(asura, 100, 100, 1, 0, 3)
     ).toMatchObject({
-      physicalDamageBonusPercent: 24,
+      physicalDamageBonusPercent: 30,
     });
     expect(
       getActiveEquipmentSpecialEffects(asura, 100, 100, 1, 0, 4)
     ).toMatchObject({
-      physicalDamageBonusPercent: 24,
+      physicalDamageBonusPercent: 30,
     });
 
     const shadowmoon = getEquipmentSpecialAbility("影月護腿", "傳說");
@@ -458,7 +462,7 @@ describe("legendary talisman abilities", () => {
         "solar-eye",
         {
           solarEyeProcChancePercent: 25,
-          solarEyeHybridDamagePercent: 50,
+          solarEyeHybridDamagePercent: 35,
           solarEyeAccuracyReductionPercent: 15,
           solarEyeAccuracyReductionDurationTurns: 2,
         },
@@ -468,7 +472,7 @@ describe("legendary talisman abilities", () => {
         "medusa-eye",
         {
           medusaEyeProcChancePercent: 20,
-          medusaEyeDamageBonusVsPetrifiedPercent: 25,
+          medusaEyeDamageBonusVsPetrifiedPercent: 20,
         },
       ],
       [
@@ -479,7 +483,7 @@ describe("legendary talisman abilities", () => {
           leviathanHealMaxHealthPercent: 4,
           leviathanLowHealthThresholdPercent: 30,
           leviathanLowHealthHealMultiplier: 2,
-          leviathanLowHealthResistancePercent: 20,
+          leviathanLowHealthResistancePercent: 10,
         },
       ],
       [
@@ -487,8 +491,8 @@ describe("legendary talisman abilities", () => {
         "hunter-king-fang",
         {
           hunterFangHighHealthThresholdPercent: 70,
-          hunterFangCritRateBonusPercent: 15,
-          hunterFangDefensePiercePercent: 20,
+          hunterFangCritRateBonusPercent: 10,
+          hunterFangDefensePiercePercent: 15,
           hunterFangCooldownReductionOnKill: 1,
         },
       ],
@@ -501,7 +505,8 @@ describe("legendary talisman abilities", () => {
         "永恆星核",
         "eternal-star-core",
         {
-          starCoreShieldPercentIntelligence: 50,
+          starCoreShieldPercentIntelligence: 10,
+          starCoreShieldDurationTurns: 1,
           starCoreMagicDamageBonusPercent: 15,
         },
       ],
@@ -545,14 +550,18 @@ describe("legendary talisman abilities", () => {
 
   it("gives Spacetime Crystal one 30% fatal reversal and lets Star Core absorb damage", () => {
     const spacetime = getEquipmentSpecialAbility("時空交界水晶", "傳說");
-    expect(rollSpacetimeReversal(spacetime, 50, 50, false, 0.299)).toBe(true);
-    expect(rollSpacetimeReversal(spacetime, 50, 50, false, 0.3)).toBe(false);
-    expect(rollSpacetimeReversal(spacetime, 50, 50, true, 0)).toBe(false);
+    expect(rollSpacetimeReversal(spacetime, 50, 50, false, 0.999)).toBe(true);
+    expect(rollSpacetimeReversal(spacetime, 50, 50, true, 0.299)).toBe(true);
+    expect(rollSpacetimeReversal(spacetime, 50, 50, true, 0.3)).toBe(false);
+    expect(getSpacetimeReversalHeal(spacetime, 1000, false)).toBe(0);
+    expect(getSpacetimeReversalHeal(spacetime, 1000, true)).toBe(50);
     expect(rollSpacetimeReversal(spacetime, 50, 49, false, 0)).toBe(false);
 
     const starCore = getEquipmentSpecialAbility("永恆星核", "傳說");
-    expect(getStarCoreShieldGain(starCore, 200, true)).toBe(100);
+    expect(getStarCoreShieldGain(starCore, 200, true)).toBe(20);
     expect(getStarCoreShieldGain(starCore, 200, false)).toBe(0);
+    expect(expireStarCoreShieldAtTurnEnd(20, 1)).toBe(0);
+    expect(expireStarCoreShieldAtTurnEnd(20, 2)).toBe(20);
     expect(resolveStarCoreShieldDamage(100, 65)).toEqual({
       shieldRemaining: 35,
       damageRemaining: 0,
@@ -633,15 +642,15 @@ describe("legendary chest armor abilities", () => {
     expect(
       getEquipmentSpecialAbility("帝王光輝聖甲", "傳說")?.effects
     ).toMatchObject({
-      attackBonusAbove70HealthPercent: 15,
-      defenseBonusAbove70HealthPercent: 15,
-      enemyDamageReductionAbove70HealthPercent: 15,
+      attackBonusAbove70HealthPercent: 10,
+      defenseBonusAbove70HealthPercent: 10,
+      enemyDamageReductionAbove70HealthPercent: 10,
     });
     expect(
       getEquipmentSpecialAbility("深淵獵手皮革", "傳說")?.effects
     ).toMatchObject({
       guaranteedCritOnNextAttackAfterDodge: true,
-      nextAttackDamageBonusAfterDodgePercent: 15,
+      nextAttackDamageBonusAfterDodgePercent: 10,
     });
     expect(
       getEquipmentSpecialAbility("真理之門法袍", "傳說")?.effects
@@ -657,7 +666,7 @@ describe("legendary chest armor abilities", () => {
       getEquipmentSpecialAbility("神聖守護者之壁", "傳說")?.effects
     ).toMatchObject({
       sacredShieldBelowHealthPercent: 30,
-      sacredShieldAbsorbPercentMaxHealth: 25,
+      sacredShieldAbsorbPercentMaxHealth: 15,
       sacredShieldDurationTurns: 2,
     });
     expect(
@@ -680,9 +689,9 @@ describe("legendary chest armor abilities", () => {
   it("activates the threshold and duration-based effects at their boundaries", () => {
     const emperor = getEquipmentSpecialAbility("帝王光輝聖甲", "傳說");
     expect(getActiveEquipmentSpecialEffects(emperor, 71, 100)).toMatchObject({
-      attackDamageBonusPercent: 15,
-      defenseBonusPercent: 15,
-      enemyDamageReductionPercent: 15,
+      attackDamageBonusPercent: 10,
+      defenseBonusPercent: 10,
+      enemyDamageReductionPercent: 10,
     });
     expect(getActiveEquipmentSpecialEffects(emperor, 70, 100)).toMatchObject({
       attackDamageBonusPercent: 0,
@@ -729,7 +738,7 @@ describe("legendary chest armor abilities", () => {
       true,
       false
     );
-    expect(counter).toEqual({ guaranteedCrit: true, damageBonusPercent: 15 });
+    expect(counter).toEqual({ guaranteedCrit: true, damageBonusPercent: 10 });
     expect(resolveDodgeCounterState(abyssal, counter, false, false)).toEqual(
       counter
     );
@@ -739,11 +748,12 @@ describe("legendary chest armor abilities", () => {
     });
   });
 
-  it("adds one gale stack per normal attack or dodge and caps at five", () => {
-    expect(resolveGaleStackCount(0, true, false)).toBe(1);
-    expect(resolveGaleStackCount(1, false, true)).toBe(2);
-    expect(resolveGaleStackCount(4, true, true)).toBe(5);
-    expect(resolveGaleStackCount(5, true, true)).toBe(5);
+  it("adds one gale stack only after a successful dodge and caps at five", () => {
+    expect(resolveGaleStackCount(0, false)).toBe(0);
+    expect(resolveGaleStackCount(0, true)).toBe(1);
+    expect(resolveGaleStackCount(1, true)).toBe(2);
+    expect(resolveGaleStackCount(4, true)).toBe(5);
+    expect(resolveGaleStackCount(5, true)).toBe(5);
   });
 
   it("activates the one-time divine shield below 30% and absorbs up to 25% max HP", () => {
@@ -757,14 +767,14 @@ describe("legendary chest armor abilities", () => {
     const activated = resolveDivineShieldDamage(
       sacredWall,
       emptyState,
-      40,
+      20,
       100,
-      20
+      10
     );
     expect(activated).toMatchObject({
-      health: 40,
+      health: 20,
       damageTaken: 0,
-      absorbedDamage: 20,
+      absorbedDamage: 10,
       triggered: true,
       state: {
         charge: 0,
@@ -777,13 +787,13 @@ describe("legendary chest armor abilities", () => {
     const firstRound = resolveDivineShieldDamage(
       sacredWall,
       activated.state,
-      40,
+      20,
       100,
       2,
       true
     );
     expect(firstRound).toMatchObject({
-      health: 40,
+      health: 20,
       absorbedDamage: 2,
       state: { remainingAbsorb: 3, turnsRemaining: 1, used: true },
     });
@@ -791,13 +801,13 @@ describe("legendary chest armor abilities", () => {
     const secondRound = resolveDivineShieldDamage(
       sacredWall,
       firstRound.state,
-      40,
+      20,
       100,
       10,
       true
     );
     expect(secondRound).toMatchObject({
-      health: 33,
+      health: 13,
       damageTaken: 7,
       absorbedDamage: 3,
       triggered: false,
@@ -874,7 +884,7 @@ describe("legendary weapon abilities", () => {
     expect(
       getEquipmentSpecialAbility("焚星神弓", "傳說")?.effects
     ).toMatchObject({
-      starfireBurnPercentOfCriticalDamage: 15,
+      starfireBurnPercentOfCriticalDamage: 10,
       starfireDurationTurns: 3,
       starfireArmorReductionPercent: 10,
     });
@@ -882,9 +892,7 @@ describe("legendary weapon abilities", () => {
       getEquipmentSpecialAbility("傳說·曙光劍", "傳說")?.effects
     ).toMatchObject({
       dawnProcChancePercent: 20,
-      dawnBonusDamagePercentAttack: 20,
-      dawnHighHealthThresholdPercent: 70,
-      dawnHighHealthDamageMultiplier: 2,
+      dawnBonusDamagePercentAttack: 25,
     });
     expect(
       getEquipmentSpecialAbility("傳說·迅牙短刀", "傳說")?.effects
@@ -928,13 +936,13 @@ describe("legendary weapon abilities", () => {
       getEquipmentSpecialAbility("傳說·炎脈法杖", "傳說")?.effects
     ).toMatchObject({
       fireVeinMarksToBurst: 5,
-      fireVeinAoeMagicAttackPercent: 100,
+      fireVeinAoeMagicAttackPercent: 75,
     });
     expect(
       getEquipmentSpecialAbility("曙光聖衛·傳說劍", "傳說")?.effects
     ).toMatchObject({
       dawnWardenSwordProcChancePercent: 20,
-      dawnWardenSwordAoeDamagePercentAttack: 150,
+      dawnWardenSwordAoeDamagePercentAttack: 50,
       dawnWardenSwordStunDurationTurns: 1,
     });
     expect(
@@ -948,9 +956,75 @@ describe("legendary weapon abilities", () => {
     });
   });
 
+  it("keeps revised legendary weapon and Dawn Warden values", () => {
+    expect(getEquipmentSpecialAbility("傳說·鐵衛劍", "傳說")?.effects).toMatchObject({
+      ironGuardProcChancePercent: 50,
+      ironGuardDamageReductionPercentPerStack: 10,
+      ironGuardMaxStacks: 2,
+      ironGuardDurationTurns: 3,
+    });
+    expect(getEquipmentSpecialAbility("傳說·獵影短刀", "傳說")?.effects).toMatchObject({
+      hunterCritProcChancePercent: 50,
+      hunterCritMaxStacks: 2,
+      hunterCritRateBonusPerCriticalPercent: 15,
+      hunterCritDamageBonusPerCriticalPercent: 15,
+    });
+    expect(getEquipmentSpecialAbility("傳說·幻步短刀", "傳說")?.effects).toMatchObject({
+      phantomStepNextAttackCritRateBonusPercent: 30,
+      phantomStepDefensePiercePercent: 20,
+    });
+    expect(getEquipmentSpecialAbility("傳說·天穹弓", "傳說")?.effects).toMatchObject({
+      firmamentProcChancePercent: 50,
+      firmamentBonusDamagePercentStrength: 25,
+    });
+    expect(getEquipmentSpecialAbility("傳說·木靈法杖", "傳說")?.effects).toMatchObject({
+      natureStaffHealChancePercent: 25,
+      natureStaffHealPercentIntelligence: 15,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說盔", "傳說")?.effects).toMatchObject({
+      dawnGuardianDefensePiercePercent: 15,
+      dawnGuardianResistancePiercePercent: 15,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說胸甲", "傳說")?.effects).toMatchObject({
+      dawnArmorDamageReductionPercentPerStack: 3,
+      dawnArmorMaxStacks: 5,
+      dawnArmorHealingReceivedPercentPerStack: 2,
+      dawnArmorFullStackHealMaxHealthPercent: 3,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說護腿", "傳說")?.effects).toMatchObject({
+      dawnStepDodgeRateBonusPercent: 10,
+      dawnStepDisarmChancePercent: 15,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說徽記", "傳說")?.effects).toMatchObject({
+      dawnMarkDamageBonusPercent: 12,
+      dawnMarkLifestealPercent: 8,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說短刀", "傳說")?.effects).toMatchObject({
+      dawnWardenDaggerProcChancePercent: 25,
+      dawnWardenDaggerEchoDamagePercentAttack: 30,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說弓", "傳說")?.effects).toMatchObject({
+      dawnWardenBowDamageBonusPerTargetPercent: 10,
+      dawnWardenBowMaxDamageBonusPercent: 30,
+    });
+    expect(getEquipmentSpecialAbility("曙光聖衛·傳說法杖", "傳說")?.effects).toMatchObject({
+      dawnWardenStaffDotMaxHealthPercent: 3,
+      dawnWardenStaffDotDurationTurns: 3,
+      dawnWardenStaffDamageReductionPercent: 20,
+    });
+  });
+
   it("resolves proc boundaries, capped stacks and timed buff refresh", () => {
     expect(rollPercentChance(25, 0.249)).toBe(true);
     expect(rollPercentChance(25, 0.25)).toBe(false);
+    expect(rollHunterCritStack(50, true, 0.499)).toBe(true);
+    expect(rollHunterCritStack(50, true, 0.5)).toBe(false);
+    expect(rollHunterCritStack(50, false, 0)).toBe(false);
+    expect(advanceIronGuardStacks([], true)).toEqual([3]);
+    expect(advanceIronGuardStacks([3], true)).toEqual([2, 3]);
+    expect(advanceIronGuardStacks([2, 3], true)).toEqual([1, 2]);
+    expect(advanceIronGuardStacks([1, 2])).toEqual([1]);
+    expect(advanceIronGuardStacks([1])).toEqual([]);
     expect(addCappedStack(1, 2)).toBe(2);
     expect(addCappedStack(2, 2)).toBe(2);
 
